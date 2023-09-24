@@ -32,19 +32,22 @@ private:
 
     struct Hit
     {
-        float hitDistance = -1;;
-        glm::vec3 worldPosition;
-        glm::vec3 worldNormal;
+        bool didHit = false;
+        float hitDistance = std::numeric_limits<float>::max();
+        glm::vec3 worldPosition = glm::vec3(0.0);
+        glm::vec3 worldNormal = glm::vec3(0.0);
         int objectIndex = -1;
         int primIndex = -1;
+        int materialIndex;
     };
 
     glm::vec4 PerPixel(uint32_t x, uint32_t y);
-    Hit TraceRay(const Ray& ray);
+    glm::vec3 TraceRay(Ray& ray, uint32_t& seed);
     Hit rayTriangleIntersect(const Ray& ray, const Mesh::Triangle& tri, const glm::vec3& origin);
     Hit ClosestHit(const Ray& ray, float hitDistance, int objectIndex);
     Hit ClosestHit(const Ray& ray, float hitDistance, int objectIndex, int triIndex);
-    Hit Miss(const Ray& ray, const bool missDistMax);
+    Hit CalculateRayCollision(const Ray& ray);
+    Hit Miss(Renderer::Hit& hit);
 
 private:
 

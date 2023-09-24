@@ -11,6 +11,7 @@ struct Material
     float metalness = 0.0f;
     glm::vec3 emissionColor { 0.0f };
     float emissionPower = 0.0f;
+    float specularProbability = 0.0f;
     std::string name = "Material";
 
     glm::vec3 GetEmission() const { return emissionColor * emissionPower; }

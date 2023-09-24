@@ -23,7 +23,7 @@ namespace Utils
 		return (word >> 22u) ^ word;
 	}
 
-	static float RandmFloat(uint32_t& seed)
+	static float RandomFloat(uint32_t& seed)
 	{
 		seed = PCG_Hash(seed);
 		return (float)seed / (float)std::numeric_limits<uint32_t>::max();
@@ -31,7 +31,7 @@ namespace Utils
 
 	static glm::vec3 InUnitSphere(uint32_t& seed)
 	{
-		return glm::normalize(glm::vec3(RandmFloat(seed) * 2.0f - 1.0f, RandmFloat(seed) * 2.0f - 1.0f, RandmFloat(seed) * 2.0f - 1.0f));
+		return glm::normalize(glm::vec3(RandomFloat(seed) * 2.0f - 1.0f, RandomFloat(seed) * 2.0f - 1.0f, RandomFloat(seed) * 2.0f - 1.0f));
 	}
 }
 
@@ -74,7 +74,7 @@ void Renderer::Render(const Scene& scene, const Camera& camera)
 		memset(m_accumulationData, 0, m_finalImage->GetWidth() * m_finalImage->GetHeight() * sizeof(glm::vec4));
 
 
-#if 1
+#if true
 	std::for_each(std::execution::par, m_imgVerticalIterator.begin(), m_imgVerticalIterator.end(),
 		[this](uint32_t y)
 		{
@@ -125,105 +125,37 @@ void Renderer::Render(const Scene& scene, const Camera& camera)
 
 Renderer::Hit Renderer::rayTriangleIntersect(const Ray& ray, const Mesh::Triangle& tri, const glm::vec3& origin)
 {
-	Hit hit;
+	glm::vec3 edgeAB = tri.v1.pos - tri.v0.pos;
+	glm::vec3 edgeAC = tri.v2.pos - tri.v0.pos;
+	glm::vec3 normalVector = glm::cross(edgeAB, edgeAC);
+	glm::vec3 ao = ray.origin - tri.v0.pos;
+	glm::vec3 dao = glm::cross(ao, ray.direction);
 
-	// compute the plane's normal
-	glm::vec3 v0v1 = tri.v1.pos - tri.v0.pos;
-	glm::vec3 v0v2 = tri.v2.pos - tri.v0.pos;
-	glm::vec3 N = glm::cross(v0v1, v0v2);
-	//float area2 = N.length();
-	//N = glm::normalize(N);
+	float determinant = -glm::dot(ray.direction, normalVector);
+	float invDet = 1.0f / determinant;
 
-	float hitDistance = std::numeric_limits<float>::max();
+	// Calculate dst to triangle & barycentric coordinates of intersection point
+	float dst = glm::dot(ao, normalVector) * invDet;
+	float u = glm::dot(edgeAC, dao) * invDet;
+	float v = -glm::dot(edgeAB, dao) * invDet;
+	float w = 1.0f - u - v;
 
-	// Step 1: finding P
-	// check if the ray and plane are parallel.
-	float NdotRayDirection = glm::dot(N, ray.direction);
-	if (fabs(NdotRayDirection) < FLT_EPSILON) // almost 0
-		return Miss(ray, true); // they are parallel, so they don't intersect! 
+	// Initialize hit info
+	Hit hitInfo;
+	hitInfo.didHit = determinant >= 1E-6 && dst >= 0.0f && u >= 0.0f && v >= 0.0f && w >= 0.0f;
+	hitInfo.worldPosition = ray.origin + ray.direction * dst;
+	hitInfo.worldNormal = normalize(tri.v0.normal * w + tri.v1.normal * u + tri.v2.normal * v);
+	hitInfo.hitDistance = dst;
 
-	// compute d parameter using equation 2
-	float d = glm::dot(-N, tri.v0.pos);
-
-	// compute t (equation 3)
-	hitDistance = -(glm::dot(N, origin) + d) / NdotRayDirection;
-
-	// check if the triangle is behind the ray
-	if (hitDistance < 0) return Miss(ray, true); // the triangle is behind
-
-	// compute the intersection point using equation 1
-	glm::vec3 P = origin + ray.direction * hitDistance;
-
-	// Step 2: inside-outside test
-	glm::vec3 C; // vector perpendicular to triangle's plane
-
-	// edge 0
-	glm::vec3 edge0 = tri.v1.pos - tri.v0.pos;
-	glm::vec3 vp0 = P - tri.v0.pos;
-	C = glm::cross(edge0, vp0);
-	if (glm::dot(N, C) < 0) return Miss(ray, true); // P is on the right side
-
-	// edge 1
-	glm::vec3 edge1 = tri.v2.pos - tri.v1.pos;
-	glm::vec3 vp1 = P - tri.v1.pos;
-	C = glm::cross(edge1, vp1);
-	if (glm::dot(N, C) < 0)  return Miss(ray, true); // P is on the right side
-
-	// edge 2
-	glm::vec3 edge2 = tri.v0.pos - tri.v2.pos;
-	glm::vec3 vp2 = P - tri.v2.pos;
-	C = glm::cross(edge2, vp2);
-	if (glm::dot(N, C) < 0) return Miss(ray, true); // P is on the right side;
-
-	//hit.worldNormal = glm::vec3(0.0, 0.0, 1.0);
-	//hit.worldPosition = P;
-	hit.hitDistance = hitDistance;
-
-	return hit; // this ray hits the triangle
+	return hitInfo;
 }
 
-Renderer::Hit Renderer::TraceRay(const Ray& ray)
+Renderer::Hit Renderer::CalculateRayCollision(const Ray& ray)
 {
-	int closestTriIndex = -1;
-	float closestHit = std::numeric_limits<float>::max();
-	int closestObjectIndex = -1;
+	Hit closestHit;
 
-	Hit hit;
 
-	//spheres
-	/*
-	for (size_t i = 0u; i < m_activeScene->spheres.size(); i++)
-	{
-		const Sphere& sphere = m_activeScene->spheres[i];
-
-		glm::vec3 origin = ray.origin - sphere.position;
-
-		float a = glm::dot(ray.direction, ray.direction);
-		float b = 2.0f * glm::dot(origin, ray.direction);
-		float c = glm::dot(origin, origin) - sphere.radius * sphere.radius;
-
-		float discriminant = b * b - 4.0f * a * c;
-
-		if (discriminant < 0.0f)
-			continue;
-
-		float t0 = (-b + glm::sqrt(discriminant)) / (2.0f * a);
-		float closestT = (-b - glm::sqrt(discriminant)) / (2.0f * a);
-
-		if (closestT > 0.0f && closestT < hitDistance)
-		{
-			hitDistance = closestT;
-			closestSphere = (int)i;
-		}
-	}
-
-	if (closestSphere < 0)
-		return  Miss(ray);
-
-	return ClosestHit(ray, hitDistance, closestSphere);
-	*/
-
-	//triangles
+	//Meshes
 	for (size_t i = 0u; i < m_activeScene->meshes.size(); i++)
 	{
 		const Mesh::MeshData& mesh = m_activeScene->meshes[i];
@@ -231,24 +163,72 @@ Renderer::Hit Renderer::TraceRay(const Ray& ray)
 
 		for (size_t t = 0u; t < mesh.tris.size(); t++)
 		{
-			hit = rayTriangleIntersect(ray, mesh.tris[t], origin);
+			Hit hit = rayTriangleIntersect(ray, mesh.tris[t], origin);
 
-			if (hit.hitDistance > 0.0f && hit.hitDistance < closestHit)
+			if (hit.didHit && hit.hitDistance < closestHit.hitDistance)
 			{
-				closestHit = hit.hitDistance;
-				closestObjectIndex = (int)i;
-				closestTriIndex = (int)t;
-				hit.worldPosition + mesh.Transform;
+				closestHit = hit;
+				closestHit.objectIndex = (int)i;
+				closestHit.primIndex = (int)t;
+				closestHit.worldPosition + mesh.Transform;
+				closestHit.materialIndex = mesh.materialIndex;
 			}
 		}
 	}
 
-	if (closestTriIndex < 0 && closestObjectIndex)
-		return  Miss(ray, false);
+	return closestHit;
+}
 
-	return ClosestHit(ray, closestHit, closestObjectIndex, closestTriIndex);
+glm::vec3 Renderer::TraceRay(Ray& ray, uint32_t& seed)
+{
+	//int closestTriIndex = -1;
+	//float closestHit = std::numeric_limits<float>::max();
+	//int closestObjectIndex = -1;
 
-	//return hit;
+	glm::vec3 incomingLight = glm::vec3(0.0f);
+	glm::vec3 rayColor = glm::vec3(1.0f);
+
+	size_t bounces = 1;
+	for (size_t b = 0; b <= bounces; b++)
+	{
+		Hit hit = CalculateRayCollision(ray);
+		seed += (uint32_t)b;
+
+		if (hit.didHit)
+		{
+			const Material& mat = m_activeScene->materials[hit.materialIndex];
+
+			// Figure out new ray position and direction
+			bool isSpecularBounce = mat.specularProbability >= Utils::RandomFloat(seed);
+
+			ray.origin = hit.worldPosition;
+			glm::vec3 diffuseDir = glm::normalize(hit.worldNormal + Utils::InUnitSphere(seed));
+			glm::vec3 specularDir = glm::reflect(ray.direction, hit.worldNormal);
+			ray.direction = glm::normalize(glm::mix(diffuseDir, specularDir, (1.0f-mat.roughness) * isSpecularBounce));
+
+			// Update light calculations
+			glm::vec3 emittedLight = mat.emissionColor * mat.emissionPower;
+			incomingLight += emittedLight * rayColor;
+			glm::vec3 specularColor = glm::mix(glm::vec3(0.02f), mat.albedo, mat.metalness);
+			rayColor *= glm::mix(mat.albedo, specularColor, isSpecularBounce);
+
+			// Random early exit if ray colour is nearly 0 (can't contribute much to final result)
+			float p = glm::max(rayColor.r, glm::max(rayColor.g, rayColor.b));
+			if (Utils::RandomFloat(seed) >= p)
+			{
+				break;
+			}
+
+			rayColor *= 1.0f / p;
+		}
+		else
+		{
+			incomingLight += m_activeScene->m_skyColor * m_activeScene->m_skyBrightness * rayColor;
+			break;
+		}
+	}
+
+	return incomingLight;
 }
 
 glm::vec4 Renderer::PerPixel(uint32_t x, uint32_t y)
@@ -264,39 +244,14 @@ glm::vec4 Renderer::PerPixel(uint32_t x, uint32_t y)
 	uint32_t seed = x + y * m_finalImage->GetWidth();
 	seed *= m_frameIndex;
 
-	int bounces = 5;
-	for (int i = 0; i < bounces; i++)
-	{
-		seed += i;
-		Renderer::Hit hit = TraceRay(ray);
+	glm::vec3 totalIncomingLight = glm::vec3(0.0f);
 
-		if (hit.hitDistance < 0.0f)
-		{
-			light += m_activeScene->m_skyColor * m_activeScene->m_skyBrightness * contribution;
-			break;
-		}
+	totalIncomingLight += TraceRay(ray, seed);
 
-		const Mesh::MeshData& mesh = m_activeScene->meshes[hit.objectIndex];
-		const Mesh::Triangle& tri = mesh.tris[hit.primIndex];
-		const Material& mat = m_activeScene->materials[mesh.materialIndex];
 
-		glm::vec3 nvec = glm::normalize(glm::cross(tri.v1.pos - tri.v0.pos, tri.v2.pos - tri.v0.pos));
-
-		contribution *= mat.albedo * previousContribution;
-		light += mat.GetEmission() * previousContribution;
-		//light = hit.worldPosition;
-
-		ray.origin = hit.worldPosition + hit.worldNormal * 0.0001f;
-		glm::vec3 randomDirection = nvec + Utils::InUnitSphere(seed);
-		randomDirection = glm::normalize(randomDirection);
-
-		ray.direction = randomDirection;
-		previousContribution *= mat.albedo;
-	}
-
-	return glm::vec4(light, 1.0f);
+	return glm::vec4(totalIncomingLight, 1.0f);
 }
-
+/*
 Renderer::Hit Renderer::ClosestHit(const Ray& ray, float hitDistance, int objectIndex, int triIndex)
 {
 	Renderer::Hit hit;
@@ -311,6 +266,7 @@ Renderer::Hit Renderer::ClosestHit(const Ray& ray, float hitDistance, int object
 	hit.worldPosition = origin + ray.direction * hitDistance;
 	hit.worldNormal = glm::normalize(triangle.v0.normal);
 	hit.worldPosition += mesh.Transform;
+	hit.didHit = true;
 
 	return hit;
 }
@@ -331,14 +287,10 @@ Renderer::Hit Renderer::ClosestHit(const Ray& ray, float hitDistance, int object
 
 	return hit;
 }
-
-Renderer::Hit Renderer::Miss(const Ray& ray, const bool missDistMax)
+*/
+Renderer::Hit Renderer::Miss(Renderer::Hit& hit)
 {
-	Renderer::Hit hit;
-	if (missDistMax) { hit.hitDistance = std::numeric_limits<float>::max(); }
-	else { hit.hitDistance = -1.0f; }
-	hit.objectIndex = -1;
-	hit.primIndex = -1;
+	hit.didHit = false;
 
 	return hit;
 }

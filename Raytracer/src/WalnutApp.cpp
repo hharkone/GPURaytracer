@@ -99,7 +99,7 @@ public:
 			Mesh meshclass = Mesh();
 			Mesh::MeshData mesh = meshclass.LoadOBJFile("T:\\GIT\\GPURaytracer\\Raytracer\\suzanne.obj");
 			mesh.materialIndex = 1;
-			m_scene.meshes.push_back(mesh);
+			//m_scene.meshes.push_back(mesh);
 		}
 	}
 
@@ -157,11 +157,12 @@ public:
 
 			Material& mat = m_scene.materials[i];
 			ImGui::Text("%s", mat.name);
-			if (ImGui::ColorEdit3("Albedo", glm::value_ptr(mat.albedo)))				    { m_sceneChanged = true; }
-			if (ImGui::DragFloat("Roughness", &mat.roughness, 0.01f, 0.0f, 1.0f))			{ m_sceneChanged = true; }
-			if (ImGui::DragFloat("Metalness", &mat.metalness, 0.01f, 0.0f, 1.0f))			{ m_sceneChanged = true; }
-			if (ImGui::ColorEdit3("Emission Color", glm::value_ptr(mat.emissionColor)))		{ m_sceneChanged = true; }
-			if (ImGui::DragFloat("Emission Power", &mat.emissionPower, 0.1f, 0.0f, 100.0f)) { m_sceneChanged = true; }
+			if (ImGui::ColorEdit3("Albedo", glm::value_ptr(mat.albedo)))				      { m_sceneChanged = true; }
+			if (ImGui::DragFloat("Roughness", &mat.roughness, 0.01f, 0.0f, 1.0f))			  { m_sceneChanged = true; }
+			if (ImGui::DragFloat("Specularity", &mat.specularProbability, 0.01f, 0.0f, 1.0f)) { m_sceneChanged = true; }
+			if (ImGui::DragFloat("Metalness", &mat.metalness, 0.01f, 0.0f, 1.0f))			  { m_sceneChanged = true; }
+			if (ImGui::ColorEdit3("Emission Color", glm::value_ptr(mat.emissionColor)))		  { m_sceneChanged = true; }
+			if (ImGui::DragFloat("Emission Power", &mat.emissionPower, 0.1f, 0.0f, 100.0f))   { m_sceneChanged = true; }
 			ImGui::Separator();
 			ImGui::PopID();
 		}
