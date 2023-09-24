@@ -33,6 +33,25 @@ namespace Utils
 	{
 		return glm::normalize(glm::vec3(RandomFloat(seed) * 2.0f - 1.0f, RandomFloat(seed) * 2.0f - 1.0f, RandomFloat(seed) * 2.0f - 1.0f));
 	}
+
+	// Random value in normal distribution (with mean=0 and sd=1)
+	float RandomValueNormalDistribution(uint32_t& state)
+	{
+		// Thanks to https://stackoverflow.com/a/6178290
+		float theta = 2.0f * 3.1415926f * RandomFloat(state);
+		float rho = sqrt(-2.0f * log(RandomFloat(state)));
+		return rho * cos(theta);
+	}
+	// Calculate a random direction
+	glm::vec3 RandomDirection(uint32_t& state)
+	{
+		// Thanks to https://math.stackexchange.com/a/1585996
+		float x = RandomValueNormalDistribution(state);
+		float y = RandomValueNormalDistribution(state);
+		float z = RandomValueNormalDistribution(state);
+
+		return glm::normalize(glm::vec3(x, y, z));
+	}
 }
 
 void Renderer::OnResize(uint32_t width, uint32_t height)
@@ -167,9 +186,55 @@ Renderer::Hit Renderer::rayTriangleIntersect(const Ray& ray, const Mesh::Triangl
 	return hitInfo;
 }
 
+// Calculate the intersection of a ray with a sphere
+Renderer::Hit Renderer::raySphere(const Ray& ray, const Sphere& sphere)
+{
+	Hit hitInfo;
+
+	glm::vec3 offsetRayOrigin = ray.origin - sphere.position;
+	// From the equation: sqrLength(rayOrigin + rayDir * dst) = radius^2
+	// Solving for dst results in a quadratic equation with coefficients:
+	float a = glm::dot(ray.direction, ray.direction); // a = 1 (assuming unit vector)
+	float b = 2.0f * glm::dot(offsetRayOrigin, ray.direction);
+	float c = dot(offsetRayOrigin, offsetRayOrigin) - sphere.radius * sphere.radius;
+
+	// Quadratic discriminant
+	float discriminant = b * b - 4.0f * a * c;
+
+	// No solution when d < 0 (ray misses sphere)
+	if (discriminant >= 0.0f)
+	{
+		// Distance to nearest intersection point (from quadratic formula)
+		float dst = (-b - sqrt(discriminant)) / (2 * a);
+
+		// Ignore intersections that occur behind the ray
+		if (dst >= 0) {
+			hitInfo.didHit = true;
+			hitInfo.hitDistance = dst;
+			hitInfo.worldPosition = ray.origin + ray.direction * dst;
+			hitInfo.worldNormal = glm::normalize(hitInfo.worldPosition - sphere.position);
+		}
+	}
+	return hitInfo;
+}
+
 Renderer::Hit Renderer::CalculateRayCollision(const Ray& ray)
 {
 	Hit closestHit;
+
+	//Spheres
+	for (int i = 0; i < m_activeScene->spheres.size(); i++)
+	{
+		Sphere sphere = m_activeScene->spheres[i];
+		Hit hitInfo = raySphere(ray, sphere);
+
+		if (hitInfo.didHit && hitInfo.hitDistance < closestHit.hitDistance)
+		{
+			closestHit = hitInfo;
+			closestHit.objectIndex = (int)i;
+			closestHit.materialIndex = sphere.materialIndex;
+		}
+	}
 
 	//Meshes
 	for (size_t i = 0u; i < m_activeScene->meshes.size(); i++)
@@ -233,8 +298,7 @@ glm::vec3 Renderer::TraceRay(Ray& ray, uint32_t& seed)
 	glm::vec3 incomingLight = glm::vec3(0.0f);
 	glm::vec3 rayColor = glm::vec3(1.0f);
 
-	size_t bounces = 5;
-	for (size_t b = 0; b <= bounces; b++)
+	for (size_t b = 0; b <= GetSettings().bounces; b++)
 	{
 		Hit hit = CalculateRayCollision(ray);
 		seed += (uint32_t)b;
@@ -245,14 +309,14 @@ glm::vec3 Renderer::TraceRay(Ray& ray, uint32_t& seed)
 
 			float F0 = glm::mix(0.02f, 1.0f, mat.metalness);
 			float ndotv = glm::max(glm::dot(hit.worldNormal, -ray.direction), 0.0f);
-			float F = fresnel_schlick(F0, ndotv);
+			float F = fresnel_schlick(F0, 1.0-ndotv);
 
 			// Figure out new ray position and direction
-			bool isSpecularBounce = F >= Utils::RandomFloat(seed);
+			bool isSpecularBounce = 0.5f >= Utils::RandomFloat(seed);
 
 			ray.origin = hit.worldPosition;
 			glm::vec3 diffuseContribution = glm::mix(mat.albedo, glm::vec3(0.0f), mat.metalness);
-			glm::vec3 diffuseDir = glm::normalize(hit.worldNormal + Utils::InUnitSphere(seed));
+			glm::vec3 diffuseDir = glm::normalize(hit.worldNormal + Utils::RandomDirection(seed));
 			glm::vec3 specularDir = glm::reflect(ray.direction, hit.worldNormal);
 			ray.direction = glm::normalize(glm::mix(diffuseDir, specularDir, (1.0f-mat.roughness) * isSpecularBounce));
 

@@ -15,6 +15,7 @@ public:
     struct Settings
     {
         bool accumulate = true;
+        int bounces = 5;
     };
 
 public:
@@ -44,6 +45,7 @@ private:
 
     glm::vec4 PerPixel(uint32_t x, uint32_t y);
     glm::vec3 TraceRay(Ray& ray, uint32_t& seed);
+    Hit raySphere(const Ray& ray, const Sphere& sphere);
     Hit rayTriangleIntersect(const Ray& ray, const Mesh::Triangle& tri, const glm::vec3& origin);
     Hit CalculateRayCollision(const Ray& ray);
     glm::vec3 Renderer::GetEnvironmentLight(Ray& ray);

@@ -16,32 +16,46 @@ public:
 	ExampleLayer()
 		: m_camera(50.0f, 0.1f, 1000.0f)
 	{
-		/*
 		{
 			Sphere sphere;
-			sphere.position = { 0.0f, -1000.0f, 0.0f };
-			sphere.radius = 1000.0f;
-			sphere.materialIndex = 0;
-
-			m_scene.spheres.push_back(sphere);
-		}
-		{
-			Sphere sphere;
-			sphere.position = { 0.0f, 1.0f, 0.0f };
+			sphere.position = { -9.0f, 1.0f, 0.0f };
 			sphere.radius = 1.0f;
-			sphere.materialIndex = 1;
+			sphere.materialIndex = 4;
 
 			m_scene.spheres.push_back(sphere);
 		}
 		{
 			Sphere sphere;
-			sphere.position = { 4.0f, 4.0f, 4.0f };
+			sphere.position = { -6.0f, 1.0f, 0.0f };
 			sphere.radius = 1.0f;
-			sphere.materialIndex = 2;
+			sphere.materialIndex = 5;
 
 			m_scene.spheres.push_back(sphere);
 		}
-		*/
+		{
+			Sphere sphere;
+			sphere.position = { -3.0f, 1.0f, 0.0f };
+			sphere.radius = 1.0f;
+			sphere.materialIndex = 6;
+
+			m_scene.spheres.push_back(sphere);
+		}
+		{
+			Sphere sphere;
+			sphere.position = { -0.0f, 1.0f, 0.0f };
+			sphere.radius = 1.0f;
+			sphere.materialIndex = 7;
+
+			m_scene.spheres.push_back(sphere);
+		}
+		{
+			Sphere sphere;
+			sphere.position = { 3.0f, 1.0f, 0.0f };
+			sphere.radius = 1.0f;
+			sphere.materialIndex = 8;
+
+			m_scene.spheres.push_back(sphere);
+		}
 		{
 			Material mat;
 			mat.albedo = { 0.7f, 0.7f, 0.7f };
@@ -77,6 +91,46 @@ public:
 			m_scene.materials.push_back(mat);
 		}
 		{
+			Material mat;
+			mat.albedo = { 0.1f, 0.1f, 0.1f };
+			mat.roughness = 0.9f;
+			mat.name = "Rough1";
+
+			m_scene.materials.push_back(mat);
+		}
+		{
+			Material mat;
+			mat.albedo = { 0.1f, 0.1f, 0.1f };
+			mat.roughness = 0.7f;
+			mat.name = "Rough2";
+
+			m_scene.materials.push_back(mat);
+		}
+		{
+			Material mat;
+			mat.albedo = { 0.1f, 0.1f, 0.1f };
+			mat.roughness = 0.5f;
+			mat.name = "Rough3";
+
+			m_scene.materials.push_back(mat);
+		}
+		{
+			Material mat;
+			mat.albedo = { 0.1f, 0.1f, 0.1f };
+			mat.roughness = 0.3f;
+			mat.name = "Rough4";
+
+			m_scene.materials.push_back(mat);
+		}
+		{
+			Material mat;
+			mat.albedo = { 0.1f, 0.1f, 0.1f };
+			mat.roughness = 0.0f;
+			mat.name = "Rough5";
+
+			m_scene.materials.push_back(mat);
+		}
+		{
 			Mesh meshclass = Mesh();
 			Mesh mesh = meshclass.LoadOBJFile("T:\\GIT\\GPURaytracer\\Raytracer\\cube.obj");
 			mesh.materialIndex = 1;
@@ -99,7 +153,7 @@ public:
 			Mesh meshclass = Mesh();
 			Mesh mesh = meshclass.LoadOBJFile("T:\\GIT\\GPURaytracer\\Raytracer\\suzanne.obj");
 			mesh.materialIndex = 1;
-			m_scene.meshes.push_back(mesh);
+			//m_scene.meshes.push_back(mesh);
 		}
 	}
 
@@ -119,6 +173,7 @@ public:
 		ImGui::Text("Last render time: %.3f ms", m_renderTimeMs);
 		ImGui::Checkbox("Accumulate", &m_renderer.GetSettings().accumulate);
 		ImGui::DragFloat("Camera Speed", &m_camera.GetSpeed(), 0.1f);
+		if (ImGui::SliderInt("Max Bounces", &m_renderer.GetSettings().bounces, 0, 30)) { m_sceneChanged = true; }
 
 		if (ImGui::Button("Reset") || m_sceneChanged)
 		{
@@ -148,11 +203,27 @@ public:
 			Mesh& mesh = m_scene.meshes[i];
 			Material& mat = m_scene.materials[mesh.materialIndex];
 			ImGui::Separator();
-			ImGui::Text("Object: %s", mesh.name);
+			ImGui::Text("Mesh: %s", mesh.name);
 			ImGui::Text("Material: %s", mat.name);
-			if (ImGui::DragInt("Material", &mesh.materialIndex, 0.1f, 0, (int)m_scene.materials.size() - 1))   { m_sceneChanged = true; }
-			if (ImGui::DragFloat3("Position", glm::value_ptr(mesh.Transform), 0.1f))						   { m_sceneChanged = true; }
-			//if (ImGui::DragFloat("Radius", &sphere.radius, 0.1f))											   { m_sceneChanged = true; }
+			if (ImGui::DragInt("Material", &mesh.materialIndex, 0.1f, 0, (int)m_scene.materials.size() - 1)) { m_sceneChanged = true; }
+			if (ImGui::DragFloat3("Position", glm::value_ptr(mesh.Transform), 0.1f)) { m_sceneChanged = true; }
+			ImGui::Separator();
+			ImGui::PopID();
+		}
+
+		for (size_t i = 0u; i < m_scene.spheres.size(); i++)
+		{
+			ImGui::PushID((int)i+m_scene.meshes.size());
+			ImGui::AlignTextToFramePadding();
+
+			Sphere& sphere = m_scene.spheres[i];
+			Material& mat = m_scene.materials[sphere.materialIndex];
+			ImGui::Separator();
+			ImGui::Text("Sphere: %i", i);
+			ImGui::Text("Material: %s", mat.name);
+			if (ImGui::DragInt("Material", &sphere.materialIndex, 0.1f, 0, (int)m_scene.materials.size() - 1))   { m_sceneChanged = true; }
+			if (ImGui::DragFloat3("Position", glm::value_ptr(sphere.position), 0.1f))						     { m_sceneChanged = true; }
+			if (ImGui::DragFloat("Radius", &sphere.radius, 0.1f))											     { m_sceneChanged = true; }
 			ImGui::Separator();
 			ImGui::PopID();
 		}
