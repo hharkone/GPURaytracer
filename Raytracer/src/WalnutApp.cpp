@@ -45,31 +45,31 @@ public:
 		{
 			Material mat;
 			mat.albedo = { 0.7f, 0.7f, 0.7f };
-			mat.roughness = 0.5f;
+			mat.roughness = 0.2f;
 			mat.name = "White";
 
 			m_scene.materials.push_back(mat);
 		}
 		{
 			Material mat;
-			mat.albedo = { 0.8f, 0.2f, 0.2f };
-			mat.roughness = 0.5f;
+			mat.albedo = { 0.8f, 0.3f, 0.3f };
+			mat.roughness = 0.2f;
 			mat.name = "Red";
 
 			m_scene.materials.push_back(mat);
 		}
 		{
 			Material mat;
-			mat.albedo = { 0.2f, 0.8f, 0.2f };
-			mat.roughness = 0.5f;
+			mat.albedo = { 0.4f, 0.8f, 0.4f };
+			mat.roughness = 0.2f;
 			mat.name = "Green";
 
 			m_scene.materials.push_back(mat);
 		}
 		{
 			Material mat;
-			mat.albedo = { 1.0f, 0.2f, 0.5f };
-			mat.roughness = 0.5f;
+			mat.albedo = { 0.0f, 0.0f, 0.0f };
+			mat.roughness = 0.2f;
 			mat.emissionColor = { 1.0f, 1.0f, 1.0f };
 			mat.emissionPower = 10.0f;
 			mat.name = "Emissive";
@@ -81,7 +81,7 @@ public:
 			Mesh mesh = meshclass.LoadOBJFile("T:\\GIT\\GPURaytracer\\Raytracer\\cube.obj");
 			mesh.materialIndex = 1;
 			mesh.Transform = glm::vec3(0.0f, 2.0f, 0.0f);
-			m_scene.meshes.push_back(mesh);
+			//m_scene.meshes.push_back(mesh);
 		}
 		{
 			Mesh meshclass = Mesh();
@@ -99,7 +99,7 @@ public:
 			Mesh meshclass = Mesh();
 			Mesh mesh = meshclass.LoadOBJFile("T:\\GIT\\GPURaytracer\\Raytracer\\suzanne.obj");
 			mesh.materialIndex = 1;
-			//m_scene.meshes.push_back(mesh);
+			m_scene.meshes.push_back(mesh);
 		}
 	}
 

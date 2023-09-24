@@ -29,11 +29,11 @@ struct Scene
     std::vector<Sphere> spheres;
     std::vector<Mesh> meshes;
     std::vector<Material> materials;
-    glm::vec3 m_skyColor = glm::vec4(0.6f, 0.7f, 0.9f, 1.0f);
-    float m_skyBrightness = 1.0f;
-    glm::vec3 m_skyColorHorizon = glm::vec3(0.6f, 0.7f, 0.9f);
-    glm::vec3 m_skyColorZenith  = glm::vec3(0.5f, 0.5f, 0.7f);
-    glm::vec3 m_groundColor     = glm::vec3(0.4f, 0.3f, 0.25f);
-    float m_sunFocus = 100.0f;
-    float m_sunIntensity = 10.0f;
+    glm::vec3 m_skyColor = glm::vec3(1.0f);
+    float m_skyBrightness = 1.8f;
+    glm::vec3 m_skyColorHorizon = glm::vec3(0.55f, 0.66f, 0.9f);
+    glm::vec3 m_skyColorZenith  = glm::vec3(0.28f, 0.28f, 0.75f);
+    glm::vec3 m_groundColor     = glm::vec3(0.08f, 0.08f, 0.08f);
+    float m_sunFocus = 200.0f;
+    float m_sunIntensity = 100.0f;
 };
