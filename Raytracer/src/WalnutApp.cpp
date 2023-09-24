@@ -78,26 +78,26 @@ public:
 		}
 		{
 			Mesh meshclass = Mesh();
-			Mesh::MeshData mesh = meshclass.LoadOBJFile("T:\\GIT\\GPURaytracer\\Raytracer\\cube.obj");
+			Mesh mesh = meshclass.LoadOBJFile("T:\\GIT\\GPURaytracer\\Raytracer\\cube.obj");
 			mesh.materialIndex = 1;
-			mesh.Transform = glm::vec3(0.0f, -2.0f, 0.0f);
+			mesh.Transform = glm::vec3(0.0f, 2.0f, 0.0f);
 			m_scene.meshes.push_back(mesh);
 		}
 		{
 			Mesh meshclass = Mesh();
-			Mesh::MeshData mesh = meshclass.LoadOBJFile("T:\\GIT\\GPURaytracer\\Raytracer\\plane.obj");
+			Mesh mesh = meshclass.LoadOBJFile("T:\\GIT\\GPURaytracer\\Raytracer\\plane.obj");
 			mesh.materialIndex = 2;
 			m_scene.meshes.push_back(mesh);
 		}
 		{
 			Mesh meshclass = Mesh();
-			Mesh::MeshData mesh = meshclass.LoadOBJFile("T:\\GIT\\GPURaytracer\\Raytracer\\light.obj");
+			Mesh mesh = meshclass.LoadOBJFile("T:\\GIT\\GPURaytracer\\Raytracer\\light.obj");
 			mesh.materialIndex = 3;
 			m_scene.meshes.push_back(mesh);
 		}
 		{
 			Mesh meshclass = Mesh();
-			Mesh::MeshData mesh = meshclass.LoadOBJFile("T:\\GIT\\GPURaytracer\\Raytracer\\suzanne.obj");
+			Mesh mesh = meshclass.LoadOBJFile("T:\\GIT\\GPURaytracer\\Raytracer\\suzanne.obj");
 			mesh.materialIndex = 1;
 			//m_scene.meshes.push_back(mesh);
 		}
@@ -130,14 +130,22 @@ public:
 		ImGui::Begin("Scene");
 		ImGuiColorEditFlags misc_flags = ImGuiColorEditFlags_HDR;
 		static ImGuiSliderFlags flags = ImGuiSliderFlags_None;
+		static ImGuiSliderFlags flagLog = ImGuiSliderFlags_Logarithmic;
+
 		if (ImGui::ColorEdit3("Sky Color", glm::value_ptr(m_scene.m_skyColor)))				{ m_sceneChanged = true; }
 		if (ImGui::SliderFloat("Sky Brightness", &m_scene.m_skyBrightness, 0.0f, 10.0f, "%.3f", flags))	{ m_sceneChanged = true; }
+		if (ImGui::SliderFloat("Sun Focus", &m_scene.m_sunFocus, 50.0f, 100000.0f, "%.3f", flagLog)) { m_sceneChanged = true; }
+		if (ImGui::SliderFloat("Sun Intensity", &m_scene.m_sunIntensity, 0.0f, 100.0f, "%.3f", flags)) { m_sceneChanged = true; }
+		if (ImGui::ColorEdit3("Sky Color Horizon", glm::value_ptr(m_scene.m_skyColorHorizon))) { m_sceneChanged = true; }
+		if (ImGui::ColorEdit3("Sky Color Zenith", glm::value_ptr(m_scene.m_skyColorZenith))) { m_sceneChanged = true; }
+		if (ImGui::ColorEdit3("Ground Color", glm::value_ptr(m_scene.m_groundColor))) { m_sceneChanged = true; }
+
 		for (size_t i = 0u; i < m_scene.meshes.size(); i++)
 		{
 			ImGui::PushID((int)i);
 			ImGui::AlignTextToFramePadding();
 
-			Mesh::MeshData& mesh = m_scene.meshes[i];
+			Mesh& mesh = m_scene.meshes[i];
 			Material& mat = m_scene.materials[mesh.materialIndex];
 			ImGui::Separator();
 			ImGui::Text("Object: %s", mesh.name);

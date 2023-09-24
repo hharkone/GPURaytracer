@@ -123,6 +123,23 @@ void Renderer::Render(const Scene& scene, const Camera& camera)
 	}
 }
 
+bool RayBoundingBox(const Ray& ray, const Mesh& mesh)
+{
+	glm::vec3 boxMin = mesh.bbox.min + mesh.Transform;
+	glm::vec3 boxMax = mesh.bbox.max + mesh.Transform;
+
+	glm::vec3 invDir = 1.0f / ray.direction;
+	glm::vec3 tMin = (boxMin - ray.origin) * invDir;
+	glm::vec3 tMax = (boxMax - ray.origin) * invDir;
+	glm::vec3 t1 = glm::min(tMin, tMax);
+	glm::vec3 t2 = glm::max(tMin, tMax);
+
+	float tNear = glm::max(glm::max(t1.x, t1.y), t1.z);
+	float tFar = glm::min(glm::min(t2.x, t2.y), t2.z);
+
+	return tNear <= tFar;
+};
+
 Renderer::Hit Renderer::rayTriangleIntersect(const Ray& ray, const Mesh::Triangle& tri, const glm::vec3& origin)
 {
 	glm::vec3 edgeAB = tri.v1.pos - tri.v0.pos;
@@ -154,12 +171,18 @@ Renderer::Hit Renderer::CalculateRayCollision(const Ray& ray)
 {
 	Hit closestHit;
 
-
 	//Meshes
 	for (size_t i = 0u; i < m_activeScene->meshes.size(); i++)
 	{
-		const Mesh::MeshData& mesh = m_activeScene->meshes[i];
+		const Mesh& mesh = m_activeScene->meshes[i];
 		glm::vec3 origin = mesh.Transform;
+
+
+		if (!RayBoundingBox(ray, mesh))
+		{
+			closestHit.debugHit = 1;
+			continue;
+		}
 
 		for (size_t t = 0u; t < mesh.tris.size(); t++)
 		{
@@ -179,6 +202,32 @@ Renderer::Hit Renderer::CalculateRayCollision(const Ray& ray)
 	return closestHit;
 }
 
+glm::vec3 Renderer::GetEnvironmentLight(Ray& ray)
+{
+	glm::vec3 sunDir = glm::vec3(1.0f);
+	sunDir = glm::normalize(sunDir);
+
+	float skyGradientT = glm::pow(glm::smoothstep(0.0f, 0.4f, ray.direction.y), 0.35f);
+	float groundToSkyT = glm::smoothstep(-0.01f, 0.0f, ray.direction.y);
+	glm::vec3 skyGradient = glm::mix(m_activeScene->m_skyColorHorizon, m_activeScene->m_skyColorZenith, skyGradientT);
+	float sun = glm::pow(glm::max(0.0f, glm::dot(ray.direction, sunDir)), m_activeScene->m_sunFocus) * m_activeScene->m_sunIntensity;
+	// Combine ground, sky, and sun
+	glm::vec3 composite = glm::mix(m_activeScene->m_groundColor, skyGradient, groundToSkyT) + sun * (groundToSkyT >= 1);
+
+	return composite;
+}
+
+float fresnel_schlick_ratio(float cos_theta_incident, float power)
+{
+	float p = 1.f - cos_theta_incident;
+	return pow(p, power);
+}
+
+float fresnel_schlick(float F0, float cos_theta_incident)
+{
+	return glm::mix(F0, 1.f, fresnel_schlick_ratio(cos_theta_incident, 1.0f));
+}
+
 glm::vec3 Renderer::TraceRay(Ray& ray, uint32_t& seed)
 {
 	glm::vec3 incomingLight = glm::vec3(0.0f);
@@ -194,8 +243,12 @@ glm::vec3 Renderer::TraceRay(Ray& ray, uint32_t& seed)
 		{
 			const Material& mat = m_activeScene->materials[hit.materialIndex];
 
+			float F0 = glm::mix(0.02f, 1.0f, mat.metalness);
+			float ndotv = glm::max(glm::dot(hit.worldNormal, -ray.direction), 0.0f);
+			float F = fresnel_schlick(F0, ndotv);
+
 			// Figure out new ray position and direction
-			bool isSpecularBounce = 0.5f >= Utils::RandomFloat(seed);
+			bool isSpecularBounce = F >= Utils::RandomFloat(seed);
 
 			ray.origin = hit.worldPosition;
 			glm::vec3 diffuseContribution = glm::mix(mat.albedo, glm::vec3(0.0f), mat.metalness);
@@ -220,8 +273,9 @@ glm::vec3 Renderer::TraceRay(Ray& ray, uint32_t& seed)
 		}
 		else
 		{
-			incomingLight += m_activeScene->m_skyColor * m_activeScene->m_skyBrightness * rayColor;
+			incomingLight += GetEnvironmentLight(ray) * m_activeScene->m_skyColor * m_activeScene->m_skyBrightness * rayColor;
 			break;
+			//if (hit.debugHit == 0 && b <= 1)
 		}
 	}
 
@@ -242,16 +296,8 @@ glm::vec4 Renderer::PerPixel(uint32_t x, uint32_t y)
 	seed *= m_frameIndex;
 
 	glm::vec3 totalIncomingLight = glm::vec3(0.0f);
-
 	totalIncomingLight += TraceRay(ray, seed);
 
 
 	return glm::vec4(totalIncomingLight, 1.0f);
-}
-
-Renderer::Hit Renderer::Miss(Renderer::Hit& hit)
-{
-	hit.didHit = false;
-
-	return hit;
 }

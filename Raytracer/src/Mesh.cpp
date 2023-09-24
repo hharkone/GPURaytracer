@@ -5,9 +5,38 @@
 
 #include "Mesh.h"
 
-Mesh::MeshData Mesh::LoadOBJFile(const std::string& path)
+void Mesh::CalculateBbox(Mesh& mdata)
 {
-    Mesh::MeshData mesh;
+    float min_x, min_y, min_z, max_x, max_y, max_z;
+    min_x = min_y = min_z = std::numeric_limits<float>::max();
+    max_x = max_y = max_z = std::numeric_limits<float>::min();
+
+    for (size_t i = 0u; i < mdata.verts.size(); i++)
+    {
+        if (mdata.verts[i].x < min_x) min_x = mdata.verts[i].x;
+        if (mdata.verts[i].x > max_x) max_x = mdata.verts[i].x;
+        if (mdata.verts[i].y < min_y) min_y = mdata.verts[i].y;
+        if (mdata.verts[i].y > max_y) max_y = mdata.verts[i].y;
+        if (mdata.verts[i].z < min_z) min_z = mdata.verts[i].z;
+        if (mdata.verts[i].z > max_z) max_z = mdata.verts[i].z;
+    }
+
+    mdata.bbox.min = glm::vec3(min_x, min_y, min_z) + Transform;
+    mdata.bbox.max = glm::vec3(max_x, max_y, max_z) + Transform;
+}
+
+Mesh::Bbox Mesh::GetMeshBoundingBox(const Mesh& mdata)
+{
+    Mesh::Bbox bbox;
+    bbox.max = mdata.bbox.max + mdata.Transform;
+    bbox.min = mdata.bbox.min + mdata.Transform;
+
+    return bbox;
+}
+
+Mesh Mesh::LoadOBJFile(const std::string& path)
+{
+    Mesh mesh;
     std::ifstream infile(path, std::ifstream::in);
     std::string line;
 
@@ -51,6 +80,8 @@ Mesh::MeshData Mesh::LoadOBJFile(const std::string& path)
         }
 
     }
+
+    CalculateBbox(mesh);
 
     return mesh;
 }

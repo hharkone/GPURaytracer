@@ -26,16 +26,22 @@ public:
         Vertex v2 = v2;
     };
 
-    struct MeshData
+    struct Bbox
     {
-        std::vector<glm::vec3> verts;
-        std::vector<glm::vec3> normals;
-        std::vector<glm::vec2> uvs;
-        std::vector<Triangle>  tris;
-        glm::vec3 Transform;
-        int materialIndex;
-        std::string name;
+        glm::vec3 min;
+        glm::vec3 max;
     };
 
-    MeshData LoadOBJFile(const std::string& path);
+    std::vector<glm::vec3> verts;
+    std::vector<glm::vec3> normals;
+    std::vector<glm::vec2> uvs;
+    std::vector<Triangle>  tris;
+    glm::vec3 Transform = glm::vec3(0.0f);
+    int materialIndex;
+    std::string name = "";
+    Bbox bbox;
+
+    void CalculateBbox(Mesh& mdata);
+    Bbox GetMeshBoundingBox(const Mesh& mdata);
+    Mesh LoadOBJFile(const std::string& path);
 };
