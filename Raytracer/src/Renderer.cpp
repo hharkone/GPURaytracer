@@ -107,7 +107,7 @@ void Renderer::Render(const Scene& scene, const Camera& camera)
 					accumulatedColor /= (float)m_frameIndex;
 
 					accumulatedColor = glm::clamp(accumulatedColor, glm::vec4(0.0f), glm::vec4(1.0));
-					//accumulatedColor = glm::pow(accumulatedColor, glm::vec4(0.46464f));
+					accumulatedColor = glm::pow(accumulatedColor, glm::vec4(0.46464f));
 					m_imageData[x + y * m_finalImage->GetWidth()] = Utils::ConvertToRGBA(accumulatedColor);
 				});
 		});
@@ -290,7 +290,7 @@ float fresnel_schlick_ratio(float cos_theta_incident, float power)
 
 float fresnel_schlick(float F0, float cos_theta_incident)
 {
-	return glm::mix(F0, 1.f, fresnel_schlick_ratio(cos_theta_incident, 1.0f));
+	return glm::mix(F0, 1.f, fresnel_schlick_ratio(cos_theta_incident, 2.0f));
 }
 
 glm::vec3 Renderer::TraceRay(Ray& ray, uint32_t& seed)
@@ -309,7 +309,7 @@ glm::vec3 Renderer::TraceRay(Ray& ray, uint32_t& seed)
 
 			float F0 = glm::mix(0.02f, 1.0f, mat.metalness);
 			float ndotv = glm::max(glm::dot(hit.worldNormal, -ray.direction), 0.0f);
-			float F = fresnel_schlick(F0, 1.0-ndotv);
+			float F = fresnel_schlick(F0, ndotv);
 
 			// Figure out new ray position and direction
 			bool isSpecularBounce = 0.5f >= Utils::RandomFloat(seed);
@@ -323,7 +323,7 @@ glm::vec3 Renderer::TraceRay(Ray& ray, uint32_t& seed)
 			// Update light calculations
 			glm::vec3 emittedLight = mat.emissionColor * mat.emissionPower;
 			incomingLight += emittedLight * rayColor;
-			glm::vec3 specularColor = glm::mix(glm::vec3(0.1f), mat.albedo, mat.metalness);
+			glm::vec3 specularColor = glm::mix(glm::vec3(F), mat.albedo, mat.metalness);
 			rayColor *= glm::mix(mat.albedo * diffuseContribution, specularColor, isSpecularBounce);
 
 			// Random early exit if ray colour is nearly 0 (can't contribute much to final result)
@@ -334,6 +334,8 @@ glm::vec3 Renderer::TraceRay(Ray& ray, uint32_t& seed)
 			}
 
 			rayColor *= 1.0f / p;
+
+			//rayColor = glm::vec3(specularColor);
 		}
 		else
 		{

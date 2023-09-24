@@ -173,6 +173,7 @@ public:
 		ImGui::Text("Last render time: %.3f ms", m_renderTimeMs);
 		ImGui::Checkbox("Accumulate", &m_renderer.GetSettings().accumulate);
 		ImGui::DragFloat("Camera Speed", &m_camera.GetSpeed(), 0.1f);
+		if (ImGui::DragFloat("Camera FOV", &m_camera.GetFOV(), 0.1f)) { m_sceneChanged = true; }
 		if (ImGui::SliderInt("Max Bounces", &m_renderer.GetSettings().bounces, 0, 30)) { m_sceneChanged = true; }
 
 		if (ImGui::Button("Reset") || m_sceneChanged)

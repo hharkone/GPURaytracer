@@ -82,6 +82,7 @@ bool Camera::OnUpdate(float ts)
 	if (moved)
 	{
 		RecalculateView();
+		RecalculateProjection();
 		RecalculateRayDirections();
 	}
 
@@ -103,6 +104,11 @@ void Camera::OnResize(uint32_t width, uint32_t height)
 float Camera::GetRotationSpeed()
 {
 	return 0.5f;
+}
+
+float& Camera::GetFOV()
+{
+	return m_VerticalFOV;
 }
 
 float& Camera::GetSpeed()
