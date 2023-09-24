@@ -34,6 +34,7 @@ public:
         std::vector<Triangle>  tris;
         glm::vec3 Transform;
         int materialIndex;
+        std::string name;
     };
 
     MeshData LoadOBJFile(const std::string& path);

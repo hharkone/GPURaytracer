@@ -18,6 +18,10 @@ Mesh::MeshData Mesh::LoadOBJFile(const std::string& path)
     while (std::getline(infile, line))
     {
         std::string test = line.substr(0, 2);
+        if (test == "o ")
+        {
+            mesh.name = line.substr(2, line.length()-2);
+        }
         if (test == "v ")
         {
             if(sscanf_s(line.c_str(), "v %f %f %f\n", &x, &y, &z) == 3)

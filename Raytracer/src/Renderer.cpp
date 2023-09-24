@@ -128,7 +128,7 @@ Renderer::Hit Renderer::rayTriangleIntersect(const Ray& ray, const Mesh::Triangl
 	glm::vec3 edgeAB = tri.v1.pos - tri.v0.pos;
 	glm::vec3 edgeAC = tri.v2.pos - tri.v0.pos;
 	glm::vec3 normalVector = glm::cross(edgeAB, edgeAC);
-	glm::vec3 ao = ray.origin - tri.v0.pos;
+	glm::vec3 ao = (ray.origin - origin) - tri.v0.pos;
 	glm::vec3 dao = glm::cross(ao, ray.direction);
 
 	float determinant = -glm::dot(ray.direction, normalVector);
@@ -143,7 +143,7 @@ Renderer::Hit Renderer::rayTriangleIntersect(const Ray& ray, const Mesh::Triangl
 	// Initialize hit info
 	Hit hitInfo;
 	hitInfo.didHit = determinant >= 1E-6 && dst >= 0.0f && u >= 0.0f && v >= 0.0f && w >= 0.0f;
-	hitInfo.worldPosition = ray.origin + ray.direction * dst;
+	hitInfo.worldPosition = (ray.origin) + ray.direction * dst;
 	hitInfo.worldNormal = normalize(tri.v0.normal * w + tri.v1.normal * u + tri.v2.normal * v);
 	hitInfo.hitDistance = dst;
 
@@ -159,7 +159,7 @@ Renderer::Hit Renderer::CalculateRayCollision(const Ray& ray)
 	for (size_t i = 0u; i < m_activeScene->meshes.size(); i++)
 	{
 		const Mesh::MeshData& mesh = m_activeScene->meshes[i];
-		glm::vec3 origin = ray.origin - mesh.Transform;
+		glm::vec3 origin = mesh.Transform;
 
 		for (size_t t = 0u; t < mesh.tris.size(); t++)
 		{
@@ -181,14 +181,10 @@ Renderer::Hit Renderer::CalculateRayCollision(const Ray& ray)
 
 glm::vec3 Renderer::TraceRay(Ray& ray, uint32_t& seed)
 {
-	//int closestTriIndex = -1;
-	//float closestHit = std::numeric_limits<float>::max();
-	//int closestObjectIndex = -1;
-
 	glm::vec3 incomingLight = glm::vec3(0.0f);
 	glm::vec3 rayColor = glm::vec3(1.0f);
 
-	size_t bounces = 1;
+	size_t bounces = 5;
 	for (size_t b = 0; b <= bounces; b++)
 	{
 		Hit hit = CalculateRayCollision(ray);
@@ -199,9 +195,10 @@ glm::vec3 Renderer::TraceRay(Ray& ray, uint32_t& seed)
 			const Material& mat = m_activeScene->materials[hit.materialIndex];
 
 			// Figure out new ray position and direction
-			bool isSpecularBounce = mat.specularProbability >= Utils::RandomFloat(seed);
+			bool isSpecularBounce = 0.5f >= Utils::RandomFloat(seed);
 
 			ray.origin = hit.worldPosition;
+			glm::vec3 diffuseContribution = glm::mix(mat.albedo, glm::vec3(0.0f), mat.metalness);
 			glm::vec3 diffuseDir = glm::normalize(hit.worldNormal + Utils::InUnitSphere(seed));
 			glm::vec3 specularDir = glm::reflect(ray.direction, hit.worldNormal);
 			ray.direction = glm::normalize(glm::mix(diffuseDir, specularDir, (1.0f-mat.roughness) * isSpecularBounce));
@@ -209,8 +206,8 @@ glm::vec3 Renderer::TraceRay(Ray& ray, uint32_t& seed)
 			// Update light calculations
 			glm::vec3 emittedLight = mat.emissionColor * mat.emissionPower;
 			incomingLight += emittedLight * rayColor;
-			glm::vec3 specularColor = glm::mix(glm::vec3(0.02f), mat.albedo, mat.metalness);
-			rayColor *= glm::mix(mat.albedo, specularColor, isSpecularBounce);
+			glm::vec3 specularColor = glm::mix(glm::vec3(0.1f), mat.albedo, mat.metalness);
+			rayColor *= glm::mix(mat.albedo * diffuseContribution, specularColor, isSpecularBounce);
 
 			// Random early exit if ray colour is nearly 0 (can't contribute much to final result)
 			float p = glm::max(rayColor.r, glm::max(rayColor.g, rayColor.b));
@@ -251,43 +248,7 @@ glm::vec4 Renderer::PerPixel(uint32_t x, uint32_t y)
 
 	return glm::vec4(totalIncomingLight, 1.0f);
 }
-/*
-Renderer::Hit Renderer::ClosestHit(const Ray& ray, float hitDistance, int objectIndex, int triIndex)
-{
-	Renderer::Hit hit;
-	hit.hitDistance = hitDistance;
-	hit.objectIndex = objectIndex;
-	hit.primIndex = triIndex;
 
-	const Mesh::MeshData& mesh     = m_activeScene->meshes[objectIndex];
-	const Mesh::Triangle& triangle = mesh.tris[triIndex];
-
-	glm::vec3 origin = ray.origin - mesh.Transform;
-	hit.worldPosition = origin + ray.direction * hitDistance;
-	hit.worldNormal = glm::normalize(triangle.v0.normal);
-	hit.worldPosition += mesh.Transform;
-	hit.didHit = true;
-
-	return hit;
-}
-
-Renderer::Hit Renderer::ClosestHit(const Ray& ray, float hitDistance, int objectIndex)
-{
-	Renderer::Hit hit;
-	hit.hitDistance = hitDistance;
-	hit.objectIndex = objectIndex;
-
-	const Sphere& closestSphere = m_activeScene->spheres[objectIndex];
-
-	glm::vec3 origin = ray.origin - closestSphere.position;
-	hit.worldPosition = origin + ray.direction * hitDistance;
-	hit.worldNormal = glm::normalize(hit.worldPosition);
-
-	hit.worldPosition += closestSphere.position;
-
-	return hit;
-}
-*/
 Renderer::Hit Renderer::Miss(Renderer::Hit& hit)
 {
 	hit.didHit = false;

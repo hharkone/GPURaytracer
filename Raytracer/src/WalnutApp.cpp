@@ -140,6 +140,7 @@ public:
 			Mesh::MeshData& mesh = m_scene.meshes[i];
 			Material& mat = m_scene.materials[mesh.materialIndex];
 			ImGui::Separator();
+			ImGui::Text("Object: %s", mesh.name);
 			ImGui::Text("Material: %s", mat.name);
 			if (ImGui::DragInt("Material", &mesh.materialIndex, 0.1f, 0, (int)m_scene.materials.size() - 1))   { m_sceneChanged = true; }
 			if (ImGui::DragFloat3("Position", glm::value_ptr(mesh.Transform), 0.1f))						   { m_sceneChanged = true; }
@@ -159,7 +160,7 @@ public:
 			ImGui::Text("%s", mat.name);
 			if (ImGui::ColorEdit3("Albedo", glm::value_ptr(mat.albedo)))				      { m_sceneChanged = true; }
 			if (ImGui::DragFloat("Roughness", &mat.roughness, 0.01f, 0.0f, 1.0f))			  { m_sceneChanged = true; }
-			if (ImGui::DragFloat("Specularity", &mat.specularProbability, 0.01f, 0.0f, 1.0f)) { m_sceneChanged = true; }
+			//if (ImGui::DragFloat("Specularity", &mat.specularProbability, 0.01f, 0.0f, 1.0f)) { m_sceneChanged = true; }
 			if (ImGui::DragFloat("Metalness", &mat.metalness, 0.01f, 0.0f, 1.0f))			  { m_sceneChanged = true; }
 			if (ImGui::ColorEdit3("Emission Color", glm::value_ptr(mat.emissionColor)))		  { m_sceneChanged = true; }
 			if (ImGui::DragFloat("Emission Power", &mat.emissionPower, 0.1f, 0.0f, 100.0f))   { m_sceneChanged = true; }
