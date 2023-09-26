@@ -1,4 +1,5 @@
 #pragma once
+
 #include <memory>
 #include <glm/glm.hpp>
 
@@ -8,8 +9,11 @@
 #include "Scene.h"
 #include "Mesh.h"
 
+class CudaBuffer;
+
 class Renderer
 {
+
 public:
 
     struct Settings
@@ -28,6 +32,7 @@ public:
 
     void ResetFrameIndex() { m_frameIndex = 1; }
     Settings& GetSettings() { return m_settings; }
+    float* GetCudaData() { return m_cudaData; }
 
 private:
 
@@ -61,4 +66,7 @@ private:
     glm::vec4* m_accumulationData = nullptr;
     Settings m_settings;
     uint32_t m_frameIndex = 1;
+    float* m_cudaData = nullptr;
+    //CudaBuffer* m_cudaBuffer;
+    std::shared_ptr<CudaBuffer> m_cudaBuffer;
 };

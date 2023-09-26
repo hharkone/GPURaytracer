@@ -181,6 +181,9 @@ public:
 			m_renderer.ResetFrameIndex();
 			m_sceneChanged = false;
 		}
+		if(m_renderer.GetCudaData() != nullptr)
+			ImGui::Text("CUDA ints: %i", m_renderer.GetCudaData()[4]);
+
 		ImGui::End();
 
 		ImGui::Begin("Scene");
@@ -214,7 +217,7 @@ public:
 
 		for (size_t i = 0u; i < m_scene.spheres.size(); i++)
 		{
-			ImGui::PushID((int)i+m_scene.meshes.size());
+			ImGui::PushID((int)i+(int)m_scene.meshes.size());
 			ImGui::AlignTextToFramePadding();
 
 			Sphere& sphere = m_scene.spheres[i];

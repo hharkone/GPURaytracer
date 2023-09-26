@@ -1,6 +1,7 @@
 #include <execution>
 #include "Renderer.h"
 #include "Walnut/Random.h"
+#include "CudaMain.cuh"
 
 namespace Utils
 {
@@ -82,16 +83,28 @@ void Renderer::OnResize(uint32_t width, uint32_t height)
 
 	for (uint32_t i = 0; i < height; i++)
 		m_imgVerticalIterator[i] = i;
+
+	m_cudaBuffer = std::shared_ptr<CudaBuffer>(new CudaBuffer(10u));
 }
 
 void Renderer::Render(const Scene& scene, const Camera& camera)
 {
+	if (m_cudaBuffer)
+	{
+		m_cudaBuffer->Compute();
+		m_cudaData = m_cudaBuffer->getData();
+
+		if (m_cudaData != nullptr)
+		{
+			fprintf(stderr, "Cuda: %f, %f, %f, %f, %f, %f \n", m_cudaData[0], m_cudaData[1], m_cudaData[2], m_cudaData[3], m_cudaData[4], m_cudaData[5]);
+		}
+	}
+
 	m_activeScene = &scene;
 	m_activeCamera = &camera;
 
 	if (m_frameIndex == 1)
 		memset(m_accumulationData, 0, m_finalImage->GetWidth() * m_finalImage->GetHeight() * sizeof(glm::vec4));
-
 
 #if true
 	std::for_each(std::execution::par, m_imgVerticalIterator.begin(), m_imgVerticalIterator.end(),
