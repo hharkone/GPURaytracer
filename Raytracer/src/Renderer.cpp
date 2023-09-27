@@ -1,7 +1,8 @@
 #include <execution>
+#include <glm/gtc/type_ptr.hpp>
+
 #include "Renderer.h"
 #include "Walnut/Random.h"
-#include "CudaMain.cuh"
 
 namespace Utils
 {
@@ -72,8 +73,8 @@ void Renderer::OnResize(uint32_t width, uint32_t height)
 	delete[] m_imageData;
 	m_imageData = new uint32_t[width * height];
 
-	delete[] m_accumulationData;
-	m_accumulationData = new glm::vec4[width * height];
+	//delete[] m_accumulationData;
+	//m_accumulationData = new float[width * height * 3];
 
 	m_imgHorizontalIterator.resize(width);
 	m_imgVerticalIterator.resize(height);
@@ -84,44 +85,43 @@ void Renderer::OnResize(uint32_t width, uint32_t height)
 	for (uint32_t i = 0; i < height; i++)
 		m_imgVerticalIterator[i] = i;
 
-	m_cudaBuffer = std::shared_ptr<CudaBuffer>(new CudaBuffer(10u));
+	m_cudaRenderer = std::shared_ptr<CudaRenderer>(new CudaRenderer(width, height, 50.0f, m_frameIndex, 5u, 10u));
 }
 
 void Renderer::Render(const Scene& scene, const Camera& camera)
 {
-	if (m_cudaBuffer)
+	if (m_cudaRenderer)
 	{
-		m_cudaBuffer->Compute();
-		m_cudaData = m_cudaBuffer->getData();
-
-		if (m_cudaData != nullptr)
-		{
-			fprintf(stderr, "Cuda: %f, %f, %f, %f, %f, %f \n", m_cudaData[0], m_cudaData[1], m_cudaData[2], m_cudaData[3], m_cudaData[4], m_cudaData[5]);
-		}
+		m_cudaRenderer->Compute();
+		m_cudaData = m_cudaRenderer->getAccumulationData();
 	}
 
 	m_activeScene = &scene;
 	m_activeCamera = &camera;
 
 	if (m_frameIndex == 1)
-		memset(m_accumulationData, 0, m_finalImage->GetWidth() * m_finalImage->GetHeight() * sizeof(glm::vec4));
+		//memset(m_accumulationData, 0, m_finalImage->GetWidth() * m_finalImage->GetHeight() * sizeof(float) * 3);
 
-#if true
+#if false
 	std::for_each(std::execution::par, m_imgVerticalIterator.begin(), m_imgVerticalIterator.end(),
 		[this](uint32_t y)
 		{
 			std::for_each(std::execution::par, m_imgHorizontalIterator.begin(), m_imgHorizontalIterator.end(),
 				[this, y](uint32_t x)
 				{
-					glm::vec4 color = PerPixel(x, y);
-					m_accumulationData[x + y * m_finalImage->GetWidth()] += color;
+					size_t index = x + y * m_finalImage->GetWidth();
+					glm::vec4 color;
 
-					glm::vec4 accumulatedColor = m_accumulationData[x + y * m_finalImage->GetWidth()];
-					accumulatedColor /= (float)m_frameIndex;
+					color.r = m_cudaData[index + 0];
+					color.g = m_cudaData[index + 0];
+					color.b = m_cudaData[index + 0];
+					color.a = 1.0f;
 
-					accumulatedColor = glm::clamp(accumulatedColor, glm::vec4(0.0f), glm::vec4(1.0));
-					accumulatedColor = glm::pow(accumulatedColor, glm::vec4(0.46464f));
-					m_imageData[x + y * m_finalImage->GetWidth()] = Utils::ConvertToRGBA(accumulatedColor);
+					color /= (float)m_frameIndex;
+
+					color = glm::clamp(color, glm::vec4(0.0f), glm::vec4(1.0));
+					//accumulatedColor = glm::pow(accumulatedColor, glm::vec4(0.46464f));
+					m_imageData[x + y * m_finalImage->GetWidth()] = Utils::ConvertToRGBA(color);
 				});
 		});
 #else
@@ -131,14 +131,19 @@ void Renderer::Render(const Scene& scene, const Camera& camera)
 			std::for_each( m_imgHorizontalIterator.begin(), m_imgHorizontalIterator.end(),
 			[this, y](uint32_t x)
 				{
-					glm::vec4 color = PerPixel(x, y);
-					m_accumulationData[x + y * m_finalImage->GetWidth()] += color;
+					size_t index = x + y * m_finalImage->GetWidth();
+					glm::vec4 color;
 
-					glm::vec4 accumulatedColor = m_accumulationData[x + y * m_finalImage->GetWidth()];
-					accumulatedColor /= (float)m_frameIndex;
+					color.r = m_cudaData[index * 3u + 0];
+					color.g = m_cudaData[index * 3u + 1];
+					color.b = m_cudaData[index * 3u + 2];
+					color.a = 1.0f;
 
-					accumulatedColor = glm::clamp(accumulatedColor, glm::vec4(0.0f), glm::vec4(1.0));
-					m_imageData[x + y * m_finalImage->GetWidth()] = Utils::ConvertToRGBA(accumulatedColor);
+					//color /= (float)m_frameIndex;
+
+					color = glm::clamp(color, glm::vec4(0.0f), glm::vec4(1.0));
+					//accumulatedColor = glm::pow(accumulatedColor, glm::vec4(0.46464f));
+					m_imageData[x + y * m_finalImage->GetWidth()] = Utils::ConvertToRGBA(color);
 				});
 		});
 #endif

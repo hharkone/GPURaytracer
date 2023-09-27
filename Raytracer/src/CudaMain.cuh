@@ -1,42 +1,31 @@
 #pragma once
 #include <memory>
-#include <vector>
+//#include <vector>
+
 
 #include "cuda_runtime.h"
 #include "device_launch_parameters.h"
+#include "device_atomic_functions.h"
 
-
-class CudaBuffer
+class CudaRenderer
 {
 public:
-	CudaBuffer(size_t bufferSize) : m_bufferSize(bufferSize)
+	CudaRenderer(size_t width, size_t height, float fov, size_t sampleIndex, size_t samples, size_t bounces) : m_bufferSize(width * height * sizeof(float3)),
+		m_fov(fov), m_sampleIndex(sampleIndex), m_samples(samples), m_bounces(bounces), m_width(width), m_height(height)
 	{
-		vec = std::vector<float>(bufferSize);
-
-		m_cudaBufferA = new float[bufferSize];
-		m_cudaBufferB = new float[bufferSize];
-		m_cudaBufferC = new float[bufferSize];
-
-		for (int i = 0; i < bufferSize; i++)
-		{
-			vec.at(i) = 10.0f * i;
-		}
-
-		for (int i = 0; i < bufferSize; i++)
-		{
-			m_cudaBufferA[i] = float(i+10);
-			m_cudaBufferB[i] = float(i);
-			m_cudaBufferC[i] = float(i*2);
-		}
+		m_accumulationBuffer = new float[width * height * 3];
 	}
 
 	void Compute(void);
-	float* getData(void) { return m_cudaBufferC; }
-	std::vector<float> vec;
+	float* getAccumulationData(void) { return m_accumulationBuffer; }
 
 private:
 	const size_t m_bufferSize;
-	float* m_cudaBufferA;
-	float* m_cudaBufferB;
-	float* m_cudaBufferC;
+	size_t m_sampleIndex;
+	size_t m_samples;
+	size_t m_bounces;
+	size_t m_width;
+	size_t m_height;
+	float m_fov;
+	float* m_accumulationBuffer = nullptr;
 };

@@ -16,6 +16,7 @@ public:
 	ExampleLayer()
 		: m_camera(50.0f, 0.1f, 1000.0f)
 	{
+		/*
 		{
 			Sphere sphere;
 			sphere.position = { -9.0f, 1.0f, 0.0f };
@@ -155,6 +156,7 @@ public:
 			mesh.materialIndex = 1;
 			//m_scene.meshes.push_back(mesh);
 		}
+		*/
 	}
 
 	virtual void OnUpdate(float ts) override
@@ -181,8 +183,6 @@ public:
 			m_renderer.ResetFrameIndex();
 			m_sceneChanged = false;
 		}
-		if(m_renderer.GetCudaData() != nullptr)
-			ImGui::Text("CUDA ints: %i", m_renderer.GetCudaData()[4]);
 
 		ImGui::End();
 

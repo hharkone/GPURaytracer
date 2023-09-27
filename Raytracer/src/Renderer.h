@@ -8,6 +8,7 @@
 #include "Ray.h"
 #include "Scene.h"
 #include "Mesh.h"
+#include "CudaMain.cuh"
 
 class CudaBuffer;
 
@@ -32,7 +33,6 @@ public:
 
     void ResetFrameIndex() { m_frameIndex = 1; }
     Settings& GetSettings() { return m_settings; }
-    float* GetCudaData() { return m_cudaData; }
 
 private:
 
@@ -63,10 +63,9 @@ private:
     std::vector<uint32_t> m_imgHorizontalIterator, m_imgVerticalIterator;
 
     uint32_t* m_imageData = nullptr;
-    glm::vec4* m_accumulationData = nullptr;
+    //float* m_accumulationData = nullptr;
     Settings m_settings;
     uint32_t m_frameIndex = 1;
     float* m_cudaData = nullptr;
-    //CudaBuffer* m_cudaBuffer;
-    std::shared_ptr<CudaBuffer> m_cudaBuffer;
+    std::shared_ptr<CudaRenderer> m_cudaRenderer = nullptr;
 };
