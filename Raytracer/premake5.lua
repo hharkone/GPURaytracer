@@ -5,7 +5,7 @@ project "Raytracer"
    targetdir "bin/%{cfg.buildcfg}"
    staticruntime "off"
 
-   files { "src/**.h", "src/**.cpp" }
+   files { "src/**.h", "src/**.cpp", "src/**.cuh", "src/**.cu" }
 
    includedirs
    {
@@ -13,7 +13,7 @@ project "Raytracer"
       "../Walnut/vendor/glfw/include",
       "../Walnut/vendor/glm",
       "../Walnut/Walnut/src",
-      -->"%{IncludeDir.VulkanSDK}",
+      "%{IncludeDir.VulkanSDK}",
       "%{IncludeDir.CUDA}"
    }
 

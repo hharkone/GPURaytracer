@@ -6,10 +6,11 @@ workspace "Raytracer"
 
 outputdir = "%{cfg.buildcfg}-%{cfg.system}-%{cfg.architecture}"
 include "Walnut/WalnutExternal.lua"
-include "RaytracerExternal.lua"
+include "Raytracer/RaytracerExternal.lua"
 include "Raytracer"
 
-project "Dependencies/Premake"
+--[[
+project "Premake"
 kind "Utility"
 
 files
@@ -22,3 +23,4 @@ postbuildcommands
 {
 '%{prj.location}/vendor/premake/premake5 vs2020'
 }
+}}--
