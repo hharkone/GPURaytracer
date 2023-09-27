@@ -13,8 +13,7 @@ project "Raytracer"
       "../Walnut/vendor/glfw/include",
       "../Walnut/vendor/glm",
       "../Walnut/Walnut/src",
-      
-      "%{IncludeDir.VulkanSDK}",
+      -->"%{IncludeDir.VulkanSDK}",
       "%{IncludeDir.CUDA}"
    }
 

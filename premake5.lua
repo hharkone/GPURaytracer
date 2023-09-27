@@ -9,7 +9,7 @@ include "Walnut/WalnutExternal.lua"
 include "RaytracerExternal.lua"
 include "Raytracer"
 
-project "Premake"
+project "Dependencies/Premake"
 kind "Utility"
 
 files
