@@ -1,7 +1,7 @@
 project "Raytracer"
    kind "ConsoleApp"
    language "C++"
-   cppdialect "C++17"
+   cppdialect "C++20"
    targetdir "bin/%{cfg.buildcfg}"
    staticruntime "off"
 
@@ -12,15 +12,22 @@ project "Raytracer"
       "../Walnut/vendor/imgui",
       "../Walnut/vendor/glfw/include",
       "../Walnut/vendor/glm",
-
       "../Walnut/Walnut/src",
-
+      
       "%{IncludeDir.VulkanSDK}",
+      "%{IncludeDir.CUDA}"
    }
 
+   libdirs
+   {
+       "%{LibraryDir.CUDA}"
+   }
+   
    links
    {
-       "Walnut"
+       "Walnut",
+       "%{Library.CudaLib}",
+       "%{Library.CudartStaticLib}"
    }
 
    targetdir ("../bin/" .. outputdir .. "/%{prj.name}")
@@ -47,3 +54,4 @@ project "Raytracer"
       runtime "Release"
       optimize "On"
       symbols "Off"
+      
