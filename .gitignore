@@ -2,6 +2,7 @@
 .vs/
 bin/
 bin-int/
+Raytracer/x64/**
 
 # Files
 *.vcxproj

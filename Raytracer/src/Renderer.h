@@ -53,7 +53,7 @@ private:
     Hit raySphere(const Ray& ray, const Sphere& sphere);
     Hit rayTriangleIntersect(const Ray& ray, const Mesh::Triangle& tri, const glm::vec3& origin);
     Hit CalculateRayCollision(const Ray& ray);
-    glm::vec3 Renderer::GetEnvironmentLight(Ray& ray);
+    glm::vec3 GetEnvironmentLight(Ray& ray);
 
 private:
 

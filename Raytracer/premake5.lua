@@ -14,19 +14,19 @@ project "Raytracer"
       "../Walnut/vendor/glm",
       "../Walnut/Walnut/src",
       "%{IncludeDir.VulkanSDK}",
-      "%{IncludeDir.CUDA}"
+      "%{RT_IncludeDir.CUDA}"
    }
 
    libdirs
    {
-       "%{LibraryDir.CUDA}"
+       "%{RT_LibraryDir.CUDA}"
    }
    
    links
    {
        "Walnut",
-       "%{Library.CudaLib}",
-       "%{Library.CudartStaticLib}"
+       "%{RT_Library.CudaLib}",
+       "%{RT_Library.CudartStaticLib}"
    }
 
    targetdir ("../bin/" .. outputdir .. "/%{prj.name}")

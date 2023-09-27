@@ -2,12 +2,12 @@
 
 CUDA_SDK = os.getenv("CUDA_PATH")
 
-IncludeDir = {}
-IncludeDir["CUDA"] = "%{CUDA_SDK}/include"
+RT_IncludeDir = {}
+RT_IncludeDir["CUDA"] = "%{CUDA_SDK}/include"
 
-LibraryDir = {}
-LibraryDir["CUDA"] = "%{CUDA_SDK}/lib/x64"
+RT_LibraryDir = {}
+RT_LibraryDir["CUDA"] = "%{CUDA_SDK}/lib/x64"
 
-Library = {}
-Library["CudaLib"] = "cuda.lib"
-Library["CudartStaticLib"] = "cudart_static.lib"
+RT_Library = {}
+RT_Library["CudaLib"] = "cuda.lib"
+RT_Library["CudartStaticLib"] = "cudart_static.lib"

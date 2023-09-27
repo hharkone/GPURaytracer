@@ -5,7 +5,7 @@
 #include "Walnut/Image.h"
 #include "Walnut/Timer.h"
 #include "Renderer.h"
-#include "Camera.h"
+//#include "Camera.h"
 
 using namespace Walnut;
 
