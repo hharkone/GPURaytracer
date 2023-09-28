@@ -1,4 +1,5 @@
 #include <glm/gtc/type_ptr.hpp>
+#include <deque>
 
 #include "Walnut/Application.h"
 #include "Walnut/EntryPoint.h"
@@ -16,6 +17,7 @@ public:
 	ExampleLayer()
 		: m_camera(50.0f, 0.1f, 1000.0f)
 	{
+		m_rendetTimeVec.resize(200);
 		/*
 		{
 			Sphere sphere;
@@ -174,18 +176,18 @@ public:
 		ImGui::Begin("Settings");
 		ImGui::Text("Last render time: %.3f ms", m_renderTimeMs);
 		ImGui::Text("Sample Index: %i", m_renderer.GetFrameIndex());
-		ImGui::Text("Camera DirX: %.2f, %.2f, %.2f, %.2f", m_camera.GetProjection()[0].x, m_camera.GetProjection()[0].y, m_camera.GetProjection()[0].z, m_camera.GetProjection()[0].w);
-		ImGui::Text("Camera DirY: %.2f, %.2f, %.2f, %.2f", m_camera.GetProjection()[1].x, m_camera.GetProjection()[1].y, m_camera.GetProjection()[1].z, m_camera.GetProjection()[1].w);
-		ImGui::Text("Camera DirZ: %.2f, %.2f, %.2f, %.2f", m_camera.GetProjection()[2].x, m_camera.GetProjection()[2].y, m_camera.GetProjection()[2].z, m_camera.GetProjection()[2].w);
-		ImGui::Text("Camera DirW: %.2f, %.2f, %.2f, %.2f", m_camera.GetProjection()[3].x, m_camera.GetProjection()[3].y, m_camera.GetProjection()[3].z, m_camera.GetProjection()[3].w);
-		ImGui::Text("Camera ViewX: %.2f, %.2f, %.2f, %.2f", m_camera.GetView()[0].x, m_camera.GetView()[0].y, m_camera.GetView()[0].z, m_camera.GetView()[0].w);
-		ImGui::Text("Camera ViewY: %.2f, %.2f, %.2f, %.2f", m_camera.GetView()[1].x, m_camera.GetView()[1].y, m_camera.GetView()[1].z, m_camera.GetView()[1].w);
-		ImGui::Text("Camera ViewZ: %.2f, %.2f, %.2f, %.2f", m_camera.GetView()[2].x, m_camera.GetView()[2].y, m_camera.GetView()[2].z, m_camera.GetView()[2].w);
-		ImGui::Text("Camera ViewW: %.2f, %.2f, %.2f, %.2f", m_camera.GetView()[3].x, m_camera.GetView()[3].y, m_camera.GetView()[3].z, m_camera.GetView()[3].w);
+		//ImGui::Text("Camera DirX: %.2f, %.2f, %.2f, %.2f", m_camera.GetProjection()[0].x, m_camera.GetProjection()[0].y, m_camera.GetProjection()[0].z, m_camera.GetProjection()[0].w);
+		//ImGui::Text("Camera DirY: %.2f, %.2f, %.2f, %.2f", m_camera.GetProjection()[1].x, m_camera.GetProjection()[1].y, m_camera.GetProjection()[1].z, m_camera.GetProjection()[1].w);
+		//ImGui::Text("Camera DirZ: %.2f, %.2f, %.2f, %.2f", m_camera.GetProjection()[2].x, m_camera.GetProjection()[2].y, m_camera.GetProjection()[2].z, m_camera.GetProjection()[2].w);
+		//ImGui::Text("Camera DirW: %.2f, %.2f, %.2f, %.2f", m_camera.GetProjection()[3].x, m_camera.GetProjection()[3].y, m_camera.GetProjection()[3].z, m_camera.GetProjection()[3].w);
+		//ImGui::Text("Camera ViewX: %.2f, %.2f, %.2f, %.2f", m_camera.GetView()[0].x, m_camera.GetView()[0].y, m_camera.GetView()[0].z, m_camera.GetView()[0].w);
+		//ImGui::Text("Camera ViewY: %.2f, %.2f, %.2f, %.2f", m_camera.GetView()[1].x, m_camera.GetView()[1].y, m_camera.GetView()[1].z, m_camera.GetView()[1].w);
+		//ImGui::Text("Camera ViewZ: %.2f, %.2f, %.2f, %.2f", m_camera.GetView()[2].x, m_camera.GetView()[2].y, m_camera.GetView()[2].z, m_camera.GetView()[2].w);
+		//ImGui::Text("Camera ViewW: %.2f, %.2f, %.2f, %.2f", m_camera.GetView()[3].x, m_camera.GetView()[3].y, m_camera.GetView()[3].z, m_camera.GetView()[3].w);
 		ImGui::Text("Camera POS: %.2f, %.2f, %.2f", m_camera.GetPosition().x, m_camera.GetPosition().y, m_camera.GetPosition().z);
 		ImGui::Checkbox("Accumulate", &m_renderer.GetSettings().accumulate);
 		ImGui::DragFloat("Camera Speed", &m_camera.GetSpeed(), 0.1f);
-		if (ImGui::DragFloat("Camera FOV", &m_camera.GetFOV(), 0.1f)) { m_sceneChanged = true; }
+		if (ImGui::DragFloat("Camera FOV", &m_camera.GetFOV(), 0.1f, 0.01f, 179.0f)) { m_sceneChanged = true; m_camera.RecalculateProjection(); }
 		if (ImGui::SliderInt("Max Bounces", &m_renderer.GetSettings().bounces, 0, 30)) { m_sceneChanged = true; }
 
 		if (ImGui::Button("Reset") || m_sceneChanged)
@@ -293,13 +295,23 @@ public:
 		m_camera.OnResize(m_viewportWidth, m_viewportHeight);
 		m_renderer.Render(m_scene, m_camera);
 
-		m_renderTimeMs = timer.ElapsedMillis();
+		//m_renderTimeMs = timer.ElapsedMillis();
+		m_rendetTimeVec.push_front(timer.ElapsedMillis());
+		m_rendetTimeVec.pop_back();
+
+		float sum = 0.0f;
+		for(size_t i = 0; i < m_rendetTimeVec.size(); i++)
+		{
+			sum += m_rendetTimeVec.at(i);
+		}
+		m_renderTimeMs = sum / m_rendetTimeVec.size();
 	}
 
 private:
 	Renderer m_renderer;
 	Camera m_camera;
 	float m_renderTimeMs = 0.0f;
+	std::deque<float> m_rendetTimeVec;
 	uint32_t m_viewportWidth = 0, m_viewportHeight = 0;
 	Scene m_scene;
 	bool m_sceneChanged = false;

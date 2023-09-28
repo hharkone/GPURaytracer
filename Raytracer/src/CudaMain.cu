@@ -54,7 +54,7 @@ struct Ray
 struct Material
 {
 	float3 albedo    { 0.8f, 0.8f, 0.8f };
-	float  roughness { 0.2f };
+	float  roughness { 0.6f };
 	float3 emission  { 0.0f, 0.0f, 0.0f };
 	float  metalness = 0.0f;
 };
@@ -156,16 +156,18 @@ __constant__ static float jitterMatrix[10] =
 __constant__ Sphere spheres[] =
 {
 	  //{ float radius, { float3 position },      { float3 emission }, { float3 colour },       refl_type }
-	  { 1e5f,{ 1e5f + 1.0f, 40.8f, 81.6f },     Material{{ 0.9f, 0.6f, 0.4f }} }, //Left
-	  { 1e5f,{ -1e5f + 99.0f, 40.8f, 81.6f },   Material{{ 0.4f, 0.6f, 0.9f }} }, //Rght
-	  { 1e5f,{ 50.0f, 40.8f, 1e5f },            Material{} }, //Back
-	  { 1e5f,{ 50.0f, 40.8f, -1e5f + 600.0f },  Material{} }, //Frnt
-	  { 1e5f,{ 50.0f, 1e5f, 81.6f },            Material{} }, //Botm
-	  { 1e5f,{ 50.0f, -1e5f + 81.6f, 81.6f },   Material{} }, //Top
-	  { 16.5f,{ 27.0f, 16.5f, 47.0f },          Material{} }, // small sphere 1
-	  { 16.5f,{ 73.0f, 16.5f, 78.0f },          Material{} }, // small sphere 2
-	  { 100.0f,{ 30.0f, 181.6f - 1.9f, 80.0f }, Material{ { 0.8f, 0.8f, 0.8f }, 0.1f, { 8.0f, 6.0f, 5.0f }, 0.0f} },  // Light
-	  { 100.0f,{ 70.0f, 181.6f - 1.9f, 80.0f }, Material{ { 0.8f, 0.8f, 0.8f }, 0.1f, { 5.0f, 6.0f, 8.0f }, 0.0f} }  // Light
+	  { 1e5f,{ 1e5f + 1.0f, 40.8f, 81.6f },     Material{ { 0.5f, 0.7f,  0.8f  }, 0.1f, { 0.0f, 0.0f, 0.0f }, 0.0f } }, //Left
+	  { 1e5f,{ -1e5f + 99.0f, 40.8f, 81.6f },   Material{ { 0.7f, 0.1f,  0.1f  }, 0.1f, { 0.0f, 0.0f, 0.0f }, 0.0f } }, //Right
+	  { 1e5f,{ 50.0f, 40.8f, 1e5f },            Material{ { 1.0f, 1.0f,  1.0f  }, 0.0f, { 0.0f, 0.0f, 0.0f }, 1.0f } }, //Back
+	  { 1e5f,{ 50.0f, 40.8f, -1e5f + 600.0f },  Material{} }, //Frnt     	   
+	  { 1e5f,{ 50.0f, 1e5f, 81.6f },            Material{ { 0.7f, 0.7f,  0.7f  }, 0.05f,{ 0.0f, 0.0f, 0.0f }, 0.0f } }, //Botm
+	  { 1e5f,{ 50.0f, -1e5f + 81.6f, 81.6f },   Material{} }, //Top			   
+	  { 16.5f,{ 27.0f, 16.5f, 47.0f },          Material{ { 0.7f, 0.7f,  0.7f  }, 0.05f,{ 0.0f, 0.0f, 0.0f }, 0.0f } }, // small sphere 1
+	  { 16.5f,{ 73.0f, 16.5f, 78.0f },          Material{ { 1.0f, 0.9f,  0.6f  }, 0.05f, { 0.0f, 0.0f, 0.0f }, 1.0f } },  // gold sphere 2
+	  { 16.5f,{ 73.0f, 16.5f, 118.0f },         Material{ { 0.98f,0.815f,0.75f }, 0.05f, { 0.0f, 0.0f, 0.0f }, 1.0f } }, // copper sphere 2
+	  { 100.0f,{ 30.0f, 181.6f - 1.9f, 80.0f }, Material{ { 0.0f, 0.0f,  0.0f  }, 0.1f, { 8.0f, 6.0f, 5.0f }, 0.0f } },  // Light
+	  { 100.0f,{ 70.0f, 181.6f - 1.9f, 80.0f }, Material{ { 0.0f, 0.0f,  0.0f  }, 0.1f, { 5.0f, 6.0f, 8.0f }, 0.0f } }   // Light
+	  //{ 2.1f,{ 40.0f, 40.5f, 47.0f }, Material{ { 0.8f, 0.8f, 0.8f }, 0.1f, { 150.0f, 160.0f, 180.0f }, 0.0f} }      // Light
 };
 
 __constant__ Sphere spheresSimple[] =
@@ -173,6 +175,20 @@ __constant__ Sphere spheresSimple[] =
 	//{ float radius, { float3 position }, { Material }}
 	  { 0.5f, { 0.0f, 0.0f, 0.0f },  Material{} },
 	  { 0.5f, { 0.0f, -1.0f, 0.0f }, Material{ {0.0f, 0.0f, 0.0f}, 0.0f, {1.0f, 1.0f, 0.0f}, 0.0f }}
+};
+
+__device__ static float fresnel_schlick_ratio(float cos_theta_incident, float power)
+{
+	float p = 1.0f - cos_theta_incident;
+	return pow(p, power);
+}
+__constant__ static float jitterMatrix[10] =
+{
+   -0.25,  0.75,
+	0.75,  0.33333,
+   -0.75, -0.25,
+	0.25, -0.75,
+	0.0f, 0.0f
 };
 
 // Random number generator from https://github.com/gz/rust-raytracer
@@ -196,9 +212,43 @@ __device__ static float getrandom(unsigned int* seed0, unsigned int* seed1)
 	return (res.f - 2.f) / 2.f;
 }
 
-__device__ float3 InUnitSphere(uint32_t* seed0, uint32_t* seed1)
+// PCG (permuted congruential generator). Thanks to:
+// www.pcg-random.org and www.shadertoy.com/view/XlGcRh
+__device__ uint32_t nextRandom(uint32_t& state)
 {
-	return normalize(make_float3(getrandom(seed0, seed1) * 2.0f - 1.0f, getrandom(seed0, seed1) * 2.0f - 1.0f, getrandom(seed0, seed1) * 2.0f - 1.0f));
+	state = state * 747796405 + 2891336453;
+	uint result = ((state >> ((state >> 28) + 4)) ^ state) * 277803737;
+	result = (result >> 22) ^ result;
+	return result;
+}
+
+__device__ float randomValue(uint32_t& state)
+{
+	return nextRandom(state) / 4294967295.0; // 2^32 - 1
+}
+
+__device__ float3 inUnitSphere(uint32_t& state)
+{
+	return normalize(make_float3(randomValue(state) * 2.0f - 1.0f, randomValue(state) * 2.0f - 1.0f, randomValue(state) * 2.0f - 1.0f));
+}
+
+__device__ float randomValueNormalDistribution(uint32_t& state)
+{
+	// Thanks to https://stackoverflow.com/a/6178290
+	float theta = 2 * 3.1415926 * randomValue(state);
+	float rho = fsqrtf(-2 * log(randomValue(state)));
+
+	return rho * cos(theta);
+}
+
+__device__ float3 randomDirection(uint32_t& state)
+{
+	// Thanks to https://math.stackexchange.com/a/1585996
+	float x = randomValueNormalDistribution(state);
+	float y = randomValueNormalDistribution(state);
+	float z = randomValueNormalDistribution(state);
+
+	return normalize(make_float3(x, y, z));
 }
 
 __device__ void vector4_matrix4_mult(float* vec, float* mat, float* out)
@@ -232,11 +282,7 @@ __device__ inline bool intersect_scene(const Ray& r, float& t, int& id)
 	return t < inf;
 }
 
-// Radiance function, the meat of path tracing solves the rendering equation: outgoing radiance (at a
-// point) = emitted radiance + reflected radiance reflected radiance is sum (integral) of incoming
-// radiance from all directions in hemisphere above point, multiplied by reflectance function of
-// material (BRDF) and cosine incident angle
-__device__ float3 radiance(Ray& r, uint32_t* s1, uint32_t* s2, size_t bounces) // Returns ray color
+__device__ float3 radiance(Ray& r, uint32_t& s1, size_t bounces) // Returns ray color
 {
 	float3 accucolor = make_float3(0.0f, 0.0f, 0.0f); // Accumulates ray colour with each iteration through bounce loop
 	float3 mask = make_float3(1.0f, 1.0f, 1.0f);
@@ -255,38 +301,46 @@ __device__ float3 radiance(Ray& r, uint32_t* s1, uint32_t* s2, size_t bounces) /
 		const Sphere& obj = spheres[id];
 		float3 x = r.origin + r.direction * t;                   // hitpoint
 		float3 n = normalize(x - obj.pos);             // normal
-		float3 nl = dot(n, r.direction) < 0 ? n : n * -1;    // front facing normal
+		float3 nl = dot(n, r.direction) < 0.0f ? n : n * -1.0f;    // front facing normal
 
-		// Add emission of current sphere to accumulated
-		// color (first term in rendering equation sum)
 		accucolor += mask * obj.mat.emission;
 
 		// Create 2 random numbers
-		float r1 = 2 * M_PI * getrandom(s1, s2); // Pick random number on unit circle (radius = 1, circumference = 2*Pi) for azimuth
-		float r2 = getrandom(s1, s2);            // Pick random number for elevation
+		float r1 = 2 * M_PI * randomValue(s1); // Pick random number on unit circle (radius = 1, circumference = 2*Pi) for azimuth
+		float r2 = randomValue(s1);            // Pick random number for elevation
 		float r2s = sqrtf(r2);
 
-		// Compute random ray direction on hemisphere using polar coordinates cosine weighted
-		// importance sampling (favours ray directions closer to normal direction)
-		float3 d = InUnitSphere(s1, s2);
+		float ndotl = fmaxf(dot(-r.direction, nl), 0.0f);
+		float f = fresnel_schlick_ratio(ndotl, 8.0f);
+
+		bool isSpecularBounce = max(obj.mat.metalness, max(f, 0.02f)) >= randomValue(s1);
+
+		float3 diffuseDir = normalize(nl + randomDirection(s1));
+		float3 specularDir = reflect(r.direction, normalize(nl + randomDirection(s1) * obj.mat.roughness));
+
+		float3 linearSurfColor = srgbToLinear(obj.mat.albedo);
+
+		r.direction = normalize(lerp(diffuseDir, specularDir, isSpecularBounce));
 
 		// New ray origin is intersection point of previous ray with scene
 		r.origin = x + nl * 0.1f; // offset ray origin slightly to prevent self intersection
-		r.direction = normalize(d + nl); // cosine weighted sampling pattern
 
-		mask = mask * srgbToLinear(obj.mat.albedo);     // Multiply with colour of object
-		//mask *= dot(d, nl);		      // Weigh light contribution using cosine of angle between incident light and normal
-		//mask *= 2;                      // Fudge factor
+		mask = mask * lerp(linearSurfColor, lerp(make_float3(1.0f), linearSurfColor, obj.mat.metalness), isSpecularBounce);
 
-		//accucolor = hit.normal;
+		float p = max(mask.x, max(mask.y, mask.z));
+		if (randomValue(s1) >= p)
+		{
+			break;
+		}
+		mask *= 1.0f / p;
+
+		//accucolor = { f, f, f };
 	}
 
 
 	return accucolor;
 }
 
-// __global__ : executed on the device (GPU) and callable only from host (CPU) this kernel runs in
-// parallel on all the CUDA threads
 __global__ void render_kernel(float3* buf, uint32_t width, uint32_t height, Camera_GPU camera, size_t samples, size_t bounces, uint32_t sampleIndex)
 {
 	// Assign a CUDA thread to every pixel (x,y) blockIdx, blockDim and threadIdx are CUDA specific
@@ -300,8 +354,8 @@ __global__ void render_kernel(float3* buf, uint32_t width, uint32_t height, Came
 	uint32_t i = (height - y - 1) * width + x;
 	
 	// Seeds for random number generator
-	uint32_t s1 = x * sampleIndex + i;
-	uint32_t s2 = y * sampleIndex + i;
+	uint32_t s1 = x * y * sampleIndex + i;
+	//uint32_t s2 = y * sampleIndex + i;
 	//const float fov = camera.fov * M_PI / 180.0f;
 	//const float tf = std::tan(fov * 0.5f);
 
@@ -310,6 +364,8 @@ __global__ void render_kernel(float3* buf, uint32_t width, uint32_t height, Came
 	float viewCoord[4] = { coord.x, coord.y, -1.0f, 1.0f };
 	float target[4];
 	float target2[4];
+
+
 
 	//glm::vec4 target = m_InverseProjection * glm::vec4(coord.x, coord.y, 1, 1);
 	//glm::vec3 rayDirection = glm::vec3(m_InverseView * glm::vec4(glm::normalize(glm::vec3(target) / target.w), 0)); // World space
@@ -326,8 +382,10 @@ __global__ void render_kernel(float3* buf, uint32_t width, uint32_t height, Came
 
 	float3 worldDir = normalize(make_float3(target2[0], target2[1], target2[2]));
 
-	//float3 cx = make_float3(width * tf / height, 0.0f, 0.0f);                    // Ray direction offset in x direction
-	//float3 cy = normalize(cross(cx, cam.direction)) * tf;                        // Ray direction offset in y direction (.5135 is field of view angle)
+	float3 cx = make_float3(camera.invViewMat[0], camera.invViewMat[1], camera.invViewMat[2]);
+	float3 cy = make_float3(camera.invViewMat[4], camera.invViewMat[5], camera.invViewMat[6]);
+	float3 cz = make_float3(camera.invViewMat[8], camera.invViewMat[9], camera.invViewMat[10]);
+
 	float3 lightContribution;
 
 	// Reset r to zero for every pixel
@@ -338,20 +396,16 @@ __global__ void render_kernel(float3* buf, uint32_t width, uint32_t height, Came
 	// Samples per pixel
 	for (size_t s = 0; s < samples; s++)
 	{
-		//size_t jitterIndex = (s + sampleIndex) % 5u;
-		//float jitterX = 2.0 * (x + jitterMatrix[2u * jitterIndex]) / (float)width;
-		//float jitterY = 2.0 * (y + jitterMatrix[2u * jitterIndex + 1u]) / (float)height;
-
-#ifndef MSAA_4X
-		//jitterX = jitterY = 0.0f;
-#endif // !MSAA_4X
+		size_t jitterIndex = (s + sampleIndex) % 5u;
+		float jitterX = (jitterMatrix[2u * jitterIndex]);
+		float jitterY = (jitterMatrix[2u * jitterIndex + 1u]);
 
 		// Compute primary ray direction
-		//float3 d = cam.direction + (cx * ((.25 + x + jitterX) / width - .5) + cy * ((.25 + y + jitterY) / height - .5));
+		float3 d = (cx * (jitterX / width) + cy * (jitterY / height));
 
 		// Create primary ray, add incoming radiance to pixelcolor
-		Ray ray = Ray(cameraPos, worldDir);
-		lightContribution += radiance(ray, &s1, &s2, bounces) * (1.0 / samples);
+		Ray ray = Ray(cameraPos, normalize(worldDir + d*0.5f));
+		lightContribution += radiance(ray, s1, bounces) * (1.0 / samples);
 	}
 
 	// Write rgb value of pixel to image buffer on the GPU

@@ -64,7 +64,9 @@ namespace Utils
 void Renderer::ResetFrameIndex()
 {
 	m_frameIndex = 1;
-	m_cudaRenderer->Clear();
+
+	if(m_cudaRenderer)
+		m_cudaRenderer->Clear();
 }
 
 void Renderer::OnResize(uint32_t width, uint32_t height)
@@ -75,6 +77,7 @@ void Renderer::OnResize(uint32_t width, uint32_t height)
 			return;
 
 		m_finalImage->Resize(width, height);
+		ResetFrameIndex();
 	}
 	else
 	{
@@ -93,11 +96,7 @@ void Renderer::OnResize(uint32_t width, uint32_t height)
 	for (uint32_t i = 0; i < height; i++)
 		m_imgVerticalIterator[i] = i;
 
-	float fov = 50.0f;
-	size_t bounces = 5u;
-	size_t samples = 1u;
-
-	m_cudaRenderer = std::shared_ptr<CudaRenderer>(new CudaRenderer(width, height, &m_frameIndex, samples, &m_settings.bounces));
+	m_cudaRenderer = std::shared_ptr<CudaRenderer>(new CudaRenderer(width, height, &m_frameIndex, 1u, &m_settings.bounces));
 }
 
 void Renderer::Render(const Scene& scene, const Camera& camera)

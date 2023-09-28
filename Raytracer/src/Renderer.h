@@ -64,9 +64,7 @@ private:
     std::vector<uint32_t> m_imgHorizontalIterator, m_imgVerticalIterator;
 
     uint32_t* m_imageData = nullptr;
-    //float* m_accumulationData = nullptr;
     Settings m_settings;
     uint32_t m_frameIndex = 1;
-    float* m_cudaData = nullptr;
     std::shared_ptr<CudaRenderer> m_cudaRenderer = nullptr;
 };

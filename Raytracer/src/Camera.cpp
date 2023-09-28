@@ -104,7 +104,7 @@ void Camera::OnResize(uint32_t width, uint32_t height)
 
 float Camera::GetRotationSpeed()
 {
-	return 0.5f;
+	return 0.01f * m_VerticalFOV;
 }
 
 float& Camera::GetFOV()

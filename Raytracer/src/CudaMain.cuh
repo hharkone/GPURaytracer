@@ -27,6 +27,15 @@ public:
 		m_viewMat    = new float[16];
 	}
 
+	~CudaRenderer()
+	{
+		cudaDeviceSynchronize();
+
+		cudaFree(m_accumulationBuffer_GPU);
+		cudaFree(m_imageData_GPU);
+		cudaFree(m_outputBuffer_GPU);
+	}
+
 	void SetCamera(float3 pos, float3 dir, float fov);
 	void SetInvViewMat(float4 x, float4 y, float4 z, float4 w);
 	void SetInvProjMat(float4 x, float4 y, float4 z, float4 w);
@@ -37,13 +46,14 @@ public:
 	float* getFloatOutputData(void) { return m_outputBuffer; }
 	uint32_t* getImageData(void) { return m_imageData; }
 
+	uint32_t m_width;
+	uint32_t m_height;
+
 private:
 	const size_t m_bufferSize;
 	uint32_t* m_sampleIndex;
 	size_t m_samples;
 	int* m_bounces;
-	uint32_t m_width;
-	uint32_t m_height;
 	float3 m_cameraPos = { 0.0f, 0.0f, 0.0f };
 	float3 m_cameraDir = {0.0f, 0.0f, -1.0f};
 	float* m_invViewMat = nullptr;
