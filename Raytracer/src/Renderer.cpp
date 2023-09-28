@@ -105,7 +105,7 @@ void Renderer::Render(const Scene& scene, const Camera& camera)
 	m_activeScene = &scene;
 	m_activeCamera = &camera;
 
-	if (m_cudaRenderer)
+	if (m_cudaRenderer && m_settings.accumulate)
 	{
 		glm::vec3 glmPos = m_activeCamera->GetPosition();
 		float3 pos = make_float3(glmPos.x, glmPos.y, glmPos.z);
@@ -135,14 +135,19 @@ void Renderer::Render(const Scene& scene, const Camera& camera)
 		m_cudaRenderer->SetInvProjMat(x2, y2, z2, w2);
 		m_cudaRenderer->SetViewMat(x3, y3, z3, w3);
 
-		m_cudaData = m_cudaRenderer->getOutputData();
-	}
-
-	if (GetSettings().accumulate || m_frameIndex == 1)
-	{
+		//m_cudaData = m_cudaRenderer->getOutputData();
 		m_cudaRenderer->Compute();
-	}
 
+		m_imageData = m_cudaRenderer->getImageData();
+
+		if (m_imageData)
+		{
+			m_finalImage->SetData(m_imageData);
+		}
+
+		m_frameIndex++;
+	}
+/*
 #if true
 	std::for_each(std::execution::par, m_imgVerticalIterator.begin(), m_imgVerticalIterator.end(),
 		[this](uint32_t y)
@@ -192,17 +197,7 @@ void Renderer::Render(const Scene& scene, const Camera& camera)
 				});
 		});
 #endif
-
-	m_finalImage->SetData(m_imageData);
-
-	if (m_settings.accumulate)
-	{
-		m_frameIndex++;
-	}
-	else
-	{
-		//m_frameIndex = 1;
-	}
+*/
 }
 /*
 bool RayBoundingBox(const RayCPU& ray, const Mesh& mesh)

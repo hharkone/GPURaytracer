@@ -12,10 +12,14 @@ public:
 		m_sampleIndex(sampleIndex), m_samples(samples), m_bounces(bounces), m_width(width), m_height(height)
 	{
 		m_outputBuffer = new float[width * height * 3];
+		m_imageData = new uint32_t[width * height];
+		memset(m_imageData, 0, (size_t)width * (size_t)height * sizeof(uint32_t));
 
 		cudaMalloc(&m_outputBuffer_GPU, m_bufferSize);
 		cudaMalloc(&m_accumulationBuffer_GPU, m_bufferSize);
+		cudaMalloc(&m_imageData_GPU, (size_t)width * (size_t)height * sizeof(uint32_t));
 		cudaMemset(m_accumulationBuffer_GPU, 0, m_bufferSize);
+		cudaMemset(m_imageData_GPU, 0, (size_t)width * (size_t)height * sizeof(uint32_t));
 
 		m_cameraPos = { 0.0f, 0.0f, 0.0f };
 		m_invViewMat = new float[16];
@@ -30,7 +34,8 @@ public:
 	void Compute(void);
 	void Clear(void);
 	void SetBounces(int bounces) { m_bounces = &bounces; }
-	float* getOutputData(void) { return m_outputBuffer; }
+	float* getFloatOutputData(void) { return m_outputBuffer; }
+	uint32_t* getImageData(void) { return m_imageData; }
 
 private:
 	const size_t m_bufferSize;
@@ -45,7 +50,9 @@ private:
 	float* m_invProjMat = nullptr;
 	float* m_viewMat = nullptr;
 	float m_fov = 50.0f;
+	uint32_t* m_imageData = nullptr;
 	float* m_outputBuffer = nullptr;
 	float3* m_outputBuffer_GPU = nullptr;
 	float3* m_accumulationBuffer_GPU = nullptr;
+	uint32_t* m_imageData_GPU = nullptr;
 };

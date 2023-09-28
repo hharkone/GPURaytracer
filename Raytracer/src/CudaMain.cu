@@ -26,6 +26,24 @@ __device__ inline float3 srgbToLinear(float3 c)
 	return powf(c, 2.2222f);
 }
 
+__device__ inline uint32_t ConvertToRGBA(const float3& color)
+{
+	float3 outColor;
+	outColor.x = clamp(color.x, 0.0f, 1.0f);
+	outColor.y = clamp(color.y, 0.0f, 1.0f);
+	outColor.z = clamp(color.z, 0.0f, 1.0f);
+
+	outColor = powf(outColor, 0.4646464);
+
+	uint8_t r = (uint8_t)(outColor.x * 255.0f);
+	uint8_t g = (uint8_t)(outColor.y * 255.0f);
+	uint8_t b = (uint8_t)(outColor.z * 255.0f);
+
+	uint32_t returnValue = (255 << 24) | (b << 16) | (g << 8) | r;
+
+	return returnValue;
+}
+
 struct Ray
 {
 	float3 origin; // ray origin
@@ -120,7 +138,9 @@ void CudaRenderer::Clear()
 {
 	cudaDeviceSynchronize();
 	memset(m_outputBuffer, 0, m_bufferSize);
+	memset(m_imageData, 0, m_width * m_height * sizeof(uint32_t));
 	cudaMemset(m_accumulationBuffer_GPU, 0, m_bufferSize);
+	cudaMemset(m_imageData_GPU, 0, m_width * m_height * sizeof(uint32_t));
 }
 /*
 __constant__ static float jitterMatrix[10] =
@@ -368,7 +388,7 @@ __global__ void render_kernelDebug(float3* buf, uint32_t width, uint32_t height,
 	buf[i] = r;
 }
 
-__global__ void scale_accumulation_kernel(float3* m_outputBuffer, float3* m_accumulationBuffer, uint32_t width, uint32_t height, uint32_t m_sampleIndex)
+__global__ void scale_accumulation_kernel(float3* m_outputBuffer, float3* m_accumulationBuffer, uint32_t width, uint32_t height, uint32_t sampleIndex)
 {
 	uint32_t x = blockIdx.x * blockDim.x + threadIdx.x;
 	uint32_t y = blockIdx.y * blockDim.y + threadIdx.y;
@@ -379,7 +399,22 @@ __global__ void scale_accumulation_kernel(float3* m_outputBuffer, float3* m_accu
 	// Index of current pixel (calculated using thread index)
 	uint32_t i = (height - y - 1) * width + x;
 
-	m_outputBuffer[i] = m_accumulationBuffer[i] / (float)m_sampleIndex;
+	m_outputBuffer[i] = m_accumulationBuffer[i] / (float)sampleIndex;
+}
+
+__global__ void floatToImageData_kernel(uint32_t* outputBuffer, float3* inputBuffer, uint32_t width, uint32_t height, uint32_t sampleIndex)
+{
+	uint32_t x = blockDim.x * blockIdx.x + threadIdx.x;
+	uint32_t y = blockDim.y * blockIdx.y + threadIdx.y;
+				 
+
+	if ((x >= width) || (y >= height))
+		return;
+
+	// Index of current pixel (calculated using thread index)
+	uint32_t i = (height - y - 1) * width + x;
+
+	outputBuffer[i] = ConvertToRGBA(inputBuffer[i] / (float)sampleIndex);
 }
 
 // Initialize and run the kernel
@@ -396,6 +431,15 @@ void CudaRenderer::Compute(void)
 	// dim3 is CUDA specific type, block and grid are required to schedule CUDA threads over streaming multiprocessors
 	dim3 blocks(m_width / tx + 1, m_height / ty + 1, 1);
 	dim3 threads(tx, ty);
+
+	cudaError_t cudaStatus;
+
+	cudaStatus = cudaSetDevice(0);
+	if (cudaStatus != cudaSuccess)
+	{
+		fprintf(stderr, "cudaSetDevice failed!  Do you have a CUDA-capable GPU installed?\n");
+		goto Error;
+	}
 
 	//Camera_GPU camera_gpu
 	//{
@@ -418,16 +462,50 @@ void CudaRenderer::Compute(void)
 	//render_kernelDebug <<<blocks, threads >>> (m_accumulationBuffer_GPU, m_width, m_height, camera_buffer_obj);
 	render_kernel <<<blocks, threads>>> (m_accumulationBuffer_GPU, m_width, m_height, camera_buffer_obj, m_samples, *m_bounces, *m_sampleIndex);
 
-	// cudaDeviceSynchronize waits for the kernel to finish, and returns
+	// Check for any errors launching the kernel
+	cudaStatus = cudaGetLastError();
+	if (cudaStatus != cudaSuccess)
+	{
+		fprintf(stderr, "render_kernel launch failed: %s\n", cudaGetErrorString(cudaStatus));
+		goto Error;
+	}
+
 	cudaDeviceSynchronize();
 
-	//scale_accumulation_kernel <<<blocks, threads >>> (m_outputBuffer_GPU, m_accumulationBuffer_GPU, m_width, m_height, *m_sampleIndex);
+	if (cudaStatus != cudaSuccess)
+	{
+		fprintf(stderr, "cudaDeviceSynchronize returned error code %d after launching render_kernel!\n", cudaStatus);
+		goto Error;
+	}
 
-	//cudaDeviceSynchronize();
+	floatToImageData_kernel <<<blocks, threads >>> (m_imageData_GPU, m_accumulationBuffer_GPU, m_width, m_height, *m_sampleIndex);
 
-	cudaMemcpy(m_outputBuffer, m_accumulationBuffer_GPU, m_bufferSize, cudaMemcpyDeviceToHost);
+	// Check for any errors launching the kernel
+	cudaStatus = cudaGetLastError();
+	if (cudaStatus != cudaSuccess)
+	{
+		fprintf(stderr, "floatToImageData_kernel launch failed: %s\n", cudaGetErrorString(cudaStatus));
+		goto Error;
+	}
 
+	cudaStatus = cudaDeviceSynchronize();
+
+	if (cudaStatus != cudaSuccess)
+	{
+		fprintf(stderr, "cudaDeviceSynchronize returned error code %d after launching floatToImageData_kernel!\n", cudaStatus);
+		goto Error;
+	}
+
+	cudaStatus = cudaMemcpy(m_imageData, m_imageData_GPU, m_width * m_height * sizeof(uint32_t), cudaMemcpyDeviceToHost);
+
+	if (cudaStatus != cudaSuccess)
+	{
+		fprintf(stderr, "cudaMemcpy failed!");
+		goto Error;
+	}
 	//cudaFree(output_buffer_gpu);
+
+	Error:
 }
 
 void CudaRenderer::SetCamera(float3 pos, float3 dir, float fov)
