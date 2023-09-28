@@ -60,6 +60,21 @@ struct Sphere
 	}
 };
 
+struct Camera_GPU
+{
+	float fov;
+	float invViewMat[16];
+	float invProjMat[16];
+	float viewMat[16];
+};
+
+void CudaRenderer::Clear()
+{
+	cudaDeviceSynchronize();
+	memset(m_outputBuffer, 0, m_bufferSize);
+	cudaMemset(m_accumulationBuffer_GPU, 0, m_bufferSize);
+}
+
 __constant__ static float jitterMatrix[10] =
 {
    -0.25,  0.75,
@@ -84,6 +99,7 @@ __constant__ Sphere spheres[] =
 	  { 100.0f,{ 30.0f, 181.6f - 1.9f, 80.0f }, Material{} },  // Light
 	  { 100.0f,{ 70.0f, 181.6f - 1.9f, 80.0f }, Material{} }  // Light
 };
+
 __constant__ Sphere spheresSimple[] =
 {
 	//{ float radius, { float3 position }, { Material }}
@@ -112,6 +128,35 @@ __device__ static float getrandom(unsigned int* seed0, unsigned int* seed1)
 	return (res.f - 2.f) / 2.f;
 }
 
+__device__ float3 InUnitSphere(uint32_t* seed0, uint32_t* seed1)
+{
+	return normalize(make_float3(getrandom(seed0, seed1) * 2.0f - 1.0f, getrandom(seed0, seed1) * 2.0f - 1.0f, getrandom(seed0, seed1) * 2.0f - 1.0f));
+}
+
+__device__ void vector4_matrix4_mult(float* vec, float* mat, float* out)
+{
+	for (int i = 0; i < 4; i++)
+	{
+		out[i] = 0.0f;
+	}
+
+	for (int i = 0; i < 4; i++)
+	{
+		for (int j = 0; j < 4; j++)
+		{
+			out[i] += (mat[i + 4 * j] * vec[j]);
+		}
+	}
+}
+
+__device__ void vector4_matrix4_mult_dbg(Camera_GPU camera, float* out)
+{
+	//for (int i = 0; i < 4; i++)
+	//{
+		out[1] = 1.0f;
+	//}
+}
+
 __device__ inline bool intersect_scene(const Ray& r, float& t, int& id)
 {
 	float n = sizeof(spheresSimple) / sizeof(Sphere), d, inf = t = 1e20;  // t is distance to closest intersection, initialise t to a huge number outside scene
@@ -131,13 +176,13 @@ __device__ inline bool intersect_scene(const Ray& r, float& t, int& id)
 // point) = emitted radiance + reflected radiance reflected radiance is sum (integral) of incoming
 // radiance from all directions in hemisphere above point, multiplied by reflectance function of
 // material (BRDF) and cosine incident angle
-__device__ float3 radiance(Ray& r, unsigned int* s1, unsigned int* s2, size_t bounces) // Returns ray color
+__device__ float3 radiance(Ray& r, uint32_t* s1, uint32_t* s2, size_t bounces) // Returns ray color
 {
 	float3 accucolor = make_float3(0.0f, 0.0f, 0.0f); // Accumulates ray colour with each iteration through bounce loop
 	float3 mask = make_float3(1.0f, 1.0f, 1.0f);
 
-	// Ray bounce loop (no Russian Roulette used)
-	for (size_t b = 0; b < bounces; b++) // Iteration up to 4 bounces (replaces recursion in CPU code)
+
+	for (size_t b = 0; b < bounces; b++)
 	{
 		float t;           // Distance to closest intersection
 		int id = 0;        // Index of closest intersected sphere
@@ -146,13 +191,14 @@ __device__ float3 radiance(Ray& r, unsigned int* s1, unsigned int* s2, size_t bo
 		if (!intersect_scene(r, t, id))
 		{
 			accucolor += mask * make_float3(0.1f, 0.12f, 0.2f); // If miss, return sky
+			break;
 		}
 
 		// Else, we've got a hit! compute hitpoint and normal
 		const Sphere& obj = spheresSimple[id];               // hitobject
 		float3 x = r.origin + r.direction * t;               // hitpoint
 		float3 n = normalize(x - obj.pos);                   // normal
-		float3 nl = dot(n, r.direction) < 0 ? n : n * -1;    // front facing normal
+		float3 nl = dot(n, r.direction) < 0.0f ? n : n * -1.0f;    // front facing normal
 
 		// Add emission of current sphere to accumulated
 		// colour (first term in rendering equation sum)
@@ -176,11 +222,11 @@ __device__ float3 radiance(Ray& r, unsigned int* s1, unsigned int* s2, size_t bo
 
 		// Compute random ray direction on hemisphere using polar coordinates cosine weighted
 		// importance sampling (favours ray directions closer to normal direction)
-		float3 d = normalize(u * cos(r1) * r2s + v * sin(r1) * r2s + w * sqrtf(1 - r2));
+		float3 d = InUnitSphere(s1, s2);
 
 		// New ray origin is intersection point of previous ray with scene
-		r.origin = x + nl * 0.05f; // offset ray origin slightly to prevent self intersection
-		r.direction = d;
+		r.origin = x + nl * 0.01f; // offset ray origin slightly to prevent self intersection
+		r.direction = normalize(d + nl); // cosine weighted sampling pattern
 
 		mask = mask * obj.mat.albedo;     // Multiply with colour of object
 		//mask *= dot(d, nl);		      // Weigh light contribution using cosine of angle between incident light and normal
@@ -192,32 +238,53 @@ __device__ float3 radiance(Ray& r, unsigned int* s1, unsigned int* s2, size_t bo
 
 // __global__ : executed on the device (GPU) and callable only from host (CPU) this kernel runs in
 // parallel on all the CUDA threads
-__global__ void render_kernel(float3* buf, size_t width, size_t height, float fovY, size_t samples, size_t bounces, size_t sampleIndex)
+__global__ void render_kernel(float3* buf, uint32_t width, uint32_t height, Camera_GPU camera, size_t samples, size_t bounces, uint32_t sampleIndex)
 {
 	// Assign a CUDA thread to every pixel (x,y) blockIdx, blockDim and threadIdx are CUDA specific
 	// Keywords replaces nested outer loops in CPU code looping over image rows and image columns
-	unsigned int x = blockIdx.x * blockDim.x + threadIdx.x;
-	unsigned int y = blockIdx.y * blockDim.y + threadIdx.y;
+	uint32_t x = blockIdx.x * blockDim.x + threadIdx.x;
+	uint32_t y = blockIdx.y * blockDim.y + threadIdx.y;
 
 	if ((x >= width) || (y >= height)) return;
 
 	// Index of current pixel (calculated using thread index)
-	unsigned int i = (height - y - 1) * width + x;
-
+	uint32_t i = (height - y - 1) * width + x;
+	
 	// Seeds for random number generator
-	unsigned int s1 = x + sampleIndex + i;
-	unsigned int s2 = y + sampleIndex + i;
-	const float fov = fovY * M_PI / 180.0f;
-	const float tf = std::tan(fov * 0.5f);
+	uint32_t s1 = x * sampleIndex + i;
+	uint32_t s2 = y * sampleIndex + i;
+	//const float fov = camera.fov * M_PI / 180.0f;
+	//const float tf = std::tan(fov * 0.5f);
 
-	// First hardcoded camera ray(origin, direction)
-	Ray cam(make_float3(0.0f, 0.0f, 5.0f), normalize(make_float3(0.0f, 0.0f, -1.0f)));
-	float3 cx = make_float3(width * tf / height, 0.0f, 0.0f);                    // Ray direction offset in x direction
-	float3 cy = normalize(cross(cx, cam.direction)) * tf;                              // Ray direction offset in y direction (.5135 is field of view angle)
-	float3 r;
+	float2 coord = { (float)x / (float)width, (float)y / (float)height };
+	coord = coord * 2.0f - make_float2(1.0f, 1.0f); // -1 -> 1
+	float viewCoord[4] = { coord.x, coord.y, -1.0f, 1.0f };
+	float target[4];
+	float target2[4];
+
+	//glm::vec4 target = m_InverseProjection * glm::vec4(coord.x, coord.y, 1, 1);
+	//glm::vec3 rayDirection = glm::vec3(m_InverseView * glm::vec4(glm::normalize(glm::vec3(target) / target.w), 0)); // World space
+	//m_RayDirections[x + y * m_ViewportWidth] = rayDirection;
+
+	vector4_matrix4_mult(&viewCoord[0], &camera.invProjMat[0], &target[0]);
+
+	//float4 target = m_InverseProjection * ;
+	float4 projDir4 = make_float4(normalize(make_float3(target[0], target[1], target[2]) / target[3]), 0.0f);
+
+	float projDir[4] = { projDir4.x, projDir4.y, projDir4.z, projDir4.w };
+
+	vector4_matrix4_mult(&projDir[0], &camera.invViewMat[0], target2);
+
+	float3 worldDir = normalize(make_float3(target2[0], target2[1], target2[2]));
+
+	//float3 cx = make_float3(width * tf / height, 0.0f, 0.0f);                    // Ray direction offset in x direction
+	//float3 cy = normalize(cross(cx, cam.direction)) * tf;                        // Ray direction offset in y direction (.5135 is field of view angle)
+	float3 lightContribution;
 
 	// Reset r to zero for every pixel
-	r = make_float3(0.0f);
+	lightContribution = make_float3(0.0f);
+
+	float3 cameraPos = make_float3(camera.viewMat[12], camera.viewMat[13], camera.viewMat[14]);
 
 	// Samples per pixel
 	for (size_t s = 0; s < samples; s++)
@@ -231,44 +298,67 @@ __global__ void render_kernel(float3* buf, size_t width, size_t height, float fo
 #endif // !MSAA_4X
 
 		// Compute primary ray direction
-		float3 d = cam.direction + (cx * ((.25 + x + jitterX) / width - .5) + cy * ((.25 + y + jitterY) / height - .5));
+		//float3 d = cam.direction + (cx * ((.25 + x + jitterX) / width - .5) + cy * ((.25 + y + jitterY) / height - .5));
 
 		// Create primary ray, add incoming radiance to pixelcolor
-		r = r + radiance(Ray(cam.origin, normalize(d)), &s1, &s2, bounces) * (1.0 / samples);
-	}   // Camera rays are pushed ^^^^^ forward to start in interior
+		lightContribution += radiance(Ray(cameraPos, worldDir), &s1, &s2, bounces) * (1.0 / samples);
+	}
+
+	// Write rgb value of pixel to image buffer on the GPU
+	buf[i] += lightContribution;
+}
+
+__global__ void render_kernelDebug(float3* buf, uint32_t width, uint32_t height, Camera_GPU camera)
+{
+	// Assign a CUDA thread to every pixel (x,y) blockIdx, blockDim and threadIdx are CUDA specific
+	// Keywords replaces nested outer loops in CPU code looping over image rows and image columns
+	uint32_t x = blockIdx.x * blockDim.x + threadIdx.x;
+	uint32_t y = blockIdx.y * blockDim.y + threadIdx.y;
+
+	if ((x >= width) || (y >= height))
+		return;
+
+	// Index of current pixel (calculated using thread index)
+	uint32_t i = (height - y - 1) * width + x;
+
+
+	float2 coord = { (float)x / (float)width, (float)y / (float)height };
+	coord = coord * 2.0f - make_float2(1.0f, 1.0f); // -1 -> 1
+	float viewCoord[4] = { coord.x, coord.y, 1.0f, 1.0f };
+	float target[4];
+
+	vector4_matrix4_mult(&viewCoord[0], &camera.invViewMat[0], &target[0]);
+
+	float3 r;
+
+	// Reset r to zero for every pixel
+	r = make_float3(target[0], target[1], target[2]);
 
 	// Write rgb value of pixel to image buffer on the GPU
 	buf[i] = r;
 }
 
-__global__ void render_kernelDebug(float3* buf, size_t width, size_t height)
+__global__ void scale_accumulation_kernel(float3* m_outputBuffer, float3* m_accumulationBuffer, uint32_t width, uint32_t height, uint32_t m_sampleIndex)
 {
-	// Assign a CUDA thread to every pixel (x,y) blockIdx, blockDim and threadIdx are CUDA specific
-	// Keywords replaces nested outer loops in CPU code looping over image rows and image columns
-	unsigned int x = blockIdx.x * blockDim.x + threadIdx.x;
-	unsigned int y = blockIdx.y * blockDim.y + threadIdx.y;
+	uint32_t x = blockIdx.x * blockDim.x + threadIdx.x;
+	uint32_t y = blockIdx.y * blockDim.y + threadIdx.y;
 
-	if ((x >= width) || (y >= height)) return;
+	if ((x >= width) || (y >= height))
+		return;
 
 	// Index of current pixel (calculated using thread index)
-	unsigned int i = (height - y - 1) * width + x;
+	uint32_t i = (height - y - 1) * width + x;
 
-	float3 r;
-
-	// Reset r to zero for every pixel
-	r = make_float3(1.0f, 0.5, 0.0f);
-
-	// Write rgb value of pixel to image buffer on the GPU
-	buf[i] = r;
+	m_outputBuffer[i] = m_accumulationBuffer[i] / (float)m_sampleIndex;
 }
 
 // Initialize and run the kernel
 void CudaRenderer::Compute(void)
 {
-	float3* output_buffer_gpu;                // pointer to memory for image on the device (GPU VRAM)
+	//float3* output_buffer_gpu;                // pointer to memory for image on the device (GPU VRAM)
 
 	// Allocate memory on the CUDA device (GPU VRAM)
-	cudaMalloc(&output_buffer_gpu, m_width * m_height * sizeof(float3));
+	//cudaMalloc(&output_buffer_gpu, m_width * m_height * sizeof(float3));
 
 	int tx = 8;
 	int ty = 8;
@@ -277,15 +367,111 @@ void CudaRenderer::Compute(void)
 	dim3 blocks(m_width / tx + 1, m_height / ty + 1, 1);
 	dim3 threads(tx, ty);
 
+	//Camera_GPU camera_gpu
+	//{
+	//	m_fov,
+	//	m_cameraPos,
+	//	m_cameraDir,
+	//	m_invViewMat,
+	//	m_invProjMat
+	//};
+
+	Camera_GPU camera_buffer_obj;
+	camera_buffer_obj.fov = 50.0f;
+	memcpy(&camera_buffer_obj.invProjMat[0], m_invProjMat, sizeof(float) * 16);
+	memcpy(&camera_buffer_obj.invViewMat[0], m_invViewMat, sizeof(float) * 16);
+	memcpy(&camera_buffer_obj.viewMat[0],    m_viewMat,    sizeof(float) * 16);
+
+	//cudaMalloc(&camera_buffer_obj, sizeof(Camera_GPU));
+
 	// Schedule threads on device and launch CUDA kernel from host
-	//render_kernelDebug <<<blocks, threads >>> (output_buffer_gpu, m_width, m_height);
-	render_kernel <<<blocks, threads >>> (output_buffer_gpu, m_width, m_height, m_fov, m_samples, m_bounces, m_sampleIndex);
+	//render_kernelDebug <<<blocks, threads >>> (m_accumulationBuffer_GPU, m_width, m_height, camera_buffer_obj);
+	render_kernel <<<blocks, threads>>> (m_accumulationBuffer_GPU, m_width, m_height, camera_buffer_obj, m_samples, *m_bounces, *m_sampleIndex);
 
 	// cudaDeviceSynchronize waits for the kernel to finish, and returns
 	cudaDeviceSynchronize();
 
-	// Copy results of computation from device back to host
-	//render_kernel(float3* buf, size_t width, size_t height, float fovY, size_t samples, size_t bounces, size_t sampleIndex)
-	cudaMemcpy(m_accumulationBuffer, output_buffer_gpu, m_bufferSize, cudaMemcpyDeviceToHost);
-	cudaFree(output_buffer_gpu);
+	//scale_accumulation_kernel <<<blocks, threads >>> (m_outputBuffer_GPU, m_accumulationBuffer_GPU, m_width, m_height, *m_sampleIndex);
+
+	//cudaDeviceSynchronize();
+
+	cudaMemcpy(m_outputBuffer, m_accumulationBuffer_GPU, m_bufferSize, cudaMemcpyDeviceToHost);
+
+	//cudaFree(output_buffer_gpu);
+}
+
+void CudaRenderer::SetCamera(float3 pos, float3 dir, float fov)
+{
+	m_cameraPos = pos;
+	m_cameraDir = dir;
+	m_fov = fov;
+}
+
+void CudaRenderer::SetInvViewMat(float4 x, float4 y, float4 z, float4 w)
+{
+	m_invViewMat[0]  = x.x;
+	m_invViewMat[1]  = x.y;
+	m_invViewMat[2]  = x.z;
+	m_invViewMat[3]  = x.w;
+				    
+	m_invViewMat[4]  = y.x;
+	m_invViewMat[5]  = y.y;
+	m_invViewMat[6]  = y.z;
+	m_invViewMat[7]  = y.w;
+
+	m_invViewMat[8]  = z.x;
+	m_invViewMat[9]  = z.y;
+	m_invViewMat[10] = z.z;
+	m_invViewMat[11] = z.w;
+
+	m_invViewMat[12] = w.x;
+	m_invViewMat[13] = w.y;
+	m_invViewMat[14] = w.z;
+	m_invViewMat[15] = w.w;
+}
+
+void CudaRenderer::SetInvProjMat(float4 x, float4 y, float4 z, float4 w)
+{
+	m_invProjMat[0] = x.x;
+	m_invProjMat[1] = x.y;
+	m_invProjMat[2] = x.z;
+	m_invProjMat[3] = x.w;
+
+	m_invProjMat[4] = y.x;
+	m_invProjMat[5] = y.y;
+	m_invProjMat[6] = y.z;
+	m_invProjMat[7] = y.w;
+
+	m_invProjMat[8] = z.x;
+	m_invProjMat[9] = z.y;
+	m_invProjMat[10] = z.z;
+	m_invProjMat[11] = z.w;
+
+	m_invProjMat[12] = w.x;
+	m_invProjMat[13] = w.y;
+	m_invProjMat[14] = w.z;
+	m_invProjMat[15] = w.w;
+}
+
+void CudaRenderer::SetViewMat(float4 x, float4 y, float4 z, float4 w)
+{
+	m_viewMat[0] = x.x;
+	m_viewMat[1] = x.y;
+	m_viewMat[2] = x.z;
+	m_viewMat[3] = x.w;
+
+	m_viewMat[4] = y.x;
+	m_viewMat[5] = y.y;
+	m_viewMat[6] = y.z;
+	m_viewMat[7] = y.w;
+
+	m_viewMat[8] = z.x;
+	m_viewMat[9] = z.y;
+	m_viewMat[10] = z.z;
+	m_viewMat[11] = z.w;
+
+	m_viewMat[12] = w.x;
+	m_viewMat[13] = w.y;
+	m_viewMat[14] = w.z;
+	m_viewMat[15] = w.w;
 }

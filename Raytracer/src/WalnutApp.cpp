@@ -5,7 +5,7 @@
 #include "Walnut/Image.h"
 #include "Walnut/Timer.h"
 #include "Renderer.h"
-//#include "Camera.h"
+#include "Camera.h"
 
 using namespace Walnut;
 
@@ -173,6 +173,16 @@ public:
 
 		ImGui::Begin("Settings");
 		ImGui::Text("Last render time: %.3f ms", m_renderTimeMs);
+		ImGui::Text("Sample Index: %i", m_renderer.GetFrameIndex());
+		ImGui::Text("Camera DirX: %.2f, %.2f, %.2f, %.2f", m_camera.GetProjection()[0].x, m_camera.GetProjection()[0].y, m_camera.GetProjection()[0].z, m_camera.GetProjection()[0].w);
+		ImGui::Text("Camera DirY: %.2f, %.2f, %.2f, %.2f", m_camera.GetProjection()[1].x, m_camera.GetProjection()[1].y, m_camera.GetProjection()[1].z, m_camera.GetProjection()[1].w);
+		ImGui::Text("Camera DirZ: %.2f, %.2f, %.2f, %.2f", m_camera.GetProjection()[2].x, m_camera.GetProjection()[2].y, m_camera.GetProjection()[2].z, m_camera.GetProjection()[2].w);
+		ImGui::Text("Camera DirW: %.2f, %.2f, %.2f, %.2f", m_camera.GetProjection()[3].x, m_camera.GetProjection()[3].y, m_camera.GetProjection()[3].z, m_camera.GetProjection()[3].w);
+		ImGui::Text("Camera ViewX: %.2f, %.2f, %.2f, %.2f", m_camera.GetView()[0].x, m_camera.GetView()[0].y, m_camera.GetView()[0].z, m_camera.GetView()[0].w);
+		ImGui::Text("Camera ViewY: %.2f, %.2f, %.2f, %.2f", m_camera.GetView()[1].x, m_camera.GetView()[1].y, m_camera.GetView()[1].z, m_camera.GetView()[1].w);
+		ImGui::Text("Camera ViewZ: %.2f, %.2f, %.2f, %.2f", m_camera.GetView()[2].x, m_camera.GetView()[2].y, m_camera.GetView()[2].z, m_camera.GetView()[2].w);
+		ImGui::Text("Camera ViewW: %.2f, %.2f, %.2f, %.2f", m_camera.GetView()[3].x, m_camera.GetView()[3].y, m_camera.GetView()[3].z, m_camera.GetView()[3].w);
+		ImGui::Text("Camera POS: %.2f, %.2f, %.2f", m_camera.GetPosition().x, m_camera.GetPosition().y, m_camera.GetPosition().z);
 		ImGui::Checkbox("Accumulate", &m_renderer.GetSettings().accumulate);
 		ImGui::DragFloat("Camera Speed", &m_camera.GetSpeed(), 0.1f);
 		if (ImGui::DragFloat("Camera FOV", &m_camera.GetFOV(), 0.1f)) { m_sceneChanged = true; }
@@ -262,9 +272,11 @@ public:
 
 		if (image)
 		{
-			ImGui::Image(image->GetDescriptorSet(),
-				{ (float)image->GetWidth(), (float)image->GetHeight() },
-				ImVec2(0,1), ImVec2(1,0));
+			ImGui::Image(image->GetDescriptorSet(), { (float)image->GetWidth(), (float)image->GetHeight() }, ImVec2(0, 1), ImVec2(1, 0) );
+			//inverted
+			//ImGui::Image(image->GetDescriptorSet(),
+			//	{ (float)image->GetWidth(), (float)image->GetHeight() },
+			//	ImVec2(0, 1), ImVec2(1, 0));
 		}
 
 		ImGui::End();
@@ -296,7 +308,7 @@ private:
 Walnut::Application* Walnut::CreateApplication(int argc, char** argv)
 {
 	Walnut::ApplicationSpecification spec;
-	spec.Name = "Walnut Example";
+	spec.Name = "CUDA Raytracer";
 
 	Walnut::Application* app = new Walnut::Application(spec);
 	app->PushLayer<ExampleLayer>();

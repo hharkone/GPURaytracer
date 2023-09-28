@@ -5,7 +5,7 @@
 
 #include "Walnut/Image.h"
 #include "Camera.h"
-#include "Ray.h"
+#include "RayCPU.h"
 #include "Scene.h"
 #include "Mesh.h"
 #include "CudaMain.cuh"
@@ -31,8 +31,9 @@ public:
     void Render(const Scene& scene, const Camera& camera);
     std::shared_ptr<Walnut::Image> GetFinalImage() const { return m_finalImage; }
 
-    void ResetFrameIndex() { m_frameIndex = 1; }
+    void ResetFrameIndex();
     Settings& GetSettings() { return m_settings; }
+    uint32_t GetFrameIndex() { return m_frameIndex; }
 
 private:
 
@@ -47,14 +48,14 @@ private:
         int primIndex = -1;
         int materialIndex;
     };
-
+    /*
     glm::vec4 PerPixel(uint32_t x, uint32_t y);
-    glm::vec3 TraceRay(Ray& ray, uint32_t& seed);
-    Hit raySphere(const Ray& ray, const Sphere& sphere);
-    Hit rayTriangleIntersect(const Ray& ray, const Mesh::Triangle& tri, const glm::vec3& origin);
-    Hit CalculateRayCollision(const Ray& ray);
-    glm::vec3 GetEnvironmentLight(Ray& ray);
-
+    glm::vec3 TraceRay(RayCPU& ray, uint32_t& seed);
+    Hit raySphere(const RayCPU& ray, const Sphere& sphere);
+    Hit rayTriangleIntersect(const RayCPU& ray, const Mesh::Triangle& tri, const glm::vec3& origin);
+    Hit CalculateRayCollision(const RayCPU& ray);
+    glm::vec3 GetEnvironmentLight(RayCPU& ray);
+    */
 private:
 
     const Scene* m_activeScene = nullptr;

@@ -83,7 +83,7 @@ bool Camera::OnUpdate(float ts)
 	{
 		RecalculateView();
 		RecalculateProjection();
-		RecalculateRayDirections();
+		//RecalculateRayDirections();
 	}
 
 	return moved;
@@ -98,7 +98,7 @@ void Camera::OnResize(uint32_t width, uint32_t height)
 	m_ViewportHeight = height;
 
 	RecalculateProjection();
-	RecalculateRayDirections();
+	//RecalculateRayDirections();
 }
 
 float Camera::GetRotationSpeed()
@@ -116,6 +116,7 @@ float& Camera::GetSpeed()
 	return m_speed;
 }
 
+
 void Camera::RecalculateProjection()
 {
 	m_Projection = glm::perspectiveFov(glm::radians(m_VerticalFOV), (float)m_ViewportWidth, (float)m_ViewportHeight, m_NearClip, m_FarClip);
@@ -127,7 +128,7 @@ void Camera::RecalculateView()
 	m_View = glm::lookAt(m_Position, m_Position + m_ForwardDirection, glm::vec3(0, 1, 0));
 	m_InverseView = glm::inverse(m_View);
 }
-
+/*
 void Camera::RecalculateRayDirections()
 {
 	m_RayDirections.resize(m_ViewportWidth * m_ViewportHeight);
@@ -145,3 +146,4 @@ void Camera::RecalculateRayDirections()
 		}
 	}
 }
+*/

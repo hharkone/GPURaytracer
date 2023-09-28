@@ -54,6 +54,17 @@ namespace Utils
 
 		return glm::normalize(glm::vec3(x, y, z));
 	}
+
+	float4 vec4Tofloat4(glm::vec4& v)
+	{
+		return make_float4(v.x, v.y, v.z, v.w);
+	}
+}
+
+void Renderer::ResetFrameIndex()
+{
+	m_frameIndex = 1;
+	m_cudaRenderer->Clear();
 }
 
 void Renderer::OnResize(uint32_t width, uint32_t height)
@@ -73,9 +84,6 @@ void Renderer::OnResize(uint32_t width, uint32_t height)
 	delete[] m_imageData;
 	m_imageData = new uint32_t[width * height];
 
-	//delete[] m_accumulationData;
-	//m_accumulationData = new float[width * height * 3];
-
 	m_imgHorizontalIterator.resize(width);
 	m_imgVerticalIterator.resize(height);
 
@@ -85,24 +93,57 @@ void Renderer::OnResize(uint32_t width, uint32_t height)
 	for (uint32_t i = 0; i < height; i++)
 		m_imgVerticalIterator[i] = i;
 
-	m_cudaRenderer = std::shared_ptr<CudaRenderer>(new CudaRenderer(width, height, 50.0f, m_frameIndex, 5u, 10u));
+	float fov = 50.0f;
+	size_t bounces = 5u;
+	size_t samples = 1u;
+
+	m_cudaRenderer = std::shared_ptr<CudaRenderer>(new CudaRenderer(width, height, &m_frameIndex, samples, &m_settings.bounces));
 }
 
 void Renderer::Render(const Scene& scene, const Camera& camera)
 {
-	if (m_cudaRenderer)
-	{
-		m_cudaRenderer->Compute();
-		m_cudaData = m_cudaRenderer->getAccumulationData();
-	}
-
 	m_activeScene = &scene;
 	m_activeCamera = &camera;
 
-	if (m_frameIndex == 1)
-		//memset(m_accumulationData, 0, m_finalImage->GetWidth() * m_finalImage->GetHeight() * sizeof(float) * 3);
+	if (m_cudaRenderer)
+	{
+		glm::vec3 glmPos = m_activeCamera->GetPosition();
+		float3 pos = make_float3(glmPos.x, glmPos.y, glmPos.z);
+		glm::vec3 glmDir = m_activeCamera->GetDirection();
+		float3 dir = make_float3(glmDir.x, glmDir.y, glmDir.z);
 
-#if false
+		glm::mat4x4 invView = m_activeCamera->GetInverseView();
+		float4 x1 = Utils::vec4Tofloat4(invView[0]);
+		float4 y1 = Utils::vec4Tofloat4(invView[1]);
+		float4 z1 = Utils::vec4Tofloat4(invView[2]);
+		float4 w1 = Utils::vec4Tofloat4(invView[3]);
+
+		glm::mat4x4 invProj = m_activeCamera->GetInverseProjection();
+		float4 x2 = Utils::vec4Tofloat4(invProj[0]);
+		float4 y2 = Utils::vec4Tofloat4(invProj[1]);
+		float4 z2 = Utils::vec4Tofloat4(invProj[2]);
+		float4 w2 = Utils::vec4Tofloat4(invProj[3]);
+
+		glm::mat4x4 viewMat = m_activeCamera->GetView();
+		float4 x3 = Utils::vec4Tofloat4(viewMat[0]);
+		float4 y3 = Utils::vec4Tofloat4(viewMat[1]);
+		float4 z3 = Utils::vec4Tofloat4(viewMat[2]);
+		float4 w3 = Utils::vec4Tofloat4(viewMat[3]);
+
+		m_cudaRenderer->SetCamera(pos, dir, 50.0f);
+		m_cudaRenderer->SetInvViewMat(x1, y1, z1, w1);
+		m_cudaRenderer->SetInvProjMat(x2, y2, z2, w2);
+		m_cudaRenderer->SetViewMat(x3, y3, z3, w3);
+
+		m_cudaData = m_cudaRenderer->getOutputData();
+	}
+
+	if (GetSettings().accumulate)
+	{
+		m_cudaRenderer->Compute();
+	}
+
+#if true
 	std::for_each(std::execution::par, m_imgVerticalIterator.begin(), m_imgVerticalIterator.end(),
 		[this](uint32_t y)
 		{
@@ -112,16 +153,18 @@ void Renderer::Render(const Scene& scene, const Camera& camera)
 					size_t index = x + y * m_finalImage->GetWidth();
 					glm::vec4 color;
 
-					color.r = m_cudaData[index + 0];
-					color.g = m_cudaData[index + 0];
-					color.b = m_cudaData[index + 0];
+					color.r = m_cudaData[index * 3u + 0u];
+					color.g = m_cudaData[index * 3u + 1u];
+					color.b = m_cudaData[index * 3u + 2u];
 					color.a = 1.0f;
 
 					color /= (float)m_frameIndex;
 
+					color.a = 1.0f;
+
 					color = glm::clamp(color, glm::vec4(0.0f), glm::vec4(1.0));
 					//accumulatedColor = glm::pow(accumulatedColor, glm::vec4(0.46464f));
-					m_imageData[x + y * m_finalImage->GetWidth()] = Utils::ConvertToRGBA(color);
+					m_imageData[index] = Utils::ConvertToRGBA(color);
 				});
 		});
 #else
@@ -134,16 +177,18 @@ void Renderer::Render(const Scene& scene, const Camera& camera)
 					size_t index = x + y * m_finalImage->GetWidth();
 					glm::vec4 color;
 
-					color.r = m_cudaData[index * 3u + 0];
-					color.g = m_cudaData[index * 3u + 1];
-					color.b = m_cudaData[index * 3u + 2];
+					color.r = m_cudaData[index * 3u + 0u];
+					color.g = m_cudaData[index * 3u + 1u];
+					color.b = m_cudaData[index * 3u + 2u];
 					color.a = 1.0f;
 
-					//color /= (float)m_frameIndex;
+					color /= (float)m_frameIndex;
+
+					color.a = 1.0f;
 
 					color = glm::clamp(color, glm::vec4(0.0f), glm::vec4(1.0));
 					//accumulatedColor = glm::pow(accumulatedColor, glm::vec4(0.46464f));
-					m_imageData[x + y * m_finalImage->GetWidth()] = Utils::ConvertToRGBA(color);
+					m_imageData[index] = Utils::ConvertToRGBA(color);
 				});
 		});
 #endif
@@ -156,11 +201,11 @@ void Renderer::Render(const Scene& scene, const Camera& camera)
 	}
 	else
 	{
-		m_frameIndex = 1;
+		//m_frameIndex = 1;
 	}
 }
-
-bool RayBoundingBox(const Ray& ray, const Mesh& mesh)
+/*
+bool RayBoundingBox(const RayCPU& ray, const Mesh& mesh)
 {
 	glm::vec3 boxMin = mesh.bbox.min + mesh.Transform;
 	glm::vec3 boxMax = mesh.bbox.max + mesh.Transform;
@@ -177,7 +222,7 @@ bool RayBoundingBox(const Ray& ray, const Mesh& mesh)
 	return tNear <= tFar;
 };
 
-Renderer::Hit Renderer::rayTriangleIntersect(const Ray& ray, const Mesh::Triangle& tri, const glm::vec3& origin)
+Renderer::Hit Renderer::rayTriangleIntersect(const RayCPU& ray, const Mesh::Triangle& tri, const glm::vec3& origin)
 {
 	glm::vec3 edgeAB = tri.v1.pos - tri.v0.pos;
 	glm::vec3 edgeAC = tri.v2.pos - tri.v0.pos;
@@ -205,7 +250,7 @@ Renderer::Hit Renderer::rayTriangleIntersect(const Ray& ray, const Mesh::Triangl
 }
 
 // Calculate the intersection of a ray with a sphere
-Renderer::Hit Renderer::raySphere(const Ray& ray, const Sphere& sphere)
+Renderer::Hit Renderer::raySphere(const RayCPU& ray, const Sphere& sphere)
 {
 	Hit hitInfo;
 
@@ -236,7 +281,7 @@ Renderer::Hit Renderer::raySphere(const Ray& ray, const Sphere& sphere)
 	return hitInfo;
 }
 
-Renderer::Hit Renderer::CalculateRayCollision(const Ray& ray)
+Renderer::Hit Renderer::CalculateRayCollision(const RayCPU& ray)
 {
 	Hit closestHit;
 
@@ -285,7 +330,7 @@ Renderer::Hit Renderer::CalculateRayCollision(const Ray& ray)
 	return closestHit;
 }
 
-glm::vec3 Renderer::GetEnvironmentLight(Ray& ray)
+glm::vec3 Renderer::GetEnvironmentLight(RayCPU& ray)
 {
 	glm::vec3 sunDir = glm::vec3(1.0f);
 	sunDir = glm::normalize(sunDir);
@@ -311,7 +356,7 @@ float fresnel_schlick(float F0, float cos_theta_incident)
 	return glm::mix(F0, 1.f, fresnel_schlick_ratio(cos_theta_incident, 2.0f));
 }
 
-glm::vec3 Renderer::TraceRay(Ray& ray, uint32_t& seed)
+glm::vec3 Renderer::TraceRay(RayCPU& ray, uint32_t& seed)
 {
 	glm::vec3 incomingLight = glm::vec3(0.0f);
 	glm::vec3 rayColor = glm::vec3(1.0f);
@@ -368,7 +413,7 @@ glm::vec3 Renderer::TraceRay(Ray& ray, uint32_t& seed)
 
 glm::vec4 Renderer::PerPixel(uint32_t x, uint32_t y)
 {
-	Ray ray;
+	RayCPU ray;
 	ray.origin = m_activeCamera->GetPosition();
 	ray.direction = m_activeCamera->GetRayDirections()[x + y * m_finalImage->GetWidth()];
 
@@ -385,3 +430,4 @@ glm::vec4 Renderer::PerPixel(uint32_t x, uint32_t y)
 
 	return glm::vec4(totalIncomingLight, 1.0f);
 }
+*/

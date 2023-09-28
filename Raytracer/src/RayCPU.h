@@ -2,7 +2,7 @@
 
 #include <glm/glm.hpp>
 
-struct Ray
+struct RayCPU
 {
     glm::vec3 origin;
     glm::vec3 direction;
