@@ -272,7 +272,7 @@ public:
 
 		if (image)
 		{
-			ImGui::Image(image->GetDescriptorSet(), { (float)image->GetWidth(), (float)image->GetHeight() }, ImVec2(0, 1), ImVec2(1, 0) );
+			ImGui::Image(image->GetDescriptorSet(), { (float)image->GetWidth(), (float)image->GetHeight() } );
 			//inverted
 			//ImGui::Image(image->GetDescriptorSet(),
 			//	{ (float)image->GetWidth(), (float)image->GetHeight() },

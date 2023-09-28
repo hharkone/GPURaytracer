@@ -69,6 +69,12 @@ inline __device__ __host__ float clamp(float f, float a, float b)
     return fmaxf(a, fminf(f, b));
 }
 
+// sqrtf
+inline __device__ __host__ float fsqrtf(float a)
+{
+    return sqrtf(a);
+}
+
 // int2 functions
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -416,6 +422,11 @@ inline __host__ __device__ float3 reflect(float3 i, float3 n)
 inline __host__ __device__ float3 fabs(float3 v)
 {
     return make_float3(fabs(v.x), fabs(v.y), fabs(v.z));
+}
+
+inline __host__ __device__ float3 powf(float3& a, float p)
+{
+    return make_float3(pow(a.x, p), pow(a.y, p), pow(a.z, p));
 }
 
 // float4 functions

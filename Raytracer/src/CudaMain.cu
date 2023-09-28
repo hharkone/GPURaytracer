@@ -21,6 +21,11 @@ __global__ void addKernel(float* a, float* b, float* c)
 	c[i] = a[i] + b[i];
 }
 
+__device__ inline float3 srgbToLinear(float3 c)
+{
+	return powf(c, 2.2222f);
+}
+
 struct Ray
 {
 	float3 origin; // ray origin
@@ -36,12 +41,22 @@ struct Material
 	float  metalness = 0.0f;
 };
 
+struct HitInfo
+{
+	bool didHit = false;
+	float dst = FLT_MAX;
+	float3 hitPoint {0.0f, 0.0f, 0.0f};
+	float3 normal{ 0.0f, 0.0f, 0.0f };
+	Material material;
+};
+
 struct Sphere
 {
 	float rad;            // Radius
 	float3 pos;           // Position
 	Material mat;         // Material
 
+#if true
 	__device__ float intersect_sphere(const Ray& r) const
 	{
 		// Ray/sphere intersection returns distance t to intersection point, 0 if no hit ray
@@ -58,6 +73,39 @@ struct Sphere
 		else disc = sqrtf(disc);                                                    // if disc >= 0, check for solutions using negative and positive discriminant
 		return (t = b - disc) > epsilon ? t : ((t = b + disc) > epsilon ? t : 0);   // pick closest point in front of ray origin
 	}
+#else
+
+	__device__ inline HitInfo intersect_sphere(const Ray& r) const
+	{
+		HitInfo hit; 
+
+		float3 offsetRayOrigin = r.origin - pos;
+		// From the equation: sqrLength(rayOrigin + rayDir * dst) = radius^2
+		// Solving for dst results in a quadratic equation with coefficients:
+		float a = dot(r.direction, r.direction); // a = 1 (assuming unit vector)
+		float b = 2.0f * dot(offsetRayOrigin, r.direction);
+		float c = dot(offsetRayOrigin, offsetRayOrigin) - rad * rad;
+		// Quadratic discriminant
+		float discriminant = b * b - 4.0f * a * c;
+
+		// No solution when d < 0 (ray misses sphere)
+		if (discriminant >= 0.0f)
+		{
+			// Distance to nearest intersection point (from quadratic formula)
+			float dst = (-b - sqrtf(discriminant)) / (2.0f * a);
+
+			// Ignore intersections that occur behind the ray
+			if (dst >= 0)
+			{
+				hit.didHit = true;
+				hit.dst = dst;
+				hit.hitPoint = r.origin + r.direction * dst;
+				hit.normal = normalize(hit.hitPoint - pos);
+				hit.material = mat;
+			}
+		}
+	}
+#endif
 };
 
 struct Camera_GPU
@@ -74,7 +122,7 @@ void CudaRenderer::Clear()
 	memset(m_outputBuffer, 0, m_bufferSize);
 	cudaMemset(m_accumulationBuffer_GPU, 0, m_bufferSize);
 }
-
+/*
 __constant__ static float jitterMatrix[10] =
 {
    -0.25,  0.75,
@@ -83,21 +131,21 @@ __constant__ static float jitterMatrix[10] =
 	0.25, -0.75,
 	0.0f, 0.0f
 };
-
+*/
 // SCENE 9 spheres forming a Cornell box small enough to be in constant GPU memory 
 __constant__ Sphere spheres[] =
 {
-	//{ float radius, { float3 position },      { float3 emission }, { float3 colour },       refl_type }
-	  { 1e5f,{ 1e5f + 1.0f, 40.8f, 81.6f },     Material{} }, //Left
-	  { 1e5f,{ -1e5f + 99.0f, 40.8f, 81.6f },   Material{} }, //Rght
-	  //{ 1e5f,{ 50.0f, 40.8f, 1e5f },            Material{} }, //Back
+	  //{ float radius, { float3 position },      { float3 emission }, { float3 colour },       refl_type }
+	  { 1e5f,{ 1e5f + 1.0f, 40.8f, 81.6f },     Material{{ 0.9f, 0.6f, 0.4f }} }, //Left
+	  { 1e5f,{ -1e5f + 99.0f, 40.8f, 81.6f },   Material{{ 0.4f, 0.6f, 0.9f }} }, //Rght
+	  { 1e5f,{ 50.0f, 40.8f, 1e5f },            Material{} }, //Back
 	  { 1e5f,{ 50.0f, 40.8f, -1e5f + 600.0f },  Material{} }, //Frnt
 	  { 1e5f,{ 50.0f, 1e5f, 81.6f },            Material{} }, //Botm
 	  { 1e5f,{ 50.0f, -1e5f + 81.6f, 81.6f },   Material{} }, //Top
 	  { 16.5f,{ 27.0f, 16.5f, 47.0f },          Material{} }, // small sphere 1
 	  { 16.5f,{ 73.0f, 16.5f, 78.0f },          Material{} }, // small sphere 2
-	  { 100.0f,{ 30.0f, 181.6f - 1.9f, 80.0f }, Material{} },  // Light
-	  { 100.0f,{ 70.0f, 181.6f - 1.9f, 80.0f }, Material{} }  // Light
+	  { 100.0f,{ 30.0f, 181.6f - 1.9f, 80.0f }, Material{ { 0.8f, 0.8f, 0.8f }, 0.1f, { 8.0f, 6.0f, 5.0f }, 0.0f} },  // Light
+	  { 100.0f,{ 70.0f, 181.6f - 1.9f, 80.0f }, Material{ { 0.8f, 0.8f, 0.8f }, 0.1f, { 5.0f, 6.0f, 8.0f }, 0.0f} }  // Light
 };
 
 __constant__ Sphere spheresSimple[] =
@@ -149,20 +197,12 @@ __device__ void vector4_matrix4_mult(float* vec, float* mat, float* out)
 	}
 }
 
-__device__ void vector4_matrix4_mult_dbg(Camera_GPU camera, float* out)
-{
-	//for (int i = 0; i < 4; i++)
-	//{
-		out[1] = 1.0f;
-	//}
-}
-
 __device__ inline bool intersect_scene(const Ray& r, float& t, int& id)
 {
-	float n = sizeof(spheresSimple) / sizeof(Sphere), d, inf = t = 1e20;  // t is distance to closest intersection, initialise t to a huge number outside scene
+	float n = sizeof(spheres) / sizeof(Sphere), d, inf = t = 1e20;  // t is distance to closest intersection, initialise t to a huge number outside scene
 	for (int i = int(n); i--;)                                      // Test all scene objects for intersection
 	{
-		if ((d = spheresSimple[i].intersect_sphere(r)) && d < t) // If newly computed intersection distance d is smaller than current closest intersection distance
+		if ((d = spheres[i].intersect_sphere(r)) && d < t) // If newly computed intersection distance d is smaller than current closest intersection distance
 		{
 			t = d;  // Keep track of distance along ray to closest intersection point
 			id = i; // and closest intersected object
@@ -181,7 +221,6 @@ __device__ float3 radiance(Ray& r, uint32_t* s1, uint32_t* s2, size_t bounces) /
 	float3 accucolor = make_float3(0.0f, 0.0f, 0.0f); // Accumulates ray colour with each iteration through bounce loop
 	float3 mask = make_float3(1.0f, 1.0f, 1.0f);
 
-
 	for (size_t b = 0; b < bounces; b++)
 	{
 		float t;           // Distance to closest intersection
@@ -193,45 +232,35 @@ __device__ float3 radiance(Ray& r, uint32_t* s1, uint32_t* s2, size_t bounces) /
 			accucolor += mask * make_float3(0.1f, 0.12f, 0.2f); // If miss, return sky
 			break;
 		}
-
-		// Else, we've got a hit! compute hitpoint and normal
-		const Sphere& obj = spheresSimple[id];               // hitobject
-		float3 x = r.origin + r.direction * t;               // hitpoint
-		float3 n = normalize(x - obj.pos);                   // normal
-		float3 nl = dot(n, r.direction) < 0.0f ? n : n * -1.0f;    // front facing normal
+		const Sphere& obj = spheres[id];
+		float3 x = r.origin + r.direction * t;                   // hitpoint
+		float3 n = normalize(x - obj.pos);             // normal
+		float3 nl = dot(n, r.direction) < 0 ? n : n * -1;    // front facing normal
 
 		// Add emission of current sphere to accumulated
-		// colour (first term in rendering equation sum)
+		// color (first term in rendering equation sum)
 		accucolor += mask * obj.mat.emission;
-
-		// All spheres in the scene are diffuse diffuse material reflects light uniformly in all
-		// directions generate new diffuse ray: origin = hitpoint of previous ray in path random
-		// direction in hemisphere above hitpoint (see "Realistic Ray Tracing", P. Shirley)
 
 		// Create 2 random numbers
 		float r1 = 2 * M_PI * getrandom(s1, s2); // Pick random number on unit circle (radius = 1, circumference = 2*Pi) for azimuth
 		float r2 = getrandom(s1, s2);            // Pick random number for elevation
 		float r2s = sqrtf(r2);
 
-		// Compute local orthonormal basis uvw at hitpoint to use for calculation random ray
-		// direction first vector = normal at hitpoint, second vector is orthogonal to first, third
-		// vector is orthogonal to first two vectors
-		float3 w = nl;
-		float3 u = normalize(cross((fabs(w.x) > .1 ? make_float3(0, 1, 0) : make_float3(1, 0, 0)), w));
-		float3 v = cross(w, u);
-
 		// Compute random ray direction on hemisphere using polar coordinates cosine weighted
 		// importance sampling (favours ray directions closer to normal direction)
 		float3 d = InUnitSphere(s1, s2);
 
 		// New ray origin is intersection point of previous ray with scene
-		r.origin = x + nl * 0.01f; // offset ray origin slightly to prevent self intersection
+		r.origin = x + nl * 0.1f; // offset ray origin slightly to prevent self intersection
 		r.direction = normalize(d + nl); // cosine weighted sampling pattern
 
-		mask = mask * obj.mat.albedo;     // Multiply with colour of object
+		mask = mask * srgbToLinear(obj.mat.albedo);     // Multiply with colour of object
 		//mask *= dot(d, nl);		      // Weigh light contribution using cosine of angle between incident light and normal
 		//mask *= 2;                      // Fudge factor
+
+		//accucolor = hit.normal;
 	}
+
 
 	return accucolor;
 }
@@ -284,14 +313,14 @@ __global__ void render_kernel(float3* buf, uint32_t width, uint32_t height, Came
 	// Reset r to zero for every pixel
 	lightContribution = make_float3(0.0f);
 
-	float3 cameraPos = make_float3(camera.viewMat[12], camera.viewMat[13], camera.viewMat[14]);
+	float3 cameraPos = make_float3(camera.invViewMat[12], camera.invViewMat[13], camera.invViewMat[14]);
 
 	// Samples per pixel
 	for (size_t s = 0; s < samples; s++)
 	{
-		size_t jitterIndex = (s + sampleIndex) % 5u;
-		float jitterX = 2.0 * (x + jitterMatrix[2u * jitterIndex]) / (float)width;
-		float jitterY = 2.0 * (y + jitterMatrix[2u * jitterIndex + 1u]) / (float)height;
+		//size_t jitterIndex = (s + sampleIndex) % 5u;
+		//float jitterX = 2.0 * (x + jitterMatrix[2u * jitterIndex]) / (float)width;
+		//float jitterY = 2.0 * (y + jitterMatrix[2u * jitterIndex + 1u]) / (float)height;
 
 #ifndef MSAA_4X
 		//jitterX = jitterY = 0.0f;
@@ -301,7 +330,8 @@ __global__ void render_kernel(float3* buf, uint32_t width, uint32_t height, Came
 		//float3 d = cam.direction + (cx * ((.25 + x + jitterX) / width - .5) + cy * ((.25 + y + jitterY) / height - .5));
 
 		// Create primary ray, add incoming radiance to pixelcolor
-		lightContribution += radiance(Ray(cameraPos, worldDir), &s1, &s2, bounces) * (1.0 / samples);
+		Ray ray = Ray(cameraPos, worldDir);
+		lightContribution += radiance(ray, &s1, &s2, bounces) * (1.0 / samples);
 	}
 
 	// Write rgb value of pixel to image buffer on the GPU

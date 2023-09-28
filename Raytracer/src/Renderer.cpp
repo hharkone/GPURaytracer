@@ -138,7 +138,7 @@ void Renderer::Render(const Scene& scene, const Camera& camera)
 		m_cudaData = m_cudaRenderer->getOutputData();
 	}
 
-	if (GetSettings().accumulate)
+	if (GetSettings().accumulate || m_frameIndex == 1)
 	{
 		m_cudaRenderer->Compute();
 	}
@@ -163,7 +163,7 @@ void Renderer::Render(const Scene& scene, const Camera& camera)
 					color.a = 1.0f;
 
 					color = glm::clamp(color, glm::vec4(0.0f), glm::vec4(1.0));
-					//accumulatedColor = glm::pow(accumulatedColor, glm::vec4(0.46464f));
+					color = glm::pow(color, glm::vec4(0.46464f));
 					m_imageData[index] = Utils::ConvertToRGBA(color);
 				});
 		});
