@@ -4,12 +4,13 @@
 #include "cuda_runtime.h"
 #include "device_launch_parameters.h"
 #include "device_atomic_functions.h"
+#include "GPU_Mesh.h"
 
 class CudaRenderer
 {
 public:
-	CudaRenderer(uint32_t width, uint32_t height, uint32_t* sampleIndex, size_t samples, int* bounces) : m_bufferSize(width * height * sizeof(float3)),
-		m_sampleIndex(sampleIndex), m_samples(samples), m_bounces(bounces), m_width(width), m_height(height)
+	CudaRenderer(uint32_t width, uint32_t height, uint32_t* sampleIndex, size_t samples, int* bounces)
+		: m_bufferSize(width * height * sizeof(float3)), m_sampleIndex(sampleIndex), m_samples(samples), m_bounces(bounces), m_width(width), m_height(height)
 	{
 		m_outputBuffer = new float[width * height * 3];
 		m_imageData = new uint32_t[width * height];
@@ -25,6 +26,9 @@ public:
 		m_invViewMat = new float[16];
 		m_invProjMat = new float[16];
 		m_viewMat    = new float[16];
+
+		m_mesh = new GPU_Mesh();
+		m_mesh->LoadOBJFile("T:\\GIT\\GPURaytracer\\Raytracer\\cube.obj");
 	}
 
 	~CudaRenderer()
@@ -50,6 +54,8 @@ public:
 	uint32_t m_height;
 
 private:
+	//const Scene* m_scene;
+	GPU_Mesh* m_mesh;
 	const size_t m_bufferSize;
 	uint32_t* m_sampleIndex;
 	size_t m_samples;

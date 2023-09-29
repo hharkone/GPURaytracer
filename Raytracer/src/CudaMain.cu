@@ -59,7 +59,7 @@ struct Material
 	float  metalness = 0.0f;
 };
 
-struct HitInfo
+__device__ struct HitInfo
 {
 	bool didHit = false;
 	float dst = FLT_MAX;
@@ -163,8 +163,8 @@ __constant__ Sphere spheres[] =
 	  { 1e5f,{ 50.0f, 1e5f, 81.6f },            Material{ { 0.7f, 0.7f,  0.7f  }, 0.05f,{ 0.0f, 0.0f, 0.0f }, 0.0f } }, //Botm
 	  { 1e5f,{ 50.0f, -1e5f + 81.6f, 81.6f },   Material{} }, //Top			   
 	  { 16.5f,{ 27.0f, 16.5f, 47.0f },          Material{ { 0.7f, 0.7f,  0.7f  }, 0.05f,{ 0.0f, 0.0f, 0.0f }, 0.0f } }, // small sphere 1
-	  { 16.5f,{ 73.0f, 16.5f, 78.0f },          Material{ { 1.0f, 0.9f,  0.6f  }, 0.05f, { 0.0f, 0.0f, 0.0f }, 1.0f } },  // gold sphere 2
-	  { 16.5f,{ 73.0f, 16.5f, 118.0f },         Material{ { 0.98f,0.815f,0.75f }, 0.05f, { 0.0f, 0.0f, 0.0f }, 1.0f } }, // copper sphere 2
+	  { 16.5f,{ 73.0f, 16.5f, 78.0f },          Material{ { 1.0f, 0.9f,  0.6f  }, 0.00f, { 0.0f, 0.0f, 0.0f }, 1.0f } },  // gold sphere 2
+	  { 16.5f,{ 73.0f, 16.5f, 118.0f },         Material{ { 0.98f,0.815f,0.75f }, 0.00f, { 0.0f, 0.0f, 0.0f }, 1.0f } }, // copper sphere 2
 	  { 100.0f,{ 30.0f, 181.6f - 1.9f, 80.0f }, Material{ { 0.0f, 0.0f,  0.0f  }, 0.1f, { 8.0f, 6.0f, 5.0f }, 0.0f } },  // Light
 	  { 100.0f,{ 70.0f, 181.6f - 1.9f, 80.0f }, Material{ { 0.0f, 0.0f,  0.0f  }, 0.1f, { 5.0f, 6.0f, 8.0f }, 0.0f } }   // Light
 	  //{ 2.1f,{ 40.0f, 40.5f, 47.0f }, Material{ { 0.8f, 0.8f, 0.8f }, 0.1f, { 150.0f, 160.0f, 180.0f }, 0.0f} }      // Light
@@ -267,6 +267,34 @@ __device__ void vector4_matrix4_mult(float* vec, float* mat, float* out)
 	}
 }
 
+__device__ HitInfo rayTriangleIntersect(const Ray& ray, const float3& v0, const float3& v1, const float3& v2)
+{
+	float3 edgeAB = v1 - v0;
+	float3 edgeAC = v2 - v0;
+	float3 normalVector = cross(edgeAB, edgeAC);
+	float3 ao = (ray.origin) - v0;
+	float3 dao = cross(ao, ray.direction);
+
+	float determinant = -dot(ray.direction, normalVector);
+	float invDet = 1.0f / determinant;
+
+	// Calculate dst to triangle & barycentric coordinates of intersection point
+	float dst = dot(ao, normalVector) * invDet;
+	float u = dot(edgeAC, dao) * invDet;
+	float v = -dot(edgeAB, dao) * invDet;
+	float w = 1.0f - u - v;
+
+	// Initialize hit info
+	HitInfo hit;
+	hit.didHit = determinant >= 1E-6 && dst >= 0.0f && u >= 0.0f && v >= 0.0f && w >= 0.0f;
+	hit.hitPoint = (ray.origin) + ray.direction * dst;
+	//hit.normal = normalize(v0.normal * w + v1.normal * u + v2.normal * v);
+	hit.normal = normalVector;
+	hit.dst = dst;
+
+	return hit;
+}
+
 __device__ inline bool intersect_scene(const Ray& r, float& t, int& id)
 {
 	float n = sizeof(spheres) / sizeof(Sphere), d, inf = t = 1e20;  // t is distance to closest intersection, initialise t to a huge number outside scene
@@ -282,6 +310,84 @@ __device__ inline bool intersect_scene(const Ray& r, float& t, int& id)
 	return t < inf;
 }
 
+__device__ HitInfo intersect_triangles(const Ray& r, float& t, int& id, float* vbo)
+{
+	HitInfo hit;
+	HitInfo closestHit;
+	size_t n = 288u, inf = t = 1e20;  // t is distance to closest intersection, initialise t to a huge number outside scene
+	for (size_t i = 0; i < n; i += 24u)                                      // Test all scene objects for intersection
+	{
+		float3 v0 = make_float3(vbo[i],    vbo[i+1],  vbo[i+2]);
+		float3 v1 = make_float3(vbo[i+8],  vbo[i+9],  vbo[i+10]);
+		float3 v2 = make_float3(vbo[i+16], vbo[i+17], vbo[i+18]);
+
+		hit = rayTriangleIntersect(r, v0, v1, v2);
+
+		if (hit.didHit && hit.dst < t) // If newly computed intersection distance d is smaller than current closest intersection distance
+		{
+			t = hit.dst;	  // Keep track of distance along ray to closest intersection point
+			id = 1u;		  // and closest intersected object
+			closestHit = hit;
+		}
+	}
+	// Returns true if an intersection with the scene occurred, false when no hit
+	return closestHit;
+}
+__device__ float3 radianceTris(Ray& r, uint32_t& s1, size_t bounces, float* vbo) // Returns ray color
+{
+	float3 accucolor = make_float3(0.0f, 0.0f, 0.0f); // Accumulates ray colour with each iteration through bounce loop
+	float3 mask = make_float3(1.0f, 1.0f, 1.0f);
+
+	for (size_t b = 0; b < bounces; b++)
+	{
+		float t;           // Distance to closest intersection
+		int id = 0;        // Index of closest intersected sphere
+
+		// Test ray for intersection with scene
+		HitInfo hit = intersect_triangles(r, t, id, vbo);
+		if (!hit.didHit)
+		{
+			accucolor += mask * make_float3(0.1f, 0.12f, 0.2f); // If miss, return sky
+			break;
+		}
+
+		//accucolor += mask * obj.mat.emission;
+
+		// Create 2 random numbers
+		float r1 = 2 * M_PI * randomValue(s1); // Pick random number on unit circle (radius = 1, circumference = 2*Pi) for azimuth
+		float r2 = randomValue(s1);            // Pick random number for elevation
+		float r2s = sqrtf(r2);
+
+		float ndotl = fmaxf(dot(-r.direction, hit.normal), 0.0f);
+		float f = fresnel_schlick_ratio(ndotl, 8.0f);
+
+		bool isSpecularBounce = max(0.0f, max(f, 0.02f)) >= randomValue(s1);
+
+		float3 diffuseDir = normalize(hit.normal + randomDirection(s1));
+		float3 specularDir = reflect(r.direction, normalize(hit.normal + randomDirection(s1) * 0.2f));
+
+		float3 linearSurfColor = {0.7f, 0.7f, 0.7f};
+
+		r.direction = normalize(lerp(diffuseDir, specularDir, isSpecularBounce));
+
+		// New ray origin is intersection point of previous ray with scene
+		r.origin = hit.hitPoint + hit.normal * 0.1f; // offset ray origin slightly to prevent self intersection
+
+		mask = mask * lerp(linearSurfColor, lerp(make_float3(1.0f), linearSurfColor, 0.0f), isSpecularBounce);
+
+		float p = max(mask.x, max(mask.y, mask.z));
+		if (randomValue(s1) >= p)
+		{
+			break;
+		}
+		mask *= 1.0f / p;
+
+		//accucolor = { f, f, f };
+	}
+
+
+	return accucolor;
+}
 __device__ float3 radiance(Ray& r, uint32_t& s1, size_t bounces) // Returns ray color
 {
 	float3 accucolor = make_float3(0.0f, 0.0f, 0.0f); // Accumulates ray colour with each iteration through bounce loop
@@ -341,7 +447,7 @@ __device__ float3 radiance(Ray& r, uint32_t& s1, size_t bounces) // Returns ray 
 	return accucolor;
 }
 
-__global__ void render_kernel(float3* buf, uint32_t width, uint32_t height, Camera_GPU camera, size_t samples, size_t bounces, uint32_t sampleIndex)
+__global__ void render_kernel(float3* buf, uint32_t width, uint32_t height, Camera_GPU camera, size_t samples, size_t bounces, uint32_t sampleIndex, float* vbo)
 {
 	// Assign a CUDA thread to every pixel (x,y) blockIdx, blockDim and threadIdx are CUDA specific
 	// Keywords replaces nested outer loops in CPU code looping over image rows and image columns
@@ -405,7 +511,7 @@ __global__ void render_kernel(float3* buf, uint32_t width, uint32_t height, Came
 
 		// Create primary ray, add incoming radiance to pixelcolor
 		Ray ray = Ray(cameraPos, normalize(worldDir + d*0.5f));
-		lightContribution += radiance(ray, s1, bounces) * (1.0 / samples);
+		lightContribution += radianceTris(ray, s1, bounces, vbo) * (1.0 / samples);
 	}
 
 	// Write rgb value of pixel to image buffer on the GPU
@@ -474,11 +580,6 @@ __global__ void floatToImageData_kernel(uint32_t* outputBuffer, float3* inputBuf
 // Initialize and run the kernel
 void CudaRenderer::Compute(void)
 {
-	//float3* output_buffer_gpu;                // pointer to memory for image on the device (GPU VRAM)
-
-	// Allocate memory on the CUDA device (GPU VRAM)
-	//cudaMalloc(&output_buffer_gpu, m_width * m_height * sizeof(float3));
-
 	int tx = 8;
 	int ty = 8;
 
@@ -495,14 +596,11 @@ void CudaRenderer::Compute(void)
 		goto Error;
 	}
 
-	//Camera_GPU camera_gpu
-	//{
-	//	m_fov,
-	//	m_cameraPos,
-	//	m_cameraDir,
-	//	m_invViewMat,
-	//	m_invProjMat
-	//};
+
+	float* vbo;
+	size_t bufferSize = m_mesh->vertexCount * 8u * sizeof(float);
+	cudaMalloc(&vbo, bufferSize);
+	cudaMemcpy(vbo, m_mesh->vertexBuffer, bufferSize, cudaMemcpyHostToDevice);
 
 	Camera_GPU camera_buffer_obj;
 	camera_buffer_obj.fov = 50.0f;
@@ -510,11 +608,8 @@ void CudaRenderer::Compute(void)
 	memcpy(&camera_buffer_obj.invViewMat[0], m_invViewMat, sizeof(float) * 16);
 	memcpy(&camera_buffer_obj.viewMat[0],    m_viewMat,    sizeof(float) * 16);
 
-	//cudaMalloc(&camera_buffer_obj, sizeof(Camera_GPU));
 
-	// Schedule threads on device and launch CUDA kernel from host
-	//render_kernelDebug <<<blocks, threads >>> (m_accumulationBuffer_GPU, m_width, m_height, camera_buffer_obj);
-	render_kernel <<<blocks, threads>>> (m_accumulationBuffer_GPU, m_width, m_height, camera_buffer_obj, m_samples, *m_bounces, *m_sampleIndex);
+	render_kernel <<<blocks, threads>>> (m_accumulationBuffer_GPU, m_width, m_height, camera_buffer_obj, m_samples, *m_bounces, *m_sampleIndex, vbo);
 
 	// Check for any errors launching the kernel
 	cudaStatus = cudaGetLastError();

@@ -152,13 +152,14 @@ public:
 			mesh.materialIndex = 3;
 			m_scene.meshes.push_back(mesh);
 		}
+*/
 		{
 			Mesh meshclass = Mesh();
 			Mesh mesh = meshclass.LoadOBJFile("T:\\GIT\\GPURaytracer\\Raytracer\\suzanne.obj");
 			mesh.materialIndex = 1;
-			//m_scene.meshes.push_back(mesh);
+			m_scene.meshes.push_back(mesh);
 		}
-		*/
+
 	}
 
 	virtual void OnUpdate(float ts) override
@@ -217,51 +218,13 @@ public:
 			ImGui::AlignTextToFramePadding();
 
 			Mesh& mesh = m_scene.meshes[i];
-			Material& mat = m_scene.materials[mesh.materialIndex];
 			ImGui::Separator();
 			ImGui::Text("Mesh: %s", mesh.name);
-			ImGui::Text("Material: %s", mat.name);
-			if (ImGui::DragInt("Material", &mesh.materialIndex, 0.1f, 0, (int)m_scene.materials.size() - 1)) { m_sceneChanged = true; }
 			if (ImGui::DragFloat3("Position", glm::value_ptr(mesh.Transform), 0.1f)) { m_sceneChanged = true; }
 			ImGui::Separator();
 			ImGui::PopID();
 		}
 
-		for (size_t i = 0u; i < m_scene.spheres.size(); i++)
-		{
-			ImGui::PushID((int)i+(int)m_scene.meshes.size());
-			ImGui::AlignTextToFramePadding();
-
-			Sphere& sphere = m_scene.spheres[i];
-			Material& mat = m_scene.materials[sphere.materialIndex];
-			ImGui::Separator();
-			ImGui::Text("Sphere: %i", i);
-			ImGui::Text("Material: %s", mat.name);
-			if (ImGui::DragInt("Material", &sphere.materialIndex, 0.1f, 0, (int)m_scene.materials.size() - 1))   { m_sceneChanged = true; }
-			if (ImGui::DragFloat3("Position", glm::value_ptr(sphere.position), 0.1f))						     { m_sceneChanged = true; }
-			if (ImGui::DragFloat("Radius", &sphere.radius, 0.1f))											     { m_sceneChanged = true; }
-			ImGui::Separator();
-			ImGui::PopID();
-		}
-		ImGui::End();
-
-		ImGui::Begin("Materials");
-		for (size_t i = 0u; i < m_scene.materials.size(); i++)
-		{
-			ImGui::PushID((int)i);
-			ImGui::AlignTextToFramePadding();
-
-			Material& mat = m_scene.materials[i];
-			ImGui::Text("%s", mat.name);
-			if (ImGui::ColorEdit3("Albedo", glm::value_ptr(mat.albedo)))				      { m_sceneChanged = true; }
-			if (ImGui::DragFloat("Roughness", &mat.roughness, 0.01f, 0.0f, 1.0f))			  { m_sceneChanged = true; }
-			//if (ImGui::DragFloat("Specularity", &mat.specularProbability, 0.01f, 0.0f, 1.0f)) { m_sceneChanged = true; }
-			if (ImGui::DragFloat("Metalness", &mat.metalness, 0.01f, 0.0f, 1.0f))			  { m_sceneChanged = true; }
-			if (ImGui::ColorEdit3("Emission Color", glm::value_ptr(mat.emissionColor)))		  { m_sceneChanged = true; }
-			if (ImGui::DragFloat("Emission Power", &mat.emissionPower, 0.1f, 0.0f, 100.0f))   { m_sceneChanged = true; }
-			ImGui::Separator();
-			ImGui::PopID();
-		}
 		ImGui::End();
 
 		ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
