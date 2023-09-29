@@ -128,7 +128,6 @@ struct Sphere
 
 struct Camera_GPU
 {
-	float fov;
 	float invViewMat[16];
 	float invProjMat[16];
 	float viewMat[16];
@@ -310,16 +309,16 @@ __device__ inline bool intersect_scene(const Ray& r, float& t, int& id)
 	return t < inf;
 }
 
-__device__ HitInfo intersect_triangles(const Ray& r, float& t, int& id, float* vbo)
+__device__ HitInfo intersect_triangles(const Ray& r, float& t, int& id, GPU_Mesh::GPU_MeshList* vbo)
 {
 	HitInfo hit;
 	HitInfo closestHit;
-	size_t n = 288u, inf = t = 1e20;  // t is distance to closest intersection, initialise t to a huge number outside scene
+	size_t n = vbo->vertexCounts[0] * 8u, inf = t = 1e20;  // t is distance to closest intersection, initialise t to a huge number outside scene
 	for (size_t i = 0; i < n; i += 24u)                                      // Test all scene objects for intersection
 	{
-		float3 v0 = make_float3(vbo[i],    vbo[i+1],  vbo[i+2]);
-		float3 v1 = make_float3(vbo[i+8],  vbo[i+9],  vbo[i+10]);
-		float3 v2 = make_float3(vbo[i+16], vbo[i+17], vbo[i+18]);
+		float3 v0 = make_float3(vbo->vertexBuffer[i], vbo->vertexBuffer[i + 1], vbo->vertexBuffer[i + 2]);
+		float3 v1 = make_float3(vbo->vertexBuffer[i+8], vbo->vertexBuffer[i+9], vbo->vertexBuffer[i+10]);
+		float3 v2 = make_float3(vbo->vertexBuffer[i+16], vbo->vertexBuffer[i+17], vbo->vertexBuffer[i+18]);
 
 		hit = rayTriangleIntersect(r, v0, v1, v2);
 
@@ -333,7 +332,7 @@ __device__ HitInfo intersect_triangles(const Ray& r, float& t, int& id, float* v
 	// Returns true if an intersection with the scene occurred, false when no hit
 	return closestHit;
 }
-__device__ float3 radianceTris(Ray& r, uint32_t& s1, size_t bounces, float* vbo) // Returns ray color
+__device__ float3 radianceTris(Ray& r, uint32_t& s1, size_t bounces, GPU_Mesh::GPU_MeshList* vbo) // Returns ray color
 {
 	float3 accucolor = make_float3(0.0f, 0.0f, 0.0f); // Accumulates ray colour with each iteration through bounce loop
 	float3 mask = make_float3(1.0f, 1.0f, 1.0f);
@@ -347,7 +346,7 @@ __device__ float3 radianceTris(Ray& r, uint32_t& s1, size_t bounces, float* vbo)
 		HitInfo hit = intersect_triangles(r, t, id, vbo);
 		if (!hit.didHit)
 		{
-			accucolor += mask * make_float3(0.1f, 0.12f, 0.2f); // If miss, return sky
+			accucolor += mask * make_float3(0.0494, 0.091, 0.164f); // If miss, return sky
 			break;
 		}
 
@@ -382,7 +381,7 @@ __device__ float3 radianceTris(Ray& r, uint32_t& s1, size_t bounces, float* vbo)
 		}
 		mask *= 1.0f / p;
 
-		//accucolor = { f, f, f };
+		accucolor = { hit.normal };
 	}
 
 
@@ -447,7 +446,7 @@ __device__ float3 radiance(Ray& r, uint32_t& s1, size_t bounces) // Returns ray 
 	return accucolor;
 }
 
-__global__ void render_kernel(float3* buf, uint32_t width, uint32_t height, Camera_GPU camera, size_t samples, size_t bounces, uint32_t sampleIndex, float* vbo)
+__global__ void render_kernel(float3* buf, uint32_t width, uint32_t height, Camera_GPU camera, size_t samples, size_t bounces, uint32_t sampleIndex, GPU_Mesh::GPU_MeshList* vbo)
 {
 	// Assign a CUDA thread to every pixel (x,y) blockIdx, blockDim and threadIdx are CUDA specific
 	// Keywords replaces nested outer loops in CPU code looping over image rows and image columns
@@ -461,21 +460,12 @@ __global__ void render_kernel(float3* buf, uint32_t width, uint32_t height, Came
 	
 	// Seeds for random number generator
 	uint32_t s1 = x * y * sampleIndex + i;
-	//uint32_t s2 = y * sampleIndex + i;
-	//const float fov = camera.fov * M_PI / 180.0f;
-	//const float tf = std::tan(fov * 0.5f);
 
 	float2 coord = { (float)x / (float)width, (float)y / (float)height };
 	coord = coord * 2.0f - make_float2(1.0f, 1.0f); // -1 -> 1
 	float viewCoord[4] = { coord.x, coord.y, -1.0f, 1.0f };
 	float target[4];
 	float target2[4];
-
-
-
-	//glm::vec4 target = m_InverseProjection * glm::vec4(coord.x, coord.y, 1, 1);
-	//glm::vec3 rayDirection = glm::vec3(m_InverseView * glm::vec4(glm::normalize(glm::vec3(target) / target.w), 0)); // World space
-	//m_RayDirections[x + y * m_ViewportWidth] = rayDirection;
 
 	vector4_matrix4_mult(&viewCoord[0], &camera.invProjMat[0], &target[0]);
 
@@ -597,19 +587,50 @@ void CudaRenderer::Compute(void)
 	}
 
 
-	float* vbo;
-	size_t bufferSize = m_mesh->vertexCount * 8u * sizeof(float);
-	cudaMalloc(&vbo, bufferSize);
-	cudaMemcpy(vbo, m_mesh->vertexBuffer, bufferSize, cudaMemcpyHostToDevice);
+	GPU_Mesh::GPU_MeshList* deviceStruct;
+	cudaStatus = cudaMalloc(&deviceStruct, sizeof(GPU_Mesh::GPU_MeshList));
+	if (cudaStatus != cudaSuccess)
+	{
+		fprintf(stderr, "cudaMalloc failed!");
+		goto Error;
+	}
+
+	cudaStatus = cudaMemcpy(deviceStruct, m_meshList, sizeof(GPU_Mesh::GPU_MeshList), cudaMemcpyHostToDevice);
+	if (cudaStatus != cudaSuccess)
+	{
+		fprintf(stderr, "cudaMemcpy failed!");
+		goto Error;
+	}
+
+	float* d_vbo;
+	cudaMalloc(&d_vbo, m_meshList->meshOffsets[0]);
+	cudaMemcpy(d_vbo, m_meshList->vertexBuffer, m_meshList->meshOffsets[0], cudaMemcpyHostToDevice);
+	cudaMemcpy(&deviceStruct->vertexBuffer, &d_vbo, sizeof(float*), cudaMemcpyHostToDevice);
+
+	size_t* d_meshOffsets;
+	cudaMalloc(&d_meshOffsets, m_meshList->meshCount * sizeof(size_t));
+	cudaMemcpy(d_meshOffsets, m_meshList->meshOffsets, m_meshList->meshCount * sizeof(size_t), cudaMemcpyHostToDevice);
+	cudaMemcpy(&deviceStruct->meshOffsets, &d_meshOffsets, sizeof(size_t*), cudaMemcpyHostToDevice);
+
+	size_t* d_vertexCounts;
+	cudaMalloc(&d_vertexCounts, m_meshList->meshCount * sizeof(size_t));
+	cudaMemcpy(d_vertexCounts, m_meshList->vertexCounts, m_meshList->meshCount * sizeof(size_t), cudaMemcpyHostToDevice);
+	cudaMemcpy(&deviceStruct->vertexCounts, &d_vertexCounts, sizeof(size_t*), cudaMemcpyHostToDevice);
+
+	cudaStatus = cudaGetLastError();
+	if (cudaStatus != cudaSuccess)
+	{
+		fprintf(stderr, "cudaMemcpy failed: %s\n", cudaGetErrorString(cudaStatus));
+		goto Error;
+	}
 
 	Camera_GPU camera_buffer_obj;
-	camera_buffer_obj.fov = 50.0f;
 	memcpy(&camera_buffer_obj.invProjMat[0], m_invProjMat, sizeof(float) * 16);
 	memcpy(&camera_buffer_obj.invViewMat[0], m_invViewMat, sizeof(float) * 16);
 	memcpy(&camera_buffer_obj.viewMat[0],    m_viewMat,    sizeof(float) * 16);
 
 
-	render_kernel <<<blocks, threads>>> (m_accumulationBuffer_GPU, m_width, m_height, camera_buffer_obj, m_samples, *m_bounces, *m_sampleIndex, vbo);
+	render_kernel <<<blocks, threads>>> (m_accumulationBuffer_GPU, m_width, m_height, camera_buffer_obj, m_samples, *m_bounces, *m_sampleIndex, deviceStruct);
 
 	// Check for any errors launching the kernel
 	cudaStatus = cudaGetLastError();

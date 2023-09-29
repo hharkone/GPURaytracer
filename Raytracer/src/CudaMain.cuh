@@ -27,8 +27,11 @@ public:
 		m_invProjMat = new float[16];
 		m_viewMat    = new float[16];
 
-		m_mesh = new GPU_Mesh();
-		m_mesh->LoadOBJFile("T:\\GIT\\GPURaytracer\\Raytracer\\cube.obj");
+		m_gpuMesh = new GPU_Mesh();
+		m_gpuMesh->LoadOBJFile("T:\\GIT\\GPURaytracer\\Raytracer\\suzanne.obj");
+		m_meshList = new GPU_Mesh::GPU_MeshList();
+
+		m_gpuMesh->AddMeshToMeshList(*m_meshList, *m_gpuMesh);
 	}
 
 	~CudaRenderer()
@@ -55,7 +58,8 @@ public:
 
 private:
 	//const Scene* m_scene;
-	GPU_Mesh* m_mesh;
+	GPU_Mesh* m_gpuMesh;
+	GPU_Mesh::GPU_MeshList* m_meshList;
 	const size_t m_bufferSize;
 	uint32_t* m_sampleIndex;
 	size_t m_samples;

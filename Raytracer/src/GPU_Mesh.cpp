@@ -101,3 +101,45 @@ void GPU_Mesh::LoadOBJFile(const std::string& path)
 
     CalculateBbox();
 }
+
+void GPU_Mesh::AddMeshToMeshList(GPU_Mesh::GPU_MeshList& mlist, GPU_Mesh& mesh)
+{
+    size_t meshcount = mlist.meshCount;
+    size_t meshOffset = 0u;
+
+    for (size_t i = 0u; i < meshcount; i++)
+    {
+        meshOffset = mlist.vertexCounts[i] * mlist.vertexStride * sizeof(float);
+    }
+
+    size_t thisMeshOffset = mesh.vertexCount * mlist.vertexStride * sizeof(float);
+    size_t* newOffsets = new size_t[meshcount + 1u];
+    memcpy(newOffsets, mlist.meshOffsets, meshcount * sizeof(size_t));
+    memcpy(&newOffsets[meshcount * sizeof(size_t)], &thisMeshOffset, sizeof(size_t));
+
+    mlist.meshOffsets = newOffsets;
+
+    float* newVbo = new float[meshOffset + mesh.vertexCount * mlist.vertexStride * sizeof(float)];
+    memcpy(newVbo, mlist.vertexBuffer, meshOffset);
+    memcpy(&newVbo[meshOffset], mesh.vertexBuffer, +mesh.vertexCount * mlist.vertexStride * sizeof(float));
+
+    mlist.vertexBuffer = newVbo;
+
+    size_t* newVertexCounts = new size_t[meshcount * sizeof(size_t) + sizeof(size_t)];
+    memcpy(newVertexCounts, mlist.vertexCounts, meshcount * sizeof(size_t));
+    memcpy(&newVertexCounts[meshcount * sizeof(size_t)], &mesh.vertexCount, sizeof(size_t));
+
+    mlist.vertexCounts = newVertexCounts;
+
+    float3* newBboxMins = new float3[meshcount * sizeof(float3) + sizeof(float3)];
+    memcpy(newBboxMins, mlist.bboxMins, meshcount * sizeof(float3));
+    memcpy(&newBboxMins[meshcount * sizeof(float3)], &mesh.bboxMin, sizeof(float3));
+
+    float3* newBboxMaxs = new float3[meshcount * sizeof(float3) + sizeof(float3)];
+    memcpy(newBboxMaxs, mlist.bboxMaxs, meshcount * sizeof(float3));
+    memcpy(&newBboxMaxs[meshcount * sizeof(float3)], &mesh.bboxMax, sizeof(float3));
+
+    mlist.bboxMins = newBboxMins;
+    mlist.bboxMaxs = newBboxMaxs;
+    mlist.meshCount++;
+}
