@@ -152,14 +152,14 @@ public:
 			mesh.materialIndex = 3;
 			m_scene.meshes.push_back(mesh);
 		}
-*/
+
 		{
 			Mesh meshclass = Mesh();
 			Mesh mesh = meshclass.LoadOBJFile("T:\\GIT\\GPURaytracer\\Raytracer\\suzanne.obj");
 			mesh.materialIndex = 1;
 			m_scene.meshes.push_back(mesh);
 		}
-
+*/
 	}
 
 	virtual void OnUpdate(float ts) override

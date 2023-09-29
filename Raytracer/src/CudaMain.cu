@@ -266,7 +266,57 @@ __device__ void vector4_matrix4_mult(float* vec, float* mat, float* out)
 	}
 }
 
-__device__ HitInfo rayTriangleIntersect(const Ray& ray, const float3& v0, const float3& v1, const float3& v2)
+__device__ float3 getEnvironmentLight(const Ray& ray)
+{
+	float3 sunDir = make_float3(1.0f, 1.0f, 1.0f);
+	sunDir = normalize(sunDir);
+
+	float skyGradientT = powf(fmaxf(ray.direction.y, 0.0f), 0.35f);
+	float groundToSkyT = powf(fmaxf(ray.direction.y, 0.0f), 0.1f);
+
+	float3 skyColorHorizon{ 0.308, 0.459, 0.670 };
+	float3 skyColorZenith{ 0.0416, 0.158, 0.320 };
+	float3 groundColor{ 0.110, 0.102, 0.0891 };
+
+	float3 skyGradient = lerp(skyColorHorizon, skyColorZenith, skyGradientT);
+	float sun = powf(fmaxf(0.0f, dot(ray.direction, sunDir)), 100.0f) * 20.0f;
+
+	// Combine ground, sky, and sun
+	float3 composite = lerp(groundColor, skyGradient, groundToSkyT) + sun;
+
+	return composite;
+}
+__device__ HitInfo intersect_sphere(const Ray& r, const Sphere& s)
+{
+	HitInfo hit;
+
+	float3 offsetRayOrigin = r.origin - s.pos;
+	// From the equation: sqrLength(rayOrigin + rayDir * dst) = radius^2
+	// Solving for dst results in a quadratic equation with coefficients:
+	float a = dot(r.direction, r.direction); // a = 1 (assuming unit vector)
+	float b = 2.0f * dot(offsetRayOrigin, r.direction);
+	float c = dot(offsetRayOrigin, offsetRayOrigin) - s.rad * s.rad;
+	// Quadratic discriminant
+	float discriminant = b * b - 4.0f * a * c;
+
+	// No solution when d < 0 (ray misses sphere)
+	if (discriminant >= 0.0f)
+	{
+		// Distance to nearest intersection point (from quadratic formula)
+		float dst = (-b - sqrtf(discriminant)) / (2.0f * a);
+
+		// Ignore intersections that occur behind the ray
+		if (dst >= 0)
+		{
+			hit.didHit = true;
+			hit.dst = dst;
+			hit.hitPoint = r.origin + r.direction * dst;
+			hit.normal = normalize(hit.hitPoint - s.pos);
+		}
+	}
+}
+
+__device__ HitInfo rayTriangleIntersect(const Ray& ray, const float3& v0, const float3& v1, const float3& v2, const float3& vn0, const float3& vn1, const float3& vn2)
 {
 	float3 edgeAB = v1 - v0;
 	float3 edgeAC = v2 - v0;
@@ -287,51 +337,81 @@ __device__ HitInfo rayTriangleIntersect(const Ray& ray, const float3& v0, const 
 	HitInfo hit;
 	hit.didHit = determinant >= 1E-6 && dst >= 0.0f && u >= 0.0f && v >= 0.0f && w >= 0.0f;
 	hit.hitPoint = (ray.origin) + ray.direction * dst;
-	//hit.normal = normalize(v0.normal * w + v1.normal * u + v2.normal * v);
-	hit.normal = normalVector;
+	hit.normal = normalize(vn0 * w + vn1 * u + vn2 * v);
+	//hit.normal = normalVector;
 	hit.dst = dst;
 
 	return hit;
 }
 
-__device__ inline bool intersect_scene(const Ray& r, float& t, int& id)
+__device__ bool rayBoundingBox(const Ray& ray, const float3& min, float3& max)
 {
-	float n = sizeof(spheres) / sizeof(Sphere), d, inf = t = 1e20;  // t is distance to closest intersection, initialise t to a huge number outside scene
-	for (int i = int(n); i--;)                                      // Test all scene objects for intersection
-	{
-		if ((d = spheres[i].intersect_sphere(r)) && d < t) // If newly computed intersection distance d is smaller than current closest intersection distance
-		{
-			t = d;  // Keep track of distance along ray to closest intersection point
-			id = i; // and closest intersected object
-		}
-	}
-	// Returns true if an intersection with the scene occurred, false when no hit
-	return t < inf;
+	float3 invDir = 1.0f / ray.direction;
+	float3 tMin = (min - ray.origin) * invDir;
+	float3 tMax = (max - ray.origin) * invDir;
+	float3 t1 = fminf(tMin, tMax);
+	float3 t2 = fmaxf(tMin, tMax);
+
+	float tNear = fmaxf(fmaxf(t1.x, t1.y), t1.z);
+	float tFar  = fminf(fminf(t2.x, t2.y), t2.z);
+
+	return tNear <= tFar;
 }
 
-__device__ HitInfo intersect_triangles(const Ray& r, float& t, int& id, GPU_Mesh::GPU_MeshList* vbo)
+__device__ HitInfo intersect_triangles(const Ray& r, GPU_Mesh::GPU_MeshList* vbo)
 {
 	HitInfo hit;
 	HitInfo closestHit;
-	size_t n = vbo->vertexCounts[0] * 8u, inf = t = 1e20;  // t is distance to closest intersection, initialise t to a huge number outside scene
+
+	if (rayBoundingBox(r, vbo->bboxMins[0], vbo->bboxMaxs[0]))
+	{
+		closestHit.didHit = false;
+		return closestHit;
+	}
+
+	size_t n = vbo->vertexCounts[0] * vbo->vertexStride;     // t is distance to closest intersection, initialise t to a huge number outside scene
 	for (size_t i = 0; i < n; i += 24u)                                      // Test all scene objects for intersection
 	{
-		float3 v0 = make_float3(vbo->vertexBuffer[i], vbo->vertexBuffer[i + 1], vbo->vertexBuffer[i + 2]);
-		float3 v1 = make_float3(vbo->vertexBuffer[i+8], vbo->vertexBuffer[i+9], vbo->vertexBuffer[i+10]);
-		float3 v2 = make_float3(vbo->vertexBuffer[i+16], vbo->vertexBuffer[i+17], vbo->vertexBuffer[i+18]);
+		float3 vp0 = make_float3(vbo->vertexBuffer[i], vbo->vertexBuffer[i + 1], vbo->vertexBuffer[i + 2]);
+		float3 vp1 = make_float3(vbo->vertexBuffer[i+8], vbo->vertexBuffer[i+9], vbo->vertexBuffer[i+10]);
+		float3 vp2 = make_float3(vbo->vertexBuffer[i+16], vbo->vertexBuffer[i+17], vbo->vertexBuffer[i+18]);
 
-		hit = rayTriangleIntersect(r, v0, v1, v2);
+		float3 vn0 = make_float3(vbo->vertexBuffer[i + 3], vbo->vertexBuffer[i + 4], vbo->vertexBuffer[i + 5]);
+		float3 vn1 = make_float3(vbo->vertexBuffer[i + 11], vbo->vertexBuffer[i + 12], vbo->vertexBuffer[i + 13]);
+		float3 vn2 = make_float3(vbo->vertexBuffer[i + 19], vbo->vertexBuffer[i + 20], vbo->vertexBuffer[i + 21]);
 
-		if (hit.didHit && hit.dst < t) // If newly computed intersection distance d is smaller than current closest intersection distance
+
+		hit = rayTriangleIntersect(r, vp0, vp1, vp2, vn0, vn1, vn2);
+
+		if (hit.didHit && hit.dst < closestHit.dst) // If newly computed intersection distance d is smaller than current closest intersection distance
 		{
-			t = hit.dst;	  // Keep track of distance along ray to closest intersection point
-			id = 1u;		  // and closest intersected object
 			closestHit = hit;
 		}
 	}
 	// Returns true if an intersection with the scene occurred, false when no hit
 	return closestHit;
 }
+
+__device__ HitInfo intersect_scene(const Ray& r)
+{
+	HitInfo hit;
+	HitInfo closestHit;
+
+	float n = sizeof(spheres) / sizeof(Sphere);  // t is distance to closest intersection, initialise t to a huge number outside scene
+	for (int i = int(n); i--;)                                      // Test all scene objects for intersection
+	{
+		Sphere s = spheres[i];
+		hit = intersect_sphere(r, s);
+
+		if (hit.didHit && hit.dst < closestHit.dst) // If newly computed intersection distance d is smaller than current closest intersection distance
+		{
+			closestHit = hit;
+		}
+	}
+	// Returns true if an intersection with the scene occurred, false when no hit
+	return closestHit;
+}
+
 __device__ float3 radianceTris(Ray& r, uint32_t& s1, size_t bounces, GPU_Mesh::GPU_MeshList* vbo) // Returns ray color
 {
 	float3 accucolor = make_float3(0.0f, 0.0f, 0.0f); // Accumulates ray colour with each iteration through bounce loop
@@ -343,10 +423,11 @@ __device__ float3 radianceTris(Ray& r, uint32_t& s1, size_t bounces, GPU_Mesh::G
 		int id = 0;        // Index of closest intersected sphere
 
 		// Test ray for intersection with scene
-		HitInfo hit = intersect_triangles(r, t, id, vbo);
+		HitInfo hit = intersect_triangles(r, vbo);
 		if (!hit.didHit)
 		{
-			accucolor += mask * make_float3(0.0494, 0.091, 0.164f); // If miss, return sky
+			//accucolor += mask * make_float3(0.0494, 0.091, 0.164f); // If miss, return sky
+			accucolor += mask * getEnvironmentLight(r);
 			break;
 		}
 
@@ -363,14 +444,14 @@ __device__ float3 radianceTris(Ray& r, uint32_t& s1, size_t bounces, GPU_Mesh::G
 		bool isSpecularBounce = max(0.0f, max(f, 0.02f)) >= randomValue(s1);
 
 		float3 diffuseDir = normalize(hit.normal + randomDirection(s1));
-		float3 specularDir = reflect(r.direction, normalize(hit.normal + randomDirection(s1) * 0.2f));
+		float3 specularDir = reflect(r.direction, normalize(hit.normal + randomDirection(s1) * 0.3f));
 
-		float3 linearSurfColor = {0.7f, 0.7f, 0.7f};
+		float3 linearSurfColor = {0.7f, 0.2f, 0.1f};
 
 		r.direction = normalize(lerp(diffuseDir, specularDir, isSpecularBounce));
 
 		// New ray origin is intersection point of previous ray with scene
-		r.origin = hit.hitPoint + hit.normal * 0.1f; // offset ray origin slightly to prevent self intersection
+		r.origin = hit.hitPoint + hit.normal * 0.001f; // offset ray origin slightly to prevent self intersection
 
 		mask = mask * lerp(linearSurfColor, lerp(make_float3(1.0f), linearSurfColor, 0.0f), isSpecularBounce);
 
@@ -381,12 +462,14 @@ __device__ float3 radianceTris(Ray& r, uint32_t& s1, size_t bounces, GPU_Mesh::G
 		}
 		mask *= 1.0f / p;
 
-		accucolor = { hit.normal };
+		//accucolor = { hit.normal };
 	}
 
 
 	return accucolor;
 }
+
+/*
 __device__ float3 radiance(Ray& r, uint32_t& s1, size_t bounces) // Returns ray color
 {
 	float3 accucolor = make_float3(0.0f, 0.0f, 0.0f); // Accumulates ray colour with each iteration through bounce loop
@@ -398,7 +481,7 @@ __device__ float3 radiance(Ray& r, uint32_t& s1, size_t bounces) // Returns ray 
 		int id = 0;        // Index of closest intersected sphere
 
 		// Test ray for intersection with scene
-		if (!intersect_scene(r, t, id))
+		if (!intersect_scene(r))
 		{
 			accucolor += mask * make_float3(0.1f, 0.12f, 0.2f); // If miss, return sky
 			break;
@@ -445,6 +528,7 @@ __device__ float3 radiance(Ray& r, uint32_t& s1, size_t bounces) // Returns ray 
 
 	return accucolor;
 }
+*/
 
 __global__ void render_kernel(float3* buf, uint32_t width, uint32_t height, Camera_GPU camera, size_t samples, size_t bounces, uint32_t sampleIndex, GPU_Mesh::GPU_MeshList* vbo)
 {
@@ -506,50 +590,6 @@ __global__ void render_kernel(float3* buf, uint32_t width, uint32_t height, Came
 
 	// Write rgb value of pixel to image buffer on the GPU
 	buf[i] += lightContribution;
-}
-
-__global__ void render_kernelDebug(float3* buf, uint32_t width, uint32_t height, Camera_GPU camera)
-{
-	// Assign a CUDA thread to every pixel (x,y) blockIdx, blockDim and threadIdx are CUDA specific
-	// Keywords replaces nested outer loops in CPU code looping over image rows and image columns
-	uint32_t x = blockIdx.x * blockDim.x + threadIdx.x;
-	uint32_t y = blockIdx.y * blockDim.y + threadIdx.y;
-
-	if ((x >= width) || (y >= height))
-		return;
-
-	// Index of current pixel (calculated using thread index)
-	uint32_t i = (height - y - 1) * width + x;
-
-
-	float2 coord = { (float)x / (float)width, (float)y / (float)height };
-	coord = coord * 2.0f - make_float2(1.0f, 1.0f); // -1 -> 1
-	float viewCoord[4] = { coord.x, coord.y, 1.0f, 1.0f };
-	float target[4];
-
-	vector4_matrix4_mult(&viewCoord[0], &camera.invViewMat[0], &target[0]);
-
-	float3 r;
-
-	// Reset r to zero for every pixel
-	r = make_float3(target[0], target[1], target[2]);
-
-	// Write rgb value of pixel to image buffer on the GPU
-	buf[i] = r;
-}
-
-__global__ void scale_accumulation_kernel(float3* m_outputBuffer, float3* m_accumulationBuffer, uint32_t width, uint32_t height, uint32_t sampleIndex)
-{
-	uint32_t x = blockIdx.x * blockDim.x + threadIdx.x;
-	uint32_t y = blockIdx.y * blockDim.y + threadIdx.y;
-
-	if ((x >= width) || (y >= height))
-		return;
-
-	// Index of current pixel (calculated using thread index)
-	uint32_t i = (height - y - 1) * width + x;
-
-	m_outputBuffer[i] = m_accumulationBuffer[i] / (float)sampleIndex;
 }
 
 __global__ void floatToImageData_kernel(uint32_t* outputBuffer, float3* inputBuffer, uint32_t width, uint32_t height, uint32_t sampleIndex)
@@ -616,6 +656,16 @@ void CudaRenderer::Compute(void)
 	cudaMalloc(&d_vertexCounts, m_meshList->meshCount * sizeof(size_t));
 	cudaMemcpy(d_vertexCounts, m_meshList->vertexCounts, m_meshList->meshCount * sizeof(size_t), cudaMemcpyHostToDevice);
 	cudaMemcpy(&deviceStruct->vertexCounts, &d_vertexCounts, sizeof(size_t*), cudaMemcpyHostToDevice);
+
+	float3* d_bboxMin;
+	cudaMalloc(&d_bboxMin, m_meshList->meshCount * sizeof(float3));
+	cudaMemcpy(d_bboxMin, &m_meshList->bboxMins[0], m_meshList->meshCount * sizeof(float3), cudaMemcpyHostToDevice);
+	cudaMemcpy(&deviceStruct->bboxMins, &d_bboxMin, sizeof(float3*), cudaMemcpyHostToDevice);
+
+	float3* d_bboxMax;
+	cudaMalloc(&d_bboxMax, m_meshList->meshCount * sizeof(float3));
+	cudaMemcpy(d_bboxMax, &m_meshList->bboxMins[0], m_meshList->meshCount * sizeof(float3), cudaMemcpyHostToDevice);
+	cudaMemcpy(&deviceStruct->bboxMaxs, &d_bboxMax, sizeof(float3*), cudaMemcpyHostToDevice);
 
 	cudaStatus = cudaGetLastError();
 	if (cudaStatus != cudaSuccess)
