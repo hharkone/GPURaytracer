@@ -17,7 +17,7 @@ public:
 	ExampleLayer()
 		: m_camera(50.0f, 0.1f, 1000.0f)
 	{
-		m_rendetTimeVec.resize(200);
+		m_rendetTimeVec.resize(20);
 		/*
 		{
 			Sphere sphere;
@@ -258,7 +258,6 @@ public:
 		m_camera.OnResize(m_viewportWidth, m_viewportHeight);
 		m_renderer.Render(m_scene, m_camera);
 
-		//m_renderTimeMs = timer.ElapsedMillis();
 		m_rendetTimeVec.push_front(timer.ElapsedMillis());
 		m_rendetTimeVec.pop_back();
 

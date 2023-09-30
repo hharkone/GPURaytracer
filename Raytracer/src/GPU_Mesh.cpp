@@ -26,6 +26,8 @@ void GPU_Mesh::CalculateBbox()
 
 void GPU_Mesh::LoadOBJFile(const std::string& path)
 {
+    vertexCount = 0u;
+
     std::ifstream infile(path, std::ifstream::in);
     std::string line;
 
@@ -104,6 +106,7 @@ void GPU_Mesh::LoadOBJFile(const std::string& path)
 
 void GPU_Mesh::AddMeshToMeshList(GPU_Mesh::GPU_MeshList& mlist, GPU_Mesh& mesh)
 {
+
     size_t meshcount = mlist.meshCount;
     size_t meshOffset = 0u;
 
@@ -142,4 +145,5 @@ void GPU_Mesh::AddMeshToMeshList(GPU_Mesh::GPU_MeshList& mlist, GPU_Mesh& mesh)
     mlist.bboxMins = newBboxMins;
     mlist.bboxMaxs = newBboxMaxs;
     mlist.meshCount++;
+    mesh.hasChanged = true;
 }

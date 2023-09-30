@@ -16,10 +16,10 @@ public:
 		m_imageData = new uint32_t[width * height];
 		memset(m_imageData, 0, (size_t)width * (size_t)height * sizeof(uint32_t));
 
-		cudaMalloc(&m_outputBuffer_GPU, m_bufferSize);
 		cudaMalloc(&m_accumulationBuffer_GPU, m_bufferSize);
-		cudaMalloc(&m_imageData_GPU, (size_t)width * (size_t)height * sizeof(uint32_t));
 		cudaMemset(m_accumulationBuffer_GPU, 0, m_bufferSize);
+
+		cudaMalloc(&m_imageData_GPU, (size_t)width * (size_t)height * sizeof(uint32_t));
 		cudaMemset(m_imageData_GPU, 0, (size_t)width * (size_t)height * sizeof(uint32_t));
 
 		m_cameraPos = { 0.0f, 0.0f, 0.0f };
@@ -28,9 +28,12 @@ public:
 		m_viewMat    = new float[16];
 
 		m_gpuMesh = new GPU_Mesh();
-		m_gpuMesh->LoadOBJFile("T:\\GIT\\GPURaytracer\\Raytracer\\suzanne.obj");
+
 		m_meshList = new GPU_Mesh::GPU_MeshList();
 
+		m_gpuMesh->LoadOBJFile("T:\\GIT\\GPURaytracer\\Raytracer\\suzanne.obj");
+		m_gpuMesh->AddMeshToMeshList(*m_meshList, *m_gpuMesh);
+		m_gpuMesh->LoadOBJFile("T:\\GIT\\GPURaytracer\\Raytracer\\cube.obj");
 		m_gpuMesh->AddMeshToMeshList(*m_meshList, *m_gpuMesh);
 	}
 
@@ -40,7 +43,6 @@ public:
 
 		cudaFree(m_accumulationBuffer_GPU);
 		cudaFree(m_imageData_GPU);
-		cudaFree(m_outputBuffer_GPU);
 	}
 
 	void SetCamera(float3 pos, float3 dir, float fov);
@@ -60,6 +62,7 @@ private:
 	//const Scene* m_scene;
 	GPU_Mesh* m_gpuMesh;
 	GPU_Mesh::GPU_MeshList* m_meshList;
+	GPU_Mesh::GPU_MeshList* deviceStruct;
 	const size_t m_bufferSize;
 	uint32_t* m_sampleIndex;
 	size_t m_samples;
@@ -72,7 +75,6 @@ private:
 	float m_fov = 50.0f;
 	uint32_t* m_imageData = nullptr;
 	float* m_outputBuffer = nullptr;
-	float3* m_outputBuffer_GPU = nullptr;
 	float3* m_accumulationBuffer_GPU = nullptr;
 	uint32_t* m_imageData_GPU = nullptr;
 };

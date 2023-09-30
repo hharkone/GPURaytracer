@@ -59,71 +59,20 @@ struct Material
 	float  metalness = 0.0f;
 };
 
-__device__ struct HitInfo
+struct HitInfo
 {
 	bool didHit = false;
 	float dst = FLT_MAX;
 	float3 hitPoint {0.0f, 0.0f, 0.0f};
 	float3 normal{ 0.0f, 0.0f, 0.0f };
-	Material material;
+	size_t materialIndex;
 };
 
 struct Sphere
 {
 	float rad;            // Radius
 	float3 pos;           // Position
-	Material mat;         // Material
-
-#if true
-	__device__ float intersect_sphere(const Ray& r) const
-	{
-		// Ray/sphere intersection returns distance t to intersection point, 0 if no hit ray
-		// equation: p(x,y,z) = ray.orig + t*ray.dir general sphere equation: x^2 + y^2 + z^2 = rad^2
-		// classic quadratic equation of form ax^2 + bx + c = 0 solution x = (-b +- sqrt(b*b - 4ac))
-		// / 2a solve t^2*ray.dir*ray.dir + 2*t*(orig-p)*ray.dir + (orig-p)*(orig-p) - rad*rad = 0
-		// more details in "Realistic Ray Tracing" book by P. Shirley or Scratchapixel.com
-
-		float3 op = pos - r.origin;                                                 // Distance from ray.orig to center sphere
-		float t, epsilon = 0.0001f;                                                 // Epsilon required to prevent floating point precision artefacts
-		float b = dot(op, r.direction);                                             // b in quadratic equation
-		float disc = b * b - dot(op, op) + rad * rad;                               // discriminant quadratic equation
-		if (disc < 0) return 0;                                                     // if disc < 0, no real solution (we're not interested in complex roots)
-		else disc = sqrtf(disc);                                                    // if disc >= 0, check for solutions using negative and positive discriminant
-		return (t = b - disc) > epsilon ? t : ((t = b + disc) > epsilon ? t : 0);   // pick closest point in front of ray origin
-	}
-#else
-
-	__device__ inline HitInfo intersect_sphere(const Ray& r) const
-	{
-		HitInfo hit; 
-
-		float3 offsetRayOrigin = r.origin - pos;
-		// From the equation: sqrLength(rayOrigin + rayDir * dst) = radius^2
-		// Solving for dst results in a quadratic equation with coefficients:
-		float a = dot(r.direction, r.direction); // a = 1 (assuming unit vector)
-		float b = 2.0f * dot(offsetRayOrigin, r.direction);
-		float c = dot(offsetRayOrigin, offsetRayOrigin) - rad * rad;
-		// Quadratic discriminant
-		float discriminant = b * b - 4.0f * a * c;
-
-		// No solution when d < 0 (ray misses sphere)
-		if (discriminant >= 0.0f)
-		{
-			// Distance to nearest intersection point (from quadratic formula)
-			float dst = (-b - sqrtf(discriminant)) / (2.0f * a);
-
-			// Ignore intersections that occur behind the ray
-			if (dst >= 0)
-			{
-				hit.didHit = true;
-				hit.dst = dst;
-				hit.hitPoint = r.origin + r.direction * dst;
-				hit.normal = normalize(hit.hitPoint - pos);
-				hit.material = mat;
-			}
-		}
-	}
-#endif
+	size_t materialIndex; // Material Index
 };
 
 struct Camera_GPU
@@ -154,26 +103,38 @@ __constant__ static float jitterMatrix[10] =
 // SCENE 9 spheres forming a Cornell box small enough to be in constant GPU memory 
 __constant__ Sphere spheres[] =
 {
-	  //{ float radius, { float3 position },      { float3 emission }, { float3 colour },       refl_type }
-	  { 1e5f,{ 1e5f + 1.0f, 40.8f, 81.6f },     Material{ { 0.5f, 0.7f,  0.8f  }, 0.1f, { 0.0f, 0.0f, 0.0f }, 0.0f } }, //Left
-	  { 1e5f,{ -1e5f + 99.0f, 40.8f, 81.6f },   Material{ { 0.7f, 0.1f,  0.1f  }, 0.1f, { 0.0f, 0.0f, 0.0f }, 0.0f } }, //Right
-	  { 1e5f,{ 50.0f, 40.8f, 1e5f },            Material{ { 1.0f, 1.0f,  1.0f  }, 0.0f, { 0.0f, 0.0f, 0.0f }, 1.0f } }, //Back
-	  { 1e5f,{ 50.0f, 40.8f, -1e5f + 600.0f },  Material{} }, //Frnt     	   
-	  { 1e5f,{ 50.0f, 1e5f, 81.6f },            Material{ { 0.7f, 0.7f,  0.7f  }, 0.05f,{ 0.0f, 0.0f, 0.0f }, 0.0f } }, //Botm
-	  { 1e5f,{ 50.0f, -1e5f + 81.6f, 81.6f },   Material{} }, //Top			   
-	  { 16.5f,{ 27.0f, 16.5f, 47.0f },          Material{ { 0.7f, 0.7f,  0.7f  }, 0.05f,{ 0.0f, 0.0f, 0.0f }, 0.0f } }, // small sphere 1
-	  { 16.5f,{ 73.0f, 16.5f, 78.0f },          Material{ { 1.0f, 0.9f,  0.6f  }, 0.00f, { 0.0f, 0.0f, 0.0f }, 1.0f } },  // gold sphere 2
-	  { 16.5f,{ 73.0f, 16.5f, 118.0f },         Material{ { 0.98f,0.815f,0.75f }, 0.00f, { 0.0f, 0.0f, 0.0f }, 1.0f } }, // copper sphere 2
-	  { 100.0f,{ 30.0f, 181.6f - 1.9f, 80.0f }, Material{ { 0.0f, 0.0f,  0.0f  }, 0.1f, { 8.0f, 6.0f, 5.0f }, 0.0f } },  // Light
-	  { 100.0f,{ 70.0f, 181.6f - 1.9f, 80.0f }, Material{ { 0.0f, 0.0f,  0.0f  }, 0.1f, { 5.0f, 6.0f, 8.0f }, 0.0f } }   // Light
+	  { 1e5f,{ 1e5f + 1.0f, 40.8f, 81.6f },     0u }, //Left
+	  { 1e5f,{ -1e5f + 99.0f, 40.8f, 81.6f },   1u }, //Right
+	  { 1e5f,{ 50.0f, 40.8f, 1e5f },            3u }, //Back
+	  { 1e5f,{ 50.0f, 40.8f, -1e5f + 600.0f },  2u }, //Frnt     	   
+	  { 1e5f,{ 50.0f, 1e5f, 81.6f },            2u }, //Botm
+	  { 1e5f,{ 50.0f, -1e5f + 81.6f, 81.6f },   2u }, //Top			   
+	  { 16.5f,{ 27.0f, 16.5f, 47.0f },          2u }, // small sphere 1
+	  { 16.5f,{ 73.0f, 16.5f, 78.0f },          4u }, // gold sphere 2
+	  { 16.5f,{ 73.0f, 16.5f, 118.0f },         5u }, // copper sphere 2
+	  { 100.0f,{ 30.0f, 181.6f - 1.9f, 80.0f }, 6u }, // Light
+	  { 100.0f,{ 70.0f, 181.6f - 1.9f, 80.0f }, 7u }  // Light
 	  //{ 2.1f,{ 40.0f, 40.5f, 47.0f }, Material{ { 0.8f, 0.8f, 0.8f }, 0.1f, { 150.0f, 160.0f, 180.0f }, 0.0f} }      // Light
 };
 
-__constant__ Sphere spheresSimple[] =
+__constant__  Material materials[] =
+{
+	Material{ { 0.5f, 0.7f,  0.8f  }, 0.1f, { 0.0f, 0.0f, 0.0f }, 0.0f },	//Blue
+	Material{ { 0.7f, 0.1f,  0.1f  }, 0.05f, { 0.0f, 0.0f, 0.0f }, 1.0f },	//Red	
+	Material{ { 0.7f, 0.7f,  0.7f  }, 0.05f,{ 0.0f, 0.0f, 0.0f }, 0.0f },   //White
+	Material{ { 1.0f, 1.0f,  1.0f  }, 0.0f, { 0.0f, 0.0f, 0.0f }, 1.0f },	//Mirror
+	Material{ { 1.0f, 0.9f,  0.6f  }, 0.1f, { 0.0f, 0.0f, 0.0f }, 1.0f },	//Gold
+	Material{ { 0.98f,0.815f,0.75f }, 0.1f, { 0.0f, 0.0f, 0.0f }, 1.0f },	//Copper
+	Material{ { 0.0f, 0.0f,  0.0f  }, 0.1f, { 8.0f, 6.0f, 5.0f }, 0.0f },	//Light1
+	Material{ { 0.0f, 0.0f,  0.0f  }, 0.1f, { 5.0f, 6.0f, 8.0f }, 0.0f }	//Light2
+};
+
+__constant__  Sphere spheresSimple[] =
 {
 	//{ float radius, { float3 position }, { Material }}
-	  { 0.5f, { 0.0f, 0.0f, 0.0f },  Material{} },
-	  { 0.5f, { 0.0f, -1.0f, 0.0f }, Material{ {0.0f, 0.0f, 0.0f}, 0.0f, {1.0f, 1.0f, 0.0f}, 0.0f }}
+	  { 18.0f, { -20.0f, 0.0f, 0.0f }, 1u},
+	  { 8.0f, { 0.0f, -10.0f, 0.0f }, 2u},
+	  { 6.0f, {  8.0f, 0.0f, 0.0f }, 7u}
 };
 
 __device__ static float fresnel_schlick_ratio(float cos_theta_incident, float power)
@@ -189,27 +150,6 @@ __constant__ static float jitterMatrix[10] =
 	0.25, -0.75,
 	0.0f, 0.0f
 };
-
-// Random number generator from https://github.com/gz/rust-raytracer
-__device__ static float getrandom(unsigned int* seed0, unsigned int* seed1)
-{
-	*seed0 = 36969 * ((*seed0) & 65535) + ((*seed0) >> 16);  // hash the seeds using bitwise AND and bitshifts
-	*seed1 = 18000 * ((*seed1) & 65535) + ((*seed1) >> 16);
-
-	unsigned int ires = ((*seed0) << 16) + (*seed1);
-
-	// Convert to float
-	union
-	{
-		float f;
-		unsigned int ui;
-	} res;
-
-	// Bitwise AND, bitwise OR
-	res.ui = (ires & 0x007fffff) | 0x40000000;
-
-	return (res.f - 2.f) / 2.f;
-}
 
 // PCG (permuted congruential generator). Thanks to:
 // www.pcg-random.org and www.shadertoy.com/view/XlGcRh
@@ -286,14 +226,13 @@ __device__ float3 getEnvironmentLight(const Ray& ray)
 
 	return composite;
 }
+
 __device__ HitInfo intersect_sphere(const Ray& r, const Sphere& s)
 {
 	HitInfo hit;
 
 	float3 offsetRayOrigin = r.origin - s.pos;
-	// From the equation: sqrLength(rayOrigin + rayDir * dst) = radius^2
-	// Solving for dst results in a quadratic equation with coefficients:
-	float a = dot(r.direction, r.direction); // a = 1 (assuming unit vector)
+	float a = dot(r.direction, r.direction);
 	float b = 2.0f * dot(offsetRayOrigin, r.direction);
 	float c = dot(offsetRayOrigin, offsetRayOrigin) - s.rad * s.rad;
 	// Quadratic discriminant
@@ -303,17 +242,20 @@ __device__ HitInfo intersect_sphere(const Ray& r, const Sphere& s)
 	if (discriminant >= 0.0f)
 	{
 		// Distance to nearest intersection point (from quadratic formula)
-		float dst = (-b - sqrtf(discriminant)) / (2.0f * a);
+		float dst = (-b - fsqrtf(discriminant)) / (2.0f * a);
 
 		// Ignore intersections that occur behind the ray
-		if (dst >= 0)
+		if (dst >= 0.0f)
 		{
 			hit.didHit = true;
 			hit.dst = dst;
 			hit.hitPoint = r.origin + r.direction * dst;
 			hit.normal = normalize(hit.hitPoint - s.pos);
+			hit.materialIndex = s.materialIndex;
 		}
 	}
+
+	return hit;
 }
 
 __device__ HitInfo rayTriangleIntersect(const Ray& ray, const float3& v0, const float3& v1, const float3& v2, const float3& vn0, const float3& vn1, const float3& vn2)
@@ -358,7 +300,7 @@ __device__ bool rayBoundingBox(const Ray& ray, const float3& min, float3& max)
 	return tNear <= tFar;
 }
 
-__device__ HitInfo intersect_triangles(const Ray& r, GPU_Mesh::GPU_MeshList* vbo)
+__device__ HitInfo intersect_triangles(const Ray& r, const GPU_Mesh::GPU_MeshList* vbo)
 {
 	HitInfo hit;
 	HitInfo closestHit;
@@ -392,15 +334,16 @@ __device__ HitInfo intersect_triangles(const Ray& r, GPU_Mesh::GPU_MeshList* vbo
 	return closestHit;
 }
 
-__device__ HitInfo intersect_scene(const Ray& r)
+__device__ HitInfo intersect_scene(const Ray& r, const GPU_Mesh::GPU_MeshList* vbo)
 {
 	HitInfo hit;
 	HitInfo closestHit;
 
-	float n = sizeof(spheres) / sizeof(Sphere);  // t is distance to closest intersection, initialise t to a huge number outside scene
-	for (int i = int(n); i--;)                                      // Test all scene objects for intersection
+	float n = sizeof(spheresSimple) / sizeof(Sphere);
+
+	for (size_t i = 0u; i < size_t(n); i++)
 	{
-		Sphere s = spheres[i];
+		Sphere s = spheresSimple[i];
 		hit = intersect_sphere(r, s);
 
 		if (hit.didHit && hit.dst < closestHit.dst) // If newly computed intersection distance d is smaller than current closest intersection distance
@@ -408,30 +351,38 @@ __device__ HitInfo intersect_scene(const Ray& r)
 			closestHit = hit;
 		}
 	}
+
+	hit = intersect_triangles(r, vbo);
+
+	if (hit.didHit && hit.dst < closestHit.dst)
+	{
+		closestHit = hit;
+		closestHit.materialIndex = 2u;
+	}
+
 	// Returns true if an intersection with the scene occurred, false when no hit
 	return closestHit;
 }
 
-__device__ float3 radianceTris(Ray& r, uint32_t& s1, size_t bounces, GPU_Mesh::GPU_MeshList* vbo) // Returns ray color
+__device__ float3 radianceTris(Ray& r, uint32_t& s1, size_t bounces, const GPU_Mesh::GPU_MeshList* vbo) // Returns ray color
 {
 	float3 accucolor = make_float3(0.0f, 0.0f, 0.0f); // Accumulates ray colour with each iteration through bounce loop
 	float3 mask = make_float3(1.0f, 1.0f, 1.0f);
 
 	for (size_t b = 0; b < bounces; b++)
 	{
-		float t;           // Distance to closest intersection
-		int id = 0;        // Index of closest intersected sphere
-
 		// Test ray for intersection with scene
-		HitInfo hit = intersect_triangles(r, vbo);
+		HitInfo hit = intersect_scene(r, vbo);
 		if (!hit.didHit)
 		{
 			//accucolor += mask * make_float3(0.0494, 0.091, 0.164f); // If miss, return sky
-			accucolor += mask * getEnvironmentLight(r);
+			//accucolor += mask * getEnvironmentLight(r) * 0.0f;
 			break;
 		}
 
-		//accucolor += mask * obj.mat.emission;
+		Material hitMat = materials[hit.materialIndex];
+
+		accucolor += mask * hitMat.emission;
 
 		// Create 2 random numbers
 		float r1 = 2 * M_PI * randomValue(s1); // Pick random number on unit circle (radius = 1, circumference = 2*Pi) for azimuth
@@ -441,26 +392,24 @@ __device__ float3 radianceTris(Ray& r, uint32_t& s1, size_t bounces, GPU_Mesh::G
 		float ndotl = fmaxf(dot(-r.direction, hit.normal), 0.0f);
 		float f = fresnel_schlick_ratio(ndotl, 8.0f);
 
-		bool isSpecularBounce = max(0.0f, max(f, 0.02f)) >= randomValue(s1);
+		bool isSpecularBounce = max(hitMat.metalness, max(f, 0.02f)) >= randomValue(s1);
 
 		float3 diffuseDir = normalize(hit.normal + randomDirection(s1));
-		float3 specularDir = reflect(r.direction, normalize(hit.normal + randomDirection(s1) * 0.3f));
+		float3 specularDir = reflect(r.direction, normalize(hit.normal + randomDirection(s1) * hitMat.roughness));
 
-		float3 linearSurfColor = {0.7f, 0.2f, 0.1f};
+		float3 linearSurfColor = powf(hitMat.albedo, 2.2f);
 
 		r.direction = normalize(lerp(diffuseDir, specularDir, isSpecularBounce));
-
-		// New ray origin is intersection point of previous ray with scene
 		r.origin = hit.hitPoint + hit.normal * 0.001f; // offset ray origin slightly to prevent self intersection
 
-		mask = mask * lerp(linearSurfColor, lerp(make_float3(1.0f), linearSurfColor, 0.0f), isSpecularBounce);
+		mask = mask * lerp(linearSurfColor, lerp(make_float3(1.0f), linearSurfColor, hitMat.metalness), isSpecularBounce);
 
-		float p = max(mask.x, max(mask.y, mask.z));
-		if (randomValue(s1) >= p)
+		//float p = max(mask.x, max(mask.y, mask.z));
+		//if (randomValue(s1) >= p)
 		{
-			break;
+		//	break;
 		}
-		mask *= 1.0f / p;
+		//mask *= 1.0f / p;
 
 		//accucolor = { hit.normal };
 	}
@@ -530,7 +479,7 @@ __device__ float3 radiance(Ray& r, uint32_t& s1, size_t bounces) // Returns ray 
 }
 */
 
-__global__ void render_kernel(float3* buf, uint32_t width, uint32_t height, Camera_GPU camera, size_t samples, size_t bounces, uint32_t sampleIndex, GPU_Mesh::GPU_MeshList* vbo)
+__global__ void render_kernel(float3* buf, uint32_t width, uint32_t height, Camera_GPU camera, size_t samples, size_t bounces, uint32_t sampleIndex, const GPU_Mesh::GPU_MeshList* vbo)
 {
 	// Assign a CUDA thread to every pixel (x,y) blockIdx, blockDim and threadIdx are CUDA specific
 	// Keywords replaces nested outer loops in CPU code looping over image rows and image columns
@@ -626,46 +575,49 @@ void CudaRenderer::Compute(void)
 		goto Error;
 	}
 
-
-	GPU_Mesh::GPU_MeshList* deviceStruct;
-	cudaStatus = cudaMalloc(&deviceStruct, sizeof(GPU_Mesh::GPU_MeshList));
-	if (cudaStatus != cudaSuccess)
+	if (m_gpuMesh->hasChanged || deviceStruct == nullptr)
 	{
-		fprintf(stderr, "cudaMalloc failed!");
-		goto Error;
+		cudaStatus = cudaMalloc(&deviceStruct, sizeof(GPU_Mesh::GPU_MeshList));
+		if (cudaStatus != cudaSuccess)
+		{
+			fprintf(stderr, "cudaMalloc failed!");
+			goto Error;
+		}
+
+		cudaStatus = cudaMemcpy(deviceStruct, m_meshList, sizeof(GPU_Mesh::GPU_MeshList), cudaMemcpyHostToDevice);
+		if (cudaStatus != cudaSuccess)
+		{
+			fprintf(stderr, "cudaMemcpy failed!");
+			goto Error;
+		}
+
+		float* d_vbo;
+		cudaMalloc(&d_vbo, m_meshList->meshOffsets[0]);
+		cudaMemcpy(d_vbo, m_meshList->vertexBuffer, m_meshList->meshOffsets[0], cudaMemcpyHostToDevice);
+		cudaMemcpy(&deviceStruct->vertexBuffer, &d_vbo, sizeof(float*), cudaMemcpyHostToDevice);
+
+		size_t* d_meshOffsets;
+		cudaMalloc(&d_meshOffsets, m_meshList->meshCount * sizeof(size_t));
+		cudaMemcpy(d_meshOffsets, m_meshList->meshOffsets, m_meshList->meshCount * sizeof(size_t), cudaMemcpyHostToDevice);
+		cudaMemcpy(&deviceStruct->meshOffsets, &d_meshOffsets, sizeof(size_t*), cudaMemcpyHostToDevice);
+
+		size_t* d_vertexCounts;
+		cudaMalloc(&d_vertexCounts, m_meshList->meshCount * sizeof(size_t));
+		cudaMemcpy(d_vertexCounts, m_meshList->vertexCounts, m_meshList->meshCount * sizeof(size_t), cudaMemcpyHostToDevice);
+		cudaMemcpy(&deviceStruct->vertexCounts, &d_vertexCounts, sizeof(size_t*), cudaMemcpyHostToDevice);
+
+		float3* d_bboxMin;
+		cudaMalloc(&d_bboxMin, m_meshList->meshCount * sizeof(float3));
+		cudaMemcpy(d_bboxMin, &m_meshList->bboxMins[0], m_meshList->meshCount * sizeof(float3), cudaMemcpyHostToDevice);
+		cudaMemcpy(&deviceStruct->bboxMins, &d_bboxMin, sizeof(float3*), cudaMemcpyHostToDevice);
+
+		float3* d_bboxMax;
+		cudaMalloc(&d_bboxMax, m_meshList->meshCount * sizeof(float3));
+		cudaMemcpy(d_bboxMax, &m_meshList->bboxMins[0], m_meshList->meshCount * sizeof(float3), cudaMemcpyHostToDevice);
+		cudaMemcpy(&deviceStruct->bboxMaxs, &d_bboxMax, sizeof(float3*), cudaMemcpyHostToDevice);
+
+		m_gpuMesh->hasChanged = false;
 	}
-
-	cudaStatus = cudaMemcpy(deviceStruct, m_meshList, sizeof(GPU_Mesh::GPU_MeshList), cudaMemcpyHostToDevice);
-	if (cudaStatus != cudaSuccess)
-	{
-		fprintf(stderr, "cudaMemcpy failed!");
-		goto Error;
-	}
-
-	float* d_vbo;
-	cudaMalloc(&d_vbo, m_meshList->meshOffsets[0]);
-	cudaMemcpy(d_vbo, m_meshList->vertexBuffer, m_meshList->meshOffsets[0], cudaMemcpyHostToDevice);
-	cudaMemcpy(&deviceStruct->vertexBuffer, &d_vbo, sizeof(float*), cudaMemcpyHostToDevice);
-
-	size_t* d_meshOffsets;
-	cudaMalloc(&d_meshOffsets, m_meshList->meshCount * sizeof(size_t));
-	cudaMemcpy(d_meshOffsets, m_meshList->meshOffsets, m_meshList->meshCount * sizeof(size_t), cudaMemcpyHostToDevice);
-	cudaMemcpy(&deviceStruct->meshOffsets, &d_meshOffsets, sizeof(size_t*), cudaMemcpyHostToDevice);
-
-	size_t* d_vertexCounts;
-	cudaMalloc(&d_vertexCounts, m_meshList->meshCount * sizeof(size_t));
-	cudaMemcpy(d_vertexCounts, m_meshList->vertexCounts, m_meshList->meshCount * sizeof(size_t), cudaMemcpyHostToDevice);
-	cudaMemcpy(&deviceStruct->vertexCounts, &d_vertexCounts, sizeof(size_t*), cudaMemcpyHostToDevice);
-
-	float3* d_bboxMin;
-	cudaMalloc(&d_bboxMin, m_meshList->meshCount * sizeof(float3));
-	cudaMemcpy(d_bboxMin, &m_meshList->bboxMins[0], m_meshList->meshCount * sizeof(float3), cudaMemcpyHostToDevice);
-	cudaMemcpy(&deviceStruct->bboxMins, &d_bboxMin, sizeof(float3*), cudaMemcpyHostToDevice);
-
-	float3* d_bboxMax;
-	cudaMalloc(&d_bboxMax, m_meshList->meshCount * sizeof(float3));
-	cudaMemcpy(d_bboxMax, &m_meshList->bboxMins[0], m_meshList->meshCount * sizeof(float3), cudaMemcpyHostToDevice);
-	cudaMemcpy(&deviceStruct->bboxMaxs, &d_bboxMax, sizeof(float3*), cudaMemcpyHostToDevice);
 
 	cudaStatus = cudaGetLastError();
 	if (cudaStatus != cudaSuccess)
@@ -678,7 +630,6 @@ void CudaRenderer::Compute(void)
 	memcpy(&camera_buffer_obj.invProjMat[0], m_invProjMat, sizeof(float) * 16);
 	memcpy(&camera_buffer_obj.invViewMat[0], m_invViewMat, sizeof(float) * 16);
 	memcpy(&camera_buffer_obj.viewMat[0],    m_viewMat,    sizeof(float) * 16);
-
 
 	render_kernel <<<blocks, threads>>> (m_accumulationBuffer_GPU, m_width, m_height, camera_buffer_obj, m_samples, *m_bounces, *m_sampleIndex, deviceStruct);
 

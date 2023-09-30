@@ -25,6 +25,7 @@ public:
     void LoadOBJFile(const std::string& path);
     void AddMeshToMeshList(GPU_MeshList& mlist, GPU_Mesh& mesh);
 
+    bool hasChanged = false;
     size_t vertexCount = 0u;
     float* vertexBuffer = nullptr;
     size_t materialIndex = 0u;
