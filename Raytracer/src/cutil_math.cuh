@@ -141,6 +141,18 @@ inline __host__ __device__ float2 operator-(float2& a)
     return make_float2(-a.x, -a.y);
 }
 
+// min
+static __inline__ __host__ __device__ float2 cfminf(float2 a, float2 b)
+{
+    return make_float2(fminf(a.x, b.x), fminf(a.y, b.y));
+}
+
+// max
+static __inline__ __host__ __device__ float2 cfmaxf(float2 a, float2 b)
+{
+    return make_float2(fmaxf(a.x, b.x), fmaxf(a.y, b.y));
+}
+
 // addition
 inline __host__ __device__ float2 operator+(float2 a, float2 b)
 {
@@ -286,13 +298,13 @@ inline __host__ __device__ float3 operator-(float3& a)
 }
 
 // min
-static __inline__ __host__ __device__ float3 fminf(float3 a, float3 b)
+static __inline__ __host__ __device__ float3 cfminf(float3 a, float3 b)
 {
     return make_float3(fminf(a.x, b.x), fminf(a.y, b.y), fminf(a.z, b.z));
 }
 
 // max
-static __inline__ __host__ __device__ float3 fmaxf(float3 a, float3 b)
+static __inline__ __host__ __device__ float3 cfmaxf(float3 a, float3 b)
 {
     return make_float3(fmaxf(a.x, b.x), fmaxf(a.y, b.y), fmaxf(a.z, b.z));
 }
@@ -457,13 +469,13 @@ inline __host__ __device__ float4 operator-(float4& a)
 }
 
 // min
-static __inline__ __host__ __device__ float4 fminf(float4 a, float4 b)
+static __inline__ __host__ __device__ float4 cfminf(float4 a, float4 b)
 {
     return make_float4(fminf(a.x, b.x), fminf(a.y, b.y), fminf(a.z, b.z), fminf(a.w, b.w));
 }
 
 // max
-static __inline__ __host__ __device__ float4 fmaxf(float4 a, float4 b)
+static __inline__ __host__ __device__ float4 cfmaxf(float4 a, float4 b)
 {
     return make_float4(fmaxf(a.x, b.x), fmaxf(a.y, b.y), fmaxf(a.z, b.z), fmaxf(a.w, b.w));
 }

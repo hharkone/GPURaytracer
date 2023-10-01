@@ -6,55 +6,6 @@
 
 namespace Utils
 {
-	static uint32_t ConvertToRGBA(const glm::vec4& color)
-	{
-		uint8_t r = (uint8_t)(color.r * 255.0f);
-		uint8_t g = (uint8_t)(color.g * 255.0f);
-		uint8_t b = (uint8_t)(color.b * 255.0f);
-		uint8_t a = (uint8_t)(color.a * 255.0f);
-
-		uint32_t returnValue = (a << 24) | (b << 16) | (g << 8 ) | r;
-
-		return returnValue;
-	}
-
-	static uint32_t PCG_Hash(uint32_t input)
-	{
-		uint32_t state = input * 747796405u + 2891336453u;
-		uint32_t word = ((state >> ((state >> 28u) + 4u)) ^ state) * 277803737u;
-		return (word >> 22u) ^ word;
-	}
-
-	static float RandomFloat(uint32_t& seed)
-	{
-		seed = PCG_Hash(seed);
-		return (float)seed / (float)std::numeric_limits<uint32_t>::max();
-	}
-
-	static glm::vec3 InUnitSphere(uint32_t& seed)
-	{
-		return glm::normalize(glm::vec3(RandomFloat(seed) * 2.0f - 1.0f, RandomFloat(seed) * 2.0f - 1.0f, RandomFloat(seed) * 2.0f - 1.0f));
-	}
-
-	// Random value in normal distribution (with mean=0 and sd=1)
-	float RandomValueNormalDistribution(uint32_t& state)
-	{
-		// Thanks to https://stackoverflow.com/a/6178290
-		float theta = 2.0f * 3.1415926f * RandomFloat(state);
-		float rho = sqrt(-2.0f * log(RandomFloat(state)));
-		return rho * cos(theta);
-	}
-	// Calculate a random direction
-	glm::vec3 RandomDirection(uint32_t& state)
-	{
-		// Thanks to https://math.stackexchange.com/a/1585996
-		float x = RandomValueNormalDistribution(state);
-		float y = RandomValueNormalDistribution(state);
-		float z = RandomValueNormalDistribution(state);
-
-		return glm::normalize(glm::vec3(x, y, z));
-	}
-
 	float4 vec4Tofloat4(glm::vec4& v)
 	{
 		return make_float4(v.x, v.y, v.z, v.w);
@@ -96,7 +47,7 @@ void Renderer::OnResize(uint32_t width, uint32_t height)
 	for (uint32_t i = 0; i < height; i++)
 		m_imgVerticalIterator[i] = i;
 
-	m_cudaRenderer = std::shared_ptr<CudaRenderer>(new CudaRenderer(width, height, &m_frameIndex, 1u, &m_settings.bounces));
+	m_cudaRenderer = std::shared_ptr<CudaRenderer>(new CudaRenderer(width, height, &m_activeScene, &m_frameIndex, 1u, &m_settings.bounces));
 }
 
 void Renderer::Render(const Scene& scene, const Camera& camera)

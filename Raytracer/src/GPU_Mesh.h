@@ -2,33 +2,35 @@
 #include <string>
 #include "cuda_runtime.h"
 
-//#include "device_launch_parameters.h"
-//#include "device_atomic_functions.h"
-
 class GPU_Mesh
 {
 public:
 
-    struct GPU_MeshList
+    void LoadOBJFile(const std::string& path);
+
+    struct Triangle
     {
-        float* vertexBuffer = nullptr;
-        size_t vertexStride = 8u;
-        size_t meshCount = 0u;
-        size_t* vertexCounts = nullptr;
-        size_t* meshOffsets = nullptr;
-        float3* bboxMins = nullptr;
-        float3* bboxMaxs = nullptr;
-        size_t* materialIndices = nullptr;
+        float3 pos0, pos1, pos2;
+        float3 n0, n1, n2;
+        float2 uv0, uv1, uv2;
     };
 
-    void CalculateBbox();
-    void LoadOBJFile(const std::string& path);
-    void AddMeshToMeshList(GPU_MeshList& mlist, GPU_Mesh& mesh);
+    struct MeshInfo
+    {
+        size_t firstTriangleIndex = 0u;
+        size_t triangleCount = 0u;
+        float3 bboxMin = { 0.0f, 0.0f, 0.0f };
+        float3 bboxMax = { 0.0f, 0.0f, 0.0f };
+        size_t materialIndex = 0u;
+    };
 
-    bool hasChanged = false;
-    size_t vertexCount = 0u;
-    float* vertexBuffer = nullptr;
-    size_t materialIndex = 0u;
-    float3 bboxMin = { 0.0f, 0.0f, 0.0f };
-    float3 bboxMax = { 0.0f, 0.0f, 0.0f };
+    Triangle* triangleBuffer = nullptr;
+    MeshInfo* meshInfoBuffer = nullptr;
+    size_t numMeshes = 0u;
+    size_t numTris = 0u;
+
+private:
+
+    void CalculateBbox(GPU_Mesh::MeshInfo& meshInfo);
+
 };

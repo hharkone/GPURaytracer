@@ -204,14 +204,15 @@ public:
 		static ImGuiSliderFlags flags = ImGuiSliderFlags_None;
 		static ImGuiSliderFlags flagLog = ImGuiSliderFlags_Logarithmic;
 
-		if (ImGui::ColorEdit3("Sky Color", glm::value_ptr(m_scene.m_skyColor)))				{ m_sceneChanged = true; }
+		if (ImGui::ColorEdit3("Sky Color", &(m_scene.m_skyColor.x))) { m_sceneChanged = true; }
 		if (ImGui::SliderFloat("Sky Brightness", &m_scene.m_skyBrightness, 0.0f, 10.0f, "%.3f", flags))	{ m_sceneChanged = true; }
 		if (ImGui::SliderFloat("Sun Focus", &m_scene.m_sunFocus, 50.0f, 100000.0f, "%.3f", flagLog)) { m_sceneChanged = true; }
 		if (ImGui::SliderFloat("Sun Intensity", &m_scene.m_sunIntensity, 0.0f, 100.0f, "%.3f", flags)) { m_sceneChanged = true; }
-		if (ImGui::ColorEdit3("Sky Color Horizon", glm::value_ptr(m_scene.m_skyColorHorizon))) { m_sceneChanged = true; }
-		if (ImGui::ColorEdit3("Sky Color Zenith", glm::value_ptr(m_scene.m_skyColorZenith))) { m_sceneChanged = true; }
-		if (ImGui::ColorEdit3("Ground Color", glm::value_ptr(m_scene.m_groundColor))) { m_sceneChanged = true; }
+		if (ImGui::ColorEdit3("Sky Color Horizon", &(m_scene.m_skyColorHorizon.x))) { m_sceneChanged = true; }
+		if (ImGui::ColorEdit3("Sky Color Zenith", &(m_scene.m_skyColorZenith.x))) { m_sceneChanged = true; }
+		if (ImGui::ColorEdit3("Ground Color", &(m_scene.m_groundColor.x))) { m_sceneChanged = true; }
 
+		/*
 		for (size_t i = 0u; i < m_scene.meshes.size(); i++)
 		{
 			ImGui::PushID((int)i);
@@ -224,7 +225,7 @@ public:
 			ImGui::Separator();
 			ImGui::PopID();
 		}
-
+		*/
 		ImGui::End();
 
 		ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));

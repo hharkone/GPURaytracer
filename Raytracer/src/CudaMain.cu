@@ -15,12 +15,6 @@ int checkCudaError(cudaError_t& error)
 	return 1;
 }
 
-__global__ void addKernel(float* a, float* b, float* c)
-{
-	int i = threadIdx.x;
-	c[i] = a[i] + b[i];
-}
-
 __device__ inline float3 srgbToLinear(float3 c)
 {
 	return powf(c, 2.2222f);
@@ -132,9 +126,9 @@ __constant__  Material materials[] =
 __constant__  Sphere spheresSimple[] =
 {
 	//{ float radius, { float3 position }, { Material }}
-	  { 18.0f, { -20.0f, 0.0f, 0.0f }, 1u},
-	  { 8.0f, { 0.0f, -10.0f, 0.0f }, 2u},
-	  { 6.0f, {  8.0f, 0.0f, 0.0f }, 7u}
+	  //{ 18.0f, { -20.0f, 0.0f, 0.0f }, 1u},
+	  { 19.0f, { 0.0f, -20.0f, 0.0f }, 2u}
+	  //{ 6.0f, {  8.0f, 0.0f, 0.0f }, 7u}
 };
 
 __device__ static float fresnel_schlick_ratio(float cos_theta_incident, float power)
@@ -206,7 +200,7 @@ __device__ void vector4_matrix4_mult(float* vec, float* mat, float* out)
 	}
 }
 
-__device__ float3 getEnvironmentLight(const Ray& ray)
+__device__ float3 getEnvironmentLight(const Ray& ray, const Scene* scene)
 {
 	float3 sunDir = make_float3(1.0f, 1.0f, 1.0f);
 	sunDir = normalize(sunDir);
@@ -214,17 +208,13 @@ __device__ float3 getEnvironmentLight(const Ray& ray)
 	float skyGradientT = powf(fmaxf(ray.direction.y, 0.0f), 0.35f);
 	float groundToSkyT = powf(fmaxf(ray.direction.y, 0.0f), 0.1f);
 
-	float3 skyColorHorizon{ 0.308, 0.459, 0.670 };
-	float3 skyColorZenith{ 0.0416, 0.158, 0.320 };
-	float3 groundColor{ 0.110, 0.102, 0.0891 };
-
-	float3 skyGradient = lerp(skyColorHorizon, skyColorZenith, skyGradientT);
-	float sun = powf(fmaxf(0.0f, dot(ray.direction, sunDir)), 100.0f) * 20.0f;
+	float3 skyGradient = lerp(scene->m_skyColorHorizon, scene->m_skyColorZenith, skyGradientT);
+	float sun = powf(fmaxf(0.0f, dot(ray.direction, sunDir)), scene->m_sunFocus) * scene->m_sunIntensity;
 
 	// Combine ground, sky, and sun
-	float3 composite = lerp(groundColor, skyGradient, groundToSkyT) + sun;
+	float3 composite = lerp(scene->m_groundColor, skyGradient, groundToSkyT) + sun;
 
-	return composite;
+	return composite * scene->m_skyColor * scene->m_skyBrightness;
 }
 
 __device__ HitInfo intersect_sphere(const Ray& r, const Sphere& s)
@@ -258,12 +248,12 @@ __device__ HitInfo intersect_sphere(const Ray& r, const Sphere& s)
 	return hit;
 }
 
-__device__ HitInfo rayTriangleIntersect(const Ray& ray, const float3& v0, const float3& v1, const float3& v2, const float3& vn0, const float3& vn1, const float3& vn2)
+__device__ HitInfo rayTriangleIntersect(const Ray& ray, const GPU_Mesh::Triangle& tri)
 {
-	float3 edgeAB = v1 - v0;
-	float3 edgeAC = v2 - v0;
+	float3 edgeAB = tri.pos1 - tri.pos0;
+	float3 edgeAC = tri.pos2 - tri.pos0;
 	float3 normalVector = cross(edgeAB, edgeAC);
-	float3 ao = (ray.origin) - v0;
+	float3 ao = (ray.origin) - tri.pos0;
 	float3 dao = cross(ao, ray.direction);
 
 	float determinant = -dot(ray.direction, normalVector);
@@ -279,20 +269,33 @@ __device__ HitInfo rayTriangleIntersect(const Ray& ray, const float3& v0, const 
 	HitInfo hit;
 	hit.didHit = determinant >= 1E-6 && dst >= 0.0f && u >= 0.0f && v >= 0.0f && w >= 0.0f;
 	hit.hitPoint = (ray.origin) + ray.direction * dst;
-	hit.normal = normalize(vn0 * w + vn1 * u + vn2 * v);
+	hit.normal = normalize(tri.n0 * w + tri.n1 * u + tri.n2 * v);
 	//hit.normal = normalVector;
 	hit.dst = dst;
 
 	return hit;
 }
 
-__device__ bool rayBoundingBox(const Ray& ray, const float3& min, float3& max)
+
+__device__ bool rayBoxIntersection(const Ray& r, const float3& min, const float3& max)
+{
+	float tx1 = (min.x - r.origin.x) / r.direction.x, tx2 = (max.x - r.origin.x) / r.direction.x;
+	float tmin = fminf(tx1, tx2), tmax = fmaxf(tx1, tx2);
+	float ty1 = (min.y - r.origin.y) / r.direction.y, ty2 = (max.y - r.origin.y) / r.direction.y;
+	tmin = fmaxf(tmin, fminf(ty1, ty2)), tmax = fminf(tmax, fmaxf(ty1, ty2));
+	float tz1 = (min.z - r.origin.z) / r.direction.z, tz2 = (max.z - r.origin.z) / r.direction.z;
+	tmin = fmaxf(tmin, fminf(tz1, tz2)), tmax = fminf(tmax, fmaxf(tz1, tz2));
+
+	return (tmax >= tmin && tmax > 0.0f);
+}
+
+__device__ bool rayBoundingBox(const Ray& ray, const float3& min, const float3& max)
 {
 	float3 invDir = 1.0f / ray.direction;
 	float3 tMin = (min - ray.origin) * invDir;
 	float3 tMax = (max - ray.origin) * invDir;
-	float3 t1 = fminf(tMin, tMax);
-	float3 t2 = fmaxf(tMin, tMax);
+	float3 t1 = cfminf(tMin, tMax);
+	float3 t2 = cfmaxf(tMin, tMax);
 
 	float tNear = fmaxf(fmaxf(t1.x, t1.y), t1.z);
 	float tFar  = fminf(fminf(t2.x, t2.y), t2.z);
@@ -300,41 +303,44 @@ __device__ bool rayBoundingBox(const Ray& ray, const float3& min, float3& max)
 	return tNear <= tFar;
 }
 
-__device__ HitInfo intersect_triangles(const Ray& r, const GPU_Mesh::GPU_MeshList* vbo)
+__device__ HitInfo intersect_triangles(const Ray& r, const GPU_Mesh* vbo)
 {
 	HitInfo hit;
 	HitInfo closestHit;
+	bool earlyMiss = true;
 
-	if (rayBoundingBox(r, vbo->bboxMins[0], vbo->bboxMaxs[0]))
+	for (size_t mID = 0u; mID < vbo->numMeshes; mID++)
+	{
+		if (rayBoxIntersection(r, vbo->meshInfoBuffer[mID].bboxMin, vbo->meshInfoBuffer[mID].bboxMax))
+		{
+			earlyMiss = false;
+		}
+	}
+
+	if (earlyMiss)
 	{
 		closestHit.didHit = false;
 		return closestHit;
 	}
 
-	size_t n = vbo->vertexCounts[0] * vbo->vertexStride;     // t is distance to closest intersection, initialise t to a huge number outside scene
-	for (size_t i = 0; i < n; i += 24u)                                      // Test all scene objects for intersection
+	for (size_t mID = 0u; mID < vbo->numMeshes; mID++)
 	{
-		float3 vp0 = make_float3(vbo->vertexBuffer[i], vbo->vertexBuffer[i + 1], vbo->vertexBuffer[i + 2]);
-		float3 vp1 = make_float3(vbo->vertexBuffer[i+8], vbo->vertexBuffer[i+9], vbo->vertexBuffer[i+10]);
-		float3 vp2 = make_float3(vbo->vertexBuffer[i+16], vbo->vertexBuffer[i+17], vbo->vertexBuffer[i+18]);
-
-		float3 vn0 = make_float3(vbo->vertexBuffer[i + 3], vbo->vertexBuffer[i + 4], vbo->vertexBuffer[i + 5]);
-		float3 vn1 = make_float3(vbo->vertexBuffer[i + 11], vbo->vertexBuffer[i + 12], vbo->vertexBuffer[i + 13]);
-		float3 vn2 = make_float3(vbo->vertexBuffer[i + 19], vbo->vertexBuffer[i + 20], vbo->vertexBuffer[i + 21]);
-
-
-		hit = rayTriangleIntersect(r, vp0, vp1, vp2, vn0, vn1, vn2);
-
-		if (hit.didHit && hit.dst < closestHit.dst) // If newly computed intersection distance d is smaller than current closest intersection distance
+		for (size_t tID = 0; tID < vbo->numTris; tID++) // Test all scene objects for intersection
 		{
-			closestHit = hit;
+			hit = rayTriangleIntersect(r, vbo->triangleBuffer[tID]);
+
+			if (hit.didHit && hit.dst < closestHit.dst) // If newly computed intersection distance d is smaller than current closest intersection distance
+			{
+				closestHit = hit;
+			}
 		}
 	}
+
 	// Returns true if an intersection with the scene occurred, false when no hit
 	return closestHit;
 }
 
-__device__ HitInfo intersect_scene(const Ray& r, const GPU_Mesh::GPU_MeshList* vbo)
+__device__ HitInfo intersect_scene(const Ray& r, const GPU_Mesh* vbo)
 {
 	HitInfo hit;
 	HitInfo closestHit;
@@ -364,7 +370,7 @@ __device__ HitInfo intersect_scene(const Ray& r, const GPU_Mesh::GPU_MeshList* v
 	return closestHit;
 }
 
-__device__ float3 radianceTris(Ray& r, uint32_t& s1, size_t bounces, const GPU_Mesh::GPU_MeshList* vbo) // Returns ray color
+__device__ float3 radiance(Ray& r, uint32_t& s1, const Scene* scene, size_t bounces, const GPU_Mesh* vbo) // Returns ray color
 {
 	float3 accucolor = make_float3(0.0f, 0.0f, 0.0f); // Accumulates ray colour with each iteration through bounce loop
 	float3 mask = make_float3(1.0f, 1.0f, 1.0f);
@@ -373,10 +379,11 @@ __device__ float3 radianceTris(Ray& r, uint32_t& s1, size_t bounces, const GPU_M
 	{
 		// Test ray for intersection with scene
 		HitInfo hit = intersect_scene(r, vbo);
+
 		if (!hit.didHit)
 		{
 			//accucolor += mask * make_float3(0.0494, 0.091, 0.164f); // If miss, return sky
-			//accucolor += mask * getEnvironmentLight(r) * 0.0f;
+			accucolor += mask * getEnvironmentLight(r, scene);
 			break;
 		}
 
@@ -404,14 +411,15 @@ __device__ float3 radianceTris(Ray& r, uint32_t& s1, size_t bounces, const GPU_M
 
 		mask = mask * lerp(linearSurfColor, lerp(make_float3(1.0f), linearSurfColor, hitMat.metalness), isSpecularBounce);
 
-		//float p = max(mask.x, max(mask.y, mask.z));
-		//if (randomValue(s1) >= p)
+		float p = max(mask.x, max(mask.y, mask.z));
+		if (randomValue(s1) >= p)
 		{
-		//	break;
+			break;
 		}
-		//mask *= 1.0f / p;
+		mask *= 1.0f / p;
 
-		//accucolor = { hit.normal };
+		//Debug output
+		//accucolor = { hit.dst };
 	}
 
 
@@ -479,7 +487,8 @@ __device__ float3 radiance(Ray& r, uint32_t& s1, size_t bounces) // Returns ray 
 }
 */
 
-__global__ void render_kernel(float3* buf, uint32_t width, uint32_t height, Camera_GPU camera, size_t samples, size_t bounces, uint32_t sampleIndex, const GPU_Mesh::GPU_MeshList* vbo)
+__global__ void render_kernel(float3* buf, uint32_t width, uint32_t height, Camera_GPU camera, const Scene* scene, size_t samples,
+							 size_t bounces, uint32_t sampleIndex, const GPU_Mesh* vbo)
 {
 	// Assign a CUDA thread to every pixel (x,y) blockIdx, blockDim and threadIdx are CUDA specific
 	// Keywords replaces nested outer loops in CPU code looping over image rows and image columns
@@ -494,22 +503,22 @@ __global__ void render_kernel(float3* buf, uint32_t width, uint32_t height, Came
 	// Seeds for random number generator
 	uint32_t s1 = x * y * sampleIndex + i;
 
+
 	float2 coord = { (float)x / (float)width, (float)y / (float)height };
-	coord = coord * 2.0f - make_float2(1.0f, 1.0f); // -1 -> 1
-	float viewCoord[4] = { coord.x, coord.y, -1.0f, 1.0f };
+	coord = (coord * 2.0f) - make_float2(1.0f, 1.0f); // -1 -> 1
+	float viewCoord[4] = { coord.x, coord.y, 1.0f, 1.0f };
 	float target[4];
 	float target2[4];
 
 	vector4_matrix4_mult(&viewCoord[0], &camera.invProjMat[0], &target[0]);
 
-	//float4 target = m_InverseProjection * ;
 	float4 projDir4 = make_float4(normalize(make_float3(target[0], target[1], target[2]) / target[3]), 0.0f);
 
 	float projDir[4] = { projDir4.x, projDir4.y, projDir4.z, projDir4.w };
 
 	vector4_matrix4_mult(&projDir[0], &camera.invViewMat[0], target2);
 
-	float3 worldDir = normalize(make_float3(target2[0], target2[1], target2[2]));
+	float3 worldDir = (make_float3(target2[0], target2[1], target2[2]));
 
 	float3 cx = make_float3(camera.invViewMat[0], camera.invViewMat[1], camera.invViewMat[2]);
 	float3 cy = make_float3(camera.invViewMat[4], camera.invViewMat[5], camera.invViewMat[6]);
@@ -525,16 +534,16 @@ __global__ void render_kernel(float3* buf, uint32_t width, uint32_t height, Came
 	// Samples per pixel
 	for (size_t s = 0; s < samples; s++)
 	{
-		size_t jitterIndex = (s + sampleIndex) % 5u;
-		float jitterX = (jitterMatrix[2u * jitterIndex]);
-		float jitterY = (jitterMatrix[2u * jitterIndex + 1u]);
+		//size_t jitterIndex = (s + sampleIndex) % 5u;
+		//float jitterX = (jitterMatrix[2u * jitterIndex]);
+		//float jitterY = (jitterMatrix[2u * jitterIndex + 1u]);
 
 		// Compute primary ray direction
-		float3 d = (cx * (jitterX / width) + cy * (jitterY / height));
+		//float3 d = (cx * (jitterX / width) + cy * (jitterY / height));
 
 		// Create primary ray, add incoming radiance to pixelcolor
-		Ray ray = Ray(cameraPos, normalize(worldDir + d*0.5f));
-		lightContribution += radianceTris(ray, s1, bounces, vbo) * (1.0 / samples);
+		Ray ray = Ray(cameraPos, normalize(worldDir));
+		lightContribution += radiance(ray, s1, scene, bounces, vbo) * (1.0 / samples);
 	}
 
 	// Write rgb value of pixel to image buffer on the GPU
@@ -575,6 +584,9 @@ void CudaRenderer::Compute(void)
 		goto Error;
 	}
 
+	cudaMalloc(&m_deviceScene, sizeof(Scene));
+	cudaMemcpy(m_deviceScene, *m_scene, sizeof(Scene), cudaMemcpyHostToDevice);
+	/*
 	if (m_gpuMesh->hasChanged || deviceStruct == nullptr)
 	{
 		cudaStatus = cudaMalloc(&deviceStruct, sizeof(GPU_Mesh::GPU_MeshList));
@@ -618,7 +630,7 @@ void CudaRenderer::Compute(void)
 
 		m_gpuMesh->hasChanged = false;
 	}
-
+	*/
 	cudaStatus = cudaGetLastError();
 	if (cudaStatus != cudaSuccess)
 	{
@@ -631,7 +643,7 @@ void CudaRenderer::Compute(void)
 	memcpy(&camera_buffer_obj.invViewMat[0], m_invViewMat, sizeof(float) * 16);
 	memcpy(&camera_buffer_obj.viewMat[0],    m_viewMat,    sizeof(float) * 16);
 
-	render_kernel <<<blocks, threads>>> (m_accumulationBuffer_GPU, m_width, m_height, camera_buffer_obj, m_samples, *m_bounces, *m_sampleIndex, deviceStruct);
+	render_kernel <<<blocks, threads>>> (m_accumulationBuffer_GPU, m_width, m_height, camera_buffer_obj, m_deviceScene, m_samples, *m_bounces, *m_sampleIndex, m_deviceMesh);
 
 	// Check for any errors launching the kernel
 	cudaStatus = cudaGetLastError();

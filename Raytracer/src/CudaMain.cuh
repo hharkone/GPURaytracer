@@ -1,7 +1,7 @@
 #pragma once
 #include <memory>
 
-#include "cuda_runtime.h"
+#include "scene.h"
 #include "device_launch_parameters.h"
 #include "device_atomic_functions.h"
 #include "GPU_Mesh.h"
@@ -9,9 +9,12 @@
 class CudaRenderer
 {
 public:
-	CudaRenderer(uint32_t width, uint32_t height, uint32_t* sampleIndex, size_t samples, int* bounces)
-		: m_bufferSize(width * height * sizeof(float3)), m_sampleIndex(sampleIndex), m_samples(samples), m_bounces(bounces), m_width(width), m_height(height)
+	CudaRenderer(uint32_t width, uint32_t height, const Scene** scene, uint32_t* sampleIndex, size_t samples, int* bounces)
+		: m_bufferSize(width * height * sizeof(float3)), m_sampleIndex(sampleIndex), m_samples(samples),
+		  m_bounces(bounces), m_width(width), m_height(height), m_scene(scene)
 	{
+		cudaError_t cudaStatus;
+
 		m_outputBuffer = new float[width * height * 3];
 		m_imageData = new uint32_t[width * height];
 		memset(m_imageData, 0, (size_t)width * (size_t)height * sizeof(uint32_t));
@@ -27,14 +30,29 @@ public:
 		m_invProjMat = new float[16];
 		m_viewMat    = new float[16];
 
-		m_gpuMesh = new GPU_Mesh();
+		m_hostMesh = new GPU_Mesh();
+		m_hostMesh->LoadOBJFile("T:\\GIT\\GPURaytracer\\Raytracer\\suzanne.obj");
+		m_hostMesh->LoadOBJFile("T:\\GIT\\GPURaytracer\\Raytracer\\cube.obj");
 
-		m_meshList = new GPU_Mesh::GPU_MeshList();
 
-		m_gpuMesh->LoadOBJFile("T:\\GIT\\GPURaytracer\\Raytracer\\suzanne.obj");
-		m_gpuMesh->AddMeshToMeshList(*m_meshList, *m_gpuMesh);
-		m_gpuMesh->LoadOBJFile("T:\\GIT\\GPURaytracer\\Raytracer\\cube.obj");
-		m_gpuMesh->AddMeshToMeshList(*m_meshList, *m_gpuMesh);
+		cudaMalloc(&m_deviceMesh, sizeof(GPU_Mesh));
+		cudaMemcpy(m_deviceMesh, m_hostMesh, sizeof(GPU_Mesh), cudaMemcpyHostToDevice);
+
+		GPU_Mesh::Triangle* dTris;
+		cudaMalloc(&dTris, m_hostMesh->numTris * sizeof(GPU_Mesh::Triangle));
+		cudaMemcpy(dTris, m_hostMesh->triangleBuffer, m_hostMesh->numTris * sizeof(GPU_Mesh::Triangle), cudaMemcpyHostToDevice);
+		cudaMemcpy(&m_deviceMesh->triangleBuffer, &dTris, sizeof(GPU_Mesh::Triangle*), cudaMemcpyHostToDevice);
+
+		GPU_Mesh::MeshInfo* dMeshInfo;
+		cudaMalloc(&dMeshInfo, m_hostMesh->numMeshes * sizeof(GPU_Mesh::MeshInfo));
+		cudaMemcpy(dMeshInfo, m_hostMesh->meshInfoBuffer, m_hostMesh->numMeshes * sizeof(GPU_Mesh::MeshInfo), cudaMemcpyHostToDevice);
+		cudaMemcpy(&m_deviceMesh->meshInfoBuffer, &dMeshInfo, sizeof(GPU_Mesh::MeshInfo*), cudaMemcpyHostToDevice);
+
+		cudaStatus = cudaGetLastError();
+		if (cudaStatus != cudaSuccess)
+		{
+			fprintf(stderr, "Mesh buffer copy to device failed: %s\n", cudaGetErrorString(cudaStatus));
+		}
 	}
 
 	~CudaRenderer()
@@ -59,10 +77,10 @@ public:
 	uint32_t m_height;
 
 private:
-	//const Scene* m_scene;
-	GPU_Mesh* m_gpuMesh;
-	GPU_Mesh::GPU_MeshList* m_meshList;
-	GPU_Mesh::GPU_MeshList* deviceStruct;
+	const Scene** m_scene;
+	Scene* m_deviceScene;
+	GPU_Mesh* m_hostMesh;
+	GPU_Mesh* m_deviceMesh;
 	const size_t m_bufferSize;
 	uint32_t* m_sampleIndex;
 	size_t m_samples;
