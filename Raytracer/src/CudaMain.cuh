@@ -31,9 +31,13 @@ public:
 		m_viewMat    = new float[16];
 
 		m_hostMesh = new GPU_Mesh();
-		m_hostMesh->LoadOBJFile("T:\\GIT\\GPURaytracer\\Raytracer\\suzanne.obj");
-		m_hostMesh->LoadOBJFile("T:\\GIT\\GPURaytracer\\Raytracer\\cube.obj");
+		m_hostMesh->LoadOBJFile("T:\\GIT\\GPURaytracer\\Raytracer\\cube.obj", 1u);
+		m_hostMesh->LoadOBJFile("T:\\GIT\\GPURaytracer\\Raytracer\\suzanne.obj", 0u);
+		m_hostMesh->LoadOBJFile("T:\\GIT\\GPURaytracer\\Raytracer\\light.obj", 7u);
 
+		m_hostMesh->meshInfoBuffer[0];
+		m_hostMesh->meshInfoBuffer[1];
+		m_hostMesh->meshInfoBuffer[2];
 
 		cudaMalloc(&m_deviceMesh, sizeof(GPU_Mesh));
 		cudaMemcpy(m_deviceMesh, m_hostMesh, sizeof(GPU_Mesh), cudaMemcpyHostToDevice);

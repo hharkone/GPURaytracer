@@ -29,7 +29,7 @@ void GPU_Mesh::CalculateBbox(GPU_Mesh::MeshInfo& meshInfo)
 }
 
 
-void GPU_Mesh::LoadOBJFile(const std::string& path)
+void GPU_Mesh::LoadOBJFile(const std::string& path, size_t materialIndex)
 {
     size_t importTriangleCount = 0u;
 
@@ -125,6 +125,7 @@ void GPU_Mesh::LoadOBJFile(const std::string& path)
     MeshInfo newMeshInfo;
     newMeshInfo.firstTriangleIndex = meshTriCount;
     newMeshInfo.triangleCount = importTriangleCount;
+    newMeshInfo.materialIndex = materialIndex;
 
     CalculateBbox(newMeshInfo);
 
@@ -133,6 +134,7 @@ void GPU_Mesh::LoadOBJFile(const std::string& path)
     std::memcpy(&newMeshInfoBuf[numMeshes], &newMeshInfo, sizeof(MeshInfo));
 
     meshInfoBuffer = newMeshInfoBuf;
+    //std::memcpy(&meshInfoBuffer[numMeshes], newMeshInfoBuf, sizeof(MeshInfo));
 
     numMeshes++;
 }

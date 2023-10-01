@@ -113,9 +113,9 @@ __constant__ Sphere spheres[] =
 
 __constant__  Material materials[] =
 {
-	Material{ { 0.5f, 0.7f,  0.8f  }, 0.1f, { 0.0f, 0.0f, 0.0f }, 0.0f },	//Blue
+	Material{ { 0.7f, 0.7f,  0.7f  }, 0.05f, { 0.0f, 0.0f, 0.0f }, 0.0f },   //White
 	Material{ { 0.7f, 0.1f,  0.1f  }, 0.05f, { 0.0f, 0.0f, 0.0f }, 1.0f },	//Red	
-	Material{ { 0.7f, 0.7f,  0.7f  }, 0.05f,{ 0.0f, 0.0f, 0.0f }, 0.0f },   //White
+	Material{ { 0.5f, 0.7f,  0.8f  }, 0.1f, { 0.0f, 0.0f, 0.0f }, 0.0f },	//Blue
 	Material{ { 1.0f, 1.0f,  1.0f  }, 0.0f, { 0.0f, 0.0f, 0.0f }, 1.0f },	//Mirror
 	Material{ { 1.0f, 0.9f,  0.6f  }, 0.1f, { 0.0f, 0.0f, 0.0f }, 1.0f },	//Gold
 	Material{ { 0.98f,0.815f,0.75f }, 0.1f, { 0.0f, 0.0f, 0.0f }, 1.0f },	//Copper
@@ -277,7 +277,7 @@ __device__ HitInfo rayTriangleIntersect(const Ray& ray, const GPU_Mesh::Triangle
 }
 
 
-__device__ bool rayBoxIntersection(const Ray& r, const float3& min, const float3& max)
+__device__ bool rayBoxIntersection(const Ray& r, const float3& min, const float3& max, float& t)
 {
 	float tx1 = (min.x - r.origin.x) / r.direction.x, tx2 = (max.x - r.origin.x) / r.direction.x;
 	float tmin = fminf(tx1, tx2), tmax = fmaxf(tx1, tx2);
@@ -286,7 +286,25 @@ __device__ bool rayBoxIntersection(const Ray& r, const float3& min, const float3
 	float tz1 = (min.z - r.origin.z) / r.direction.z, tz2 = (max.z - r.origin.z) / r.direction.z;
 	tmin = fmaxf(tmin, fminf(tz1, tz2)), tmax = fminf(tmax, fmaxf(tz1, tz2));
 
+	t = (tmin < t ? tmin : t);
+
 	return (tmax >= tmin && tmax > 0.0f);
+}
+
+__device__ bool rayBoxIntersectNEW(const Ray& r, const float3& min, const float3& max)
+{
+	float t[9];
+	t[1] = (min.x - r.origin.x) / r.direction.x;
+	t[2] = (max.x - r.origin.x) / r.direction.x;
+	t[3] = (min.y - r.origin.y) / r.direction.y;
+	t[4] = (max.y - r.origin.y) / r.direction.y;
+	t[5] = (min.z - r.origin.z) / r.direction.z;
+	t[6] = (max.z - r.origin.z) / r.direction.z;
+	t[7] = fmaxf(fmax(fminf(t[1], t[2]), fminf(t[3], t[4])), fminf(t[5], t[6]));
+	t[8] = fminf(fmin(fmaxf(t[1], t[2]), fmaxf(t[3], t[4])), fmaxf(t[5], t[6]));
+	//t[9] = (t[8] < 0 || t[7] > t[8]) ? FLT_MAX : t[7];
+
+	return (t[8] < 0 || t[7] > t[8]);
 }
 
 __device__ bool rayBoundingBox(const Ray& ray, const float3& min, const float3& max)
@@ -307,36 +325,28 @@ __device__ HitInfo intersect_triangles(const Ray& r, const GPU_Mesh* vbo)
 {
 	HitInfo hit;
 	HitInfo closestHit;
-	bool earlyMiss = true;
 
-	for (size_t mID = 0u; mID < vbo->numMeshes; mID++)
+	for (size_t mID = 0; mID < vbo->numMeshes; mID++)
 	{
-		if (rayBoxIntersection(r, vbo->meshInfoBuffer[mID].bboxMin, vbo->meshInfoBuffer[mID].bboxMax))
+		if (rayBoxIntersectNEW(r, vbo->meshInfoBuffer[mID].bboxMin, vbo->meshInfoBuffer[mID].bboxMax))
 		{
-			earlyMiss = false;
+			continue;
 		}
-	}
-
-	if (earlyMiss)
-	{
-		closestHit.didHit = false;
-		return closestHit;
-	}
-
-	for (size_t mID = 0u; mID < vbo->numMeshes; mID++)
-	{
-		for (size_t tID = 0; tID < vbo->numTris; tID++) // Test all scene objects for intersection
+		for (size_t tID = 0; tID < vbo->meshInfoBuffer[mID].triangleCount; tID++) // Test all scene objects for intersection
 		{
-			hit = rayTriangleIntersect(r, vbo->triangleBuffer[tID]);
+			hit = rayTriangleIntersect(r, vbo->triangleBuffer[vbo->meshInfoBuffer[mID].firstTriangleIndex + tID]);
 
 			if (hit.didHit && hit.dst < closestHit.dst) // If newly computed intersection distance d is smaller than current closest intersection distance
 			{
 				closestHit = hit;
+				closestHit.materialIndex = vbo->meshInfoBuffer[mID].materialIndex;
 			}
 		}
-	}
+}
 
 	// Returns true if an intersection with the scene occurred, false when no hit
+	//closestHit.materialIndex = bboxHitCount;
+	
 	return closestHit;
 }
 
@@ -363,7 +373,6 @@ __device__ HitInfo intersect_scene(const Ray& r, const GPU_Mesh* vbo)
 	if (hit.didHit && hit.dst < closestHit.dst)
 	{
 		closestHit = hit;
-		closestHit.materialIndex = 2u;
 	}
 
 	// Returns true if an intersection with the scene occurred, false when no hit
@@ -419,7 +428,7 @@ __device__ float3 radiance(Ray& r, uint32_t& s1, const Scene* scene, size_t boun
 		mask *= 1.0f / p;
 
 		//Debug output
-		//accucolor = { hit.dst };
+		//accucolor = { hit.dst*0.01f };
 	}
 
 

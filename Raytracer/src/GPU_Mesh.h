@@ -6,7 +6,7 @@ class GPU_Mesh
 {
 public:
 
-    void LoadOBJFile(const std::string& path);
+    void LoadOBJFile(const std::string& path, size_t materialIndex);
 
     struct Triangle
     {
