@@ -18,6 +18,7 @@ public:
 	const glm::mat4& GetInverseProjection() const { return m_InverseProjection; }
 	const glm::mat4& GetView() const { return m_View; }
 	const glm::mat4& GetInverseView() const { return m_InverseView; }
+	const glm::mat4& GetLocalToWorld() const { return m_localToWorld; }
 	const glm::vec3& GetPosition() const { return m_Position; }
 	const glm::vec3& GetDirection() const { return m_ForwardDirection; }
 	//const std::vector<glm::vec3>& GetRayDirections() const { return m_RayDirections; }
@@ -26,13 +27,13 @@ public:
 	float GetRotationSpeed();
 	void RecalculateProjection();
 	void RecalculateView();
-	//void RecalculateRayDirections();
-
+	void RecalculateLocalToWorld();
 private:
 	glm::mat4 m_View{ 1.0f };
 	glm::mat4 m_InverseView{ 1.0f };
 	glm::mat4 m_Projection{ 1.0f };
 	glm::mat4 m_InverseProjection{ 1.0f };
+	glm::mat4 m_localToWorld{ 1.0f };
 
 	float m_VerticalFOV = 45.0f;
 	float m_NearClip = 0.1f;

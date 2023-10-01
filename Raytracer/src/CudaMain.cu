@@ -4,6 +4,7 @@
 #include "cutil_math.cuh"
 
 #define M_PI 3.14159265359f  // pi
+#define M_DEG2RAD 0.01745329252
 
 int checkCudaError(cudaError_t& error)
 {
@@ -45,14 +46,6 @@ struct Ray
 	__device__ Ray(float3 o_, float3 d_) : origin(o_), direction(d_) {}
 };
 
-struct Material
-{
-	float3 albedo    { 0.8f, 0.8f, 0.8f };
-	float  roughness { 0.6f };
-	float3 emission  { 0.0f, 0.0f, 0.0f };
-	float  metalness = 0.0f;
-};
-
 struct HitInfo
 {
 	bool didHit = false;
@@ -71,9 +64,11 @@ struct Sphere
 
 struct Camera_GPU
 {
+	float localToWorldMatrix[16];
 	float invViewMat[16];
 	float invProjMat[16];
 	float viewMat[16];
+	float3 pos;
 };
 
 void CudaRenderer::Clear()
@@ -84,16 +79,7 @@ void CudaRenderer::Clear()
 	cudaMemset(m_accumulationBuffer_GPU, 0, m_bufferSize);
 	cudaMemset(m_imageData_GPU, 0, m_width * m_height * sizeof(uint32_t));
 }
-/*
-__constant__ static float jitterMatrix[10] =
-{
-   -0.25,  0.75,
-	0.75,  0.33333,
-   -0.75, -0.25,
-	0.25, -0.75,
-	0.0f, 0.0f
-};
-*/
+
 // SCENE 9 spheres forming a Cornell box small enough to be in constant GPU memory 
 __constant__ Sphere spheres[] =
 {
@@ -111,31 +97,14 @@ __constant__ Sphere spheres[] =
 	  //{ 2.1f,{ 40.0f, 40.5f, 47.0f }, Material{ { 0.8f, 0.8f, 0.8f }, 0.1f, { 150.0f, 160.0f, 180.0f }, 0.0f} }      // Light
 };
 
-__constant__  Material materials[] =
-{
-	Material{ { 0.7f, 0.7f,  0.7f  }, 0.05f, { 0.0f, 0.0f, 0.0f }, 0.0f },   //White
-	Material{ { 0.7f, 0.1f,  0.1f  }, 0.05f, { 0.0f, 0.0f, 0.0f }, 1.0f },	//Red	
-	Material{ { 0.5f, 0.7f,  0.8f  }, 0.1f, { 0.0f, 0.0f, 0.0f }, 0.0f },	//Blue
-	Material{ { 1.0f, 1.0f,  1.0f  }, 0.0f, { 0.0f, 0.0f, 0.0f }, 1.0f },	//Mirror
-	Material{ { 1.0f, 0.9f,  0.6f  }, 0.1f, { 0.0f, 0.0f, 0.0f }, 1.0f },	//Gold
-	Material{ { 0.98f,0.815f,0.75f }, 0.1f, { 0.0f, 0.0f, 0.0f }, 1.0f },	//Copper
-	Material{ { 0.0f, 0.0f,  0.0f  }, 0.1f, { 8.0f, 6.0f, 5.0f }, 0.0f },	//Light1
-	Material{ { 0.0f, 0.0f,  0.0f  }, 0.1f, { 5.0f, 6.0f, 8.0f }, 0.0f }	//Light2
-};
-
 __constant__  Sphere spheresSimple[] =
 {
 	//{ float radius, { float3 position }, { Material }}
-	  //{ 18.0f, { -20.0f, 0.0f, 0.0f }, 1u},
-	  { 19.0f, { 0.0f, -20.0f, 0.0f }, 2u}
-	  //{ 6.0f, {  8.0f, 0.0f, 0.0f }, 7u}
+	  { 1.0f, { -4.0f, 1.0f, 0.0f }, 4u},
+	  { 19.0f, { 0.0f, -19.0f, 0.0f }, 2u},
+	  { 1.0f, { -6.5f, 1.0f, 0.0f }, 2u}
 };
 
-__device__ static float fresnel_schlick_ratio(float cos_theta_incident, float power)
-{
-	float p = 1.0f - cos_theta_incident;
-	return pow(p, power);
-}
 __constant__ static float jitterMatrix[10] =
 {
    -0.25,  0.75,
@@ -144,6 +113,12 @@ __constant__ static float jitterMatrix[10] =
 	0.25, -0.75,
 	0.0f, 0.0f
 };
+
+__device__ static float fresnel_schlick_ratio(float cos_theta_incident, float power)
+{
+	float p = 1.0f - cos_theta_incident;
+	return pow(p, power);
+}
 
 // PCG (permuted congruential generator). Thanks to:
 // www.pcg-random.org and www.shadertoy.com/view/XlGcRh
@@ -158,6 +133,13 @@ __device__ uint32_t nextRandom(uint32_t& state)
 __device__ float randomValue(uint32_t& state)
 {
 	return nextRandom(state) / 4294967295.0; // 2^32 - 1
+}
+
+__device__ float2 randomPointInCircle(uint32_t& state)
+{
+	float angle = randomValue(state) * 2 * M_PI;
+	float2 pointOnCircle = make_float2(cos(angle), sin(angle));
+	return pointOnCircle * fsqrtf(randomValue(state));
 }
 
 __device__ float3 inUnitSphere(uint32_t& state)
@@ -208,13 +190,13 @@ __device__ float3 getEnvironmentLight(const Ray& ray, const Scene* scene)
 	float skyGradientT = powf(fmaxf(ray.direction.y, 0.0f), 0.35f);
 	float groundToSkyT = powf(fmaxf(ray.direction.y, 0.0f), 0.1f);
 
-	float3 skyGradient = lerp(scene->m_skyColorHorizon, scene->m_skyColorZenith, skyGradientT);
-	float sun = powf(fmaxf(0.0f, dot(ray.direction, sunDir)), scene->m_sunFocus) * scene->m_sunIntensity;
+	float3 skyGradient = lerp(srgbToLinear(scene->skyColorHorizon), srgbToLinear(scene->skyColorZenith), skyGradientT);
+	float sun = powf(fmaxf(0.0f, dot(ray.direction, sunDir)), scene->sunFocus) * scene->sunIntensity;
 
 	// Combine ground, sky, and sun
-	float3 composite = lerp(scene->m_groundColor, skyGradient, groundToSkyT) + sun;
+	float3 composite = lerp(srgbToLinear(scene->groundColor), skyGradient, groundToSkyT) * scene->skyBrightness + sun;
 
-	return composite * scene->m_skyColor * scene->m_skyBrightness;
+	return composite * scene->skyColor;
 }
 
 __device__ HitInfo intersect_sphere(const Ray& r, const Sphere& s)
@@ -276,22 +258,7 @@ __device__ HitInfo rayTriangleIntersect(const Ray& ray, const GPU_Mesh::Triangle
 	return hit;
 }
 
-
-__device__ bool rayBoxIntersection(const Ray& r, const float3& min, const float3& max, float& t)
-{
-	float tx1 = (min.x - r.origin.x) / r.direction.x, tx2 = (max.x - r.origin.x) / r.direction.x;
-	float tmin = fminf(tx1, tx2), tmax = fmaxf(tx1, tx2);
-	float ty1 = (min.y - r.origin.y) / r.direction.y, ty2 = (max.y - r.origin.y) / r.direction.y;
-	tmin = fmaxf(tmin, fminf(ty1, ty2)), tmax = fminf(tmax, fmaxf(ty1, ty2));
-	float tz1 = (min.z - r.origin.z) / r.direction.z, tz2 = (max.z - r.origin.z) / r.direction.z;
-	tmin = fmaxf(tmin, fminf(tz1, tz2)), tmax = fminf(tmax, fmaxf(tz1, tz2));
-
-	t = (tmin < t ? tmin : t);
-
-	return (tmax >= tmin && tmax > 0.0f);
-}
-
-__device__ bool rayBoxIntersectNEW(const Ray& r, const float3& min, const float3& max)
+__device__ bool rayBoxIntersection(const Ray& r, const float3& min, const float3& max)
 {
 	float t[9];
 	t[1] = (min.x - r.origin.x) / r.direction.x;
@@ -307,20 +274,6 @@ __device__ bool rayBoxIntersectNEW(const Ray& r, const float3& min, const float3
 	return (t[8] < 0 || t[7] > t[8]);
 }
 
-__device__ bool rayBoundingBox(const Ray& ray, const float3& min, const float3& max)
-{
-	float3 invDir = 1.0f / ray.direction;
-	float3 tMin = (min - ray.origin) * invDir;
-	float3 tMax = (max - ray.origin) * invDir;
-	float3 t1 = cfminf(tMin, tMax);
-	float3 t2 = cfmaxf(tMin, tMax);
-
-	float tNear = fmaxf(fmaxf(t1.x, t1.y), t1.z);
-	float tFar  = fminf(fminf(t2.x, t2.y), t2.z);
-
-	return tNear <= tFar;
-}
-
 __device__ HitInfo intersect_triangles(const Ray& r, const GPU_Mesh* vbo)
 {
 	HitInfo hit;
@@ -328,7 +281,7 @@ __device__ HitInfo intersect_triangles(const Ray& r, const GPU_Mesh* vbo)
 
 	for (size_t mID = 0; mID < vbo->numMeshes; mID++)
 	{
-		if (rayBoxIntersectNEW(r, vbo->meshInfoBuffer[mID].bboxMin, vbo->meshInfoBuffer[mID].bboxMax))
+		if (rayBoxIntersection(r, vbo->meshInfoBuffer[mID].bboxMin, vbo->meshInfoBuffer[mID].bboxMax))
 		{
 			continue;
 		}
@@ -384,7 +337,7 @@ __device__ float3 radiance(Ray& r, uint32_t& s1, const Scene* scene, size_t boun
 	float3 accucolor = make_float3(0.0f, 0.0f, 0.0f); // Accumulates ray colour with each iteration through bounce loop
 	float3 mask = make_float3(1.0f, 1.0f, 1.0f);
 
-	for (size_t b = 0; b < bounces; b++)
+	for (size_t b = 0; b < 5u; b++)
 	{
 		// Test ray for intersection with scene
 		HitInfo hit = intersect_scene(r, vbo);
@@ -396,9 +349,9 @@ __device__ float3 radiance(Ray& r, uint32_t& s1, const Scene* scene, size_t boun
 			break;
 		}
 
-		Material hitMat = materials[hit.materialIndex];
+		Material hitMat = scene->materials[hit.materialIndex];
 
-		accucolor += mask * hitMat.emission;
+		accucolor += mask * srgbToLinear(hitMat.emission) * hitMat.emissionIntensity;
 
 		// Create 2 random numbers
 		float r1 = 2 * M_PI * randomValue(s1); // Pick random number on unit circle (radius = 1, circumference = 2*Pi) for azimuth
@@ -420,12 +373,12 @@ __device__ float3 radiance(Ray& r, uint32_t& s1, const Scene* scene, size_t boun
 
 		mask = mask * lerp(linearSurfColor, lerp(make_float3(1.0f), linearSurfColor, hitMat.metalness), isSpecularBounce);
 
-		float p = max(mask.x, max(mask.y, mask.z));
-		if (randomValue(s1) >= p)
+		//float p = max(mask.x, max(mask.y, mask.z));
+		//if (randomValue(s1) >= p)
 		{
-			break;
+		//	break;
 		}
-		mask *= 1.0f / p;
+		//mask *= 1.0f / p;
 
 		//Debug output
 		//accucolor = { hit.dst*0.01f };
@@ -435,69 +388,8 @@ __device__ float3 radiance(Ray& r, uint32_t& s1, const Scene* scene, size_t boun
 	return accucolor;
 }
 
-/*
-__device__ float3 radiance(Ray& r, uint32_t& s1, size_t bounces) // Returns ray color
-{
-	float3 accucolor = make_float3(0.0f, 0.0f, 0.0f); // Accumulates ray colour with each iteration through bounce loop
-	float3 mask = make_float3(1.0f, 1.0f, 1.0f);
-
-	for (size_t b = 0; b < bounces; b++)
-	{
-		float t;           // Distance to closest intersection
-		int id = 0;        // Index of closest intersected sphere
-
-		// Test ray for intersection with scene
-		if (!intersect_scene(r))
-		{
-			accucolor += mask * make_float3(0.1f, 0.12f, 0.2f); // If miss, return sky
-			break;
-		}
-		const Sphere& obj = spheres[id];
-		float3 x = r.origin + r.direction * t;                   // hitpoint
-		float3 n = normalize(x - obj.pos);             // normal
-		float3 nl = dot(n, r.direction) < 0.0f ? n : n * -1.0f;    // front facing normal
-
-		accucolor += mask * obj.mat.emission;
-
-		// Create 2 random numbers
-		float r1 = 2 * M_PI * randomValue(s1); // Pick random number on unit circle (radius = 1, circumference = 2*Pi) for azimuth
-		float r2 = randomValue(s1);            // Pick random number for elevation
-		float r2s = sqrtf(r2);
-
-		float ndotl = fmaxf(dot(-r.direction, nl), 0.0f);
-		float f = fresnel_schlick_ratio(ndotl, 8.0f);
-
-		bool isSpecularBounce = max(obj.mat.metalness, max(f, 0.02f)) >= randomValue(s1);
-
-		float3 diffuseDir = normalize(nl + randomDirection(s1));
-		float3 specularDir = reflect(r.direction, normalize(nl + randomDirection(s1) * obj.mat.roughness));
-
-		float3 linearSurfColor = srgbToLinear(obj.mat.albedo);
-
-		r.direction = normalize(lerp(diffuseDir, specularDir, isSpecularBounce));
-
-		// New ray origin is intersection point of previous ray with scene
-		r.origin = x + nl * 0.1f; // offset ray origin slightly to prevent self intersection
-
-		mask = mask * lerp(linearSurfColor, lerp(make_float3(1.0f), linearSurfColor, obj.mat.metalness), isSpecularBounce);
-
-		float p = max(mask.x, max(mask.y, mask.z));
-		if (randomValue(s1) >= p)
-		{
-			break;
-		}
-		mask *= 1.0f / p;
-
-		//accucolor = { f, f, f };
-	}
-
-
-	return accucolor;
-}
-*/
-
 __global__ void render_kernel(float3* buf, uint32_t width, uint32_t height, Camera_GPU camera, const Scene* scene, size_t samples,
-							 size_t bounces, uint32_t sampleIndex, const GPU_Mesh* vbo)
+							  size_t bounces, uint32_t sampleIndex, const GPU_Mesh* vbo)
 {
 	// Assign a CUDA thread to every pixel (x,y) blockIdx, blockDim and threadIdx are CUDA specific
 	// Keywords replaces nested outer loops in CPU code looping over image rows and image columns
@@ -515,48 +407,49 @@ __global__ void render_kernel(float3* buf, uint32_t width, uint32_t height, Came
 
 	float2 coord = { (float)x / (float)width, (float)y / (float)height };
 	coord = (coord * 2.0f) - make_float2(1.0f, 1.0f); // -1 -> 1
-	float viewCoord[4] = { coord.x, coord.y, 1.0f, 1.0f };
-	float target[4];
-	float target2[4];
-
-	vector4_matrix4_mult(&viewCoord[0], &camera.invProjMat[0], &target[0]);
-
-	float4 projDir4 = make_float4(normalize(make_float3(target[0], target[1], target[2]) / target[3]), 0.0f);
-
-	float projDir[4] = { projDir4.x, projDir4.y, projDir4.z, projDir4.w };
-
-	vector4_matrix4_mult(&projDir[0], &camera.invViewMat[0], target2);
-
-	float3 worldDir = (make_float3(target2[0], target2[1], target2[2]));
-
-	float3 cx = make_float3(camera.invViewMat[0], camera.invViewMat[1], camera.invViewMat[2]);
-	float3 cy = make_float3(camera.invViewMat[4], camera.invViewMat[5], camera.invViewMat[6]);
-	float3 cz = make_float3(camera.invViewMat[8], camera.invViewMat[9], camera.invViewMat[10]);
 
 	float3 lightContribution;
 
 	// Reset r to zero for every pixel
 	lightContribution = make_float3(0.0f);
 
-	float3 cameraPos = make_float3(camera.invViewMat[12], camera.invViewMat[13], camera.invViewMat[14]);
+	float focusDistance = float(bounces)/5.0f;
+
+	//float planeHeight = focusDistance * tan(camera.fov * 0.5f * M_DEG2RAD) * 2.0f;
+	//float planeWidth = planeHeight * (float)height / (float)width;
+
+	float3 viewParams = make_float3(focusDistance, focusDistance, focusDistance);
+
+	// Calculate focus point
+	float viewPointLocal[4] = { coord.x, coord.y, 1.0f, 1.0f };
+	float target[4];
+	vector4_matrix4_mult(&viewPointLocal[0], &camera.localToWorldMatrix[0], target);
+
+	float3 viewPoint = make_float3(target[0], target[1], target[2]);
+	float3 camRight = make_float3(camera.localToWorldMatrix[0], camera.localToWorldMatrix[1], camera.localToWorldMatrix[2]);
+	float3 camUp = make_float3(camera.localToWorldMatrix[4], camera.localToWorldMatrix[5], camera.localToWorldMatrix[6]);
 
 	// Samples per pixel
-	for (size_t s = 0; s < samples; s++)
-	{
-		//size_t jitterIndex = (s + sampleIndex) % 5u;
-		//float jitterX = (jitterMatrix[2u * jitterIndex]);
-		//float jitterY = (jitterMatrix[2u * jitterIndex + 1u]);
-
-		// Compute primary ray direction
-		//float3 d = (cx * (jitterX / width) + cy * (jitterY / height));
-
+	//for (size_t s = 0; s < samples; s++)
+	//{
 		// Create primary ray, add incoming radiance to pixelcolor
-		Ray ray = Ray(cameraPos, normalize(worldDir));
+		Ray ray = Ray(camera.pos, {0.0f, 0.0f, 0.0f});
+
+		float2 defocusJitter = randomPointInCircle(s1) * 0.001f;
+		ray.origin = camera.pos + camRight * defocusJitter.x + camUp * defocusJitter.y;
+
+		float2 jitter = randomPointInCircle(s1) * 0.0f;
+		float3 jitteredViewPoint = viewPoint + camRight * jitter.x + camUp * jitter.y;
+
+		//ray.direction = normalize(jitteredViewPoint) * focusDistance;
+		ray.direction = normalize(jitteredViewPoint);
+
 		lightContribution += radiance(ray, s1, scene, bounces, vbo) * (1.0 / samples);
-	}
+	//}
 
 	// Write rgb value of pixel to image buffer on the GPU
 	buf[i] += lightContribution;
+	//buf[i] += normalize((cameraPos + viewPoint * focusDistance) - cameraPos);//make_float3(viewPointLocal[0], viewPointLocal[1], viewPointLocal[2]);
 }
 
 __global__ void floatToImageData_kernel(uint32_t* outputBuffer, float3* inputBuffer, uint32_t width, uint32_t height, uint32_t sampleIndex)
@@ -648,9 +541,11 @@ void CudaRenderer::Compute(void)
 	}
 
 	Camera_GPU camera_buffer_obj;
-	memcpy(&camera_buffer_obj.invProjMat[0], m_invProjMat, sizeof(float) * 16);
-	memcpy(&camera_buffer_obj.invViewMat[0], m_invViewMat, sizeof(float) * 16);
-	memcpy(&camera_buffer_obj.viewMat[0],    m_viewMat,    sizeof(float) * 16);
+	memcpy(&camera_buffer_obj.invProjMat[0],		 m_invProjMat,      sizeof(float) * 16);
+	memcpy(&camera_buffer_obj.invViewMat[0],		 m_invViewMat,      sizeof(float) * 16);
+	memcpy(&camera_buffer_obj.viewMat[0],			 m_viewMat,         sizeof(float) * 16);
+	memcpy(&camera_buffer_obj.localToWorldMatrix[0], m_localToWorldMat, sizeof(float) * 16);
+	camera_buffer_obj.pos = m_cameraPos;
 
 	render_kernel <<<blocks, threads>>> (m_accumulationBuffer_GPU, m_width, m_height, camera_buffer_obj, m_deviceScene, m_samples, *m_bounces, *m_sampleIndex, m_deviceMesh);
 
@@ -700,11 +595,10 @@ void CudaRenderer::Compute(void)
 	Error:
 }
 
-void CudaRenderer::SetCamera(float3 pos, float3 dir, float fov)
+void CudaRenderer::SetCamera(float3 pos, float3 dir)
 {
 	m_cameraPos = pos;
 	m_cameraDir = dir;
-	m_fov = fov;
 }
 
 void CudaRenderer::SetInvViewMat(float4 x, float4 y, float4 z, float4 w)
@@ -774,4 +668,27 @@ void CudaRenderer::SetViewMat(float4 x, float4 y, float4 z, float4 w)
 	m_viewMat[13] = w.y;
 	m_viewMat[14] = w.z;
 	m_viewMat[15] = w.w;
+}
+
+void CudaRenderer::SetLocalToWorldMat(float4 x, float4 y, float4 z, float4 w)
+{
+	m_localToWorldMat[0] = x.x;
+	m_localToWorldMat[1] = x.y;
+	m_localToWorldMat[2] = x.z;
+	m_localToWorldMat[3] = x.w;
+
+	m_localToWorldMat[4] = y.x;
+	m_localToWorldMat[5] = y.y;
+	m_localToWorldMat[6] = y.z;
+	m_localToWorldMat[7] = y.w;
+
+	m_localToWorldMat[8] = z.x;
+	m_localToWorldMat[9] = z.y;
+	m_localToWorldMat[10] = z.z;
+	m_localToWorldMat[11] = z.w;
+
+	m_localToWorldMat[12] = w.x;
+	m_localToWorldMat[13] = w.y;
+	m_localToWorldMat[14] = w.z;
+	m_localToWorldMat[15] = w.w;
 }

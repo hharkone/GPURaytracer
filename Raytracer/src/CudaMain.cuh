@@ -26,18 +26,15 @@ public:
 		cudaMemset(m_imageData_GPU, 0, (size_t)width * (size_t)height * sizeof(uint32_t));
 
 		m_cameraPos = { 0.0f, 0.0f, 0.0f };
-		m_invViewMat = new float[16];
-		m_invProjMat = new float[16];
-		m_viewMat    = new float[16];
+		m_invViewMat	  = new float[16];
+		m_invProjMat	  = new float[16];
+		m_viewMat		  = new float[16];
+		m_localToWorldMat = new float[16];
 
 		m_hostMesh = new GPU_Mesh();
 		m_hostMesh->LoadOBJFile("T:\\GIT\\GPURaytracer\\Raytracer\\cube.obj", 1u);
 		m_hostMesh->LoadOBJFile("T:\\GIT\\GPURaytracer\\Raytracer\\suzanne.obj", 0u);
 		m_hostMesh->LoadOBJFile("T:\\GIT\\GPURaytracer\\Raytracer\\light.obj", 7u);
-
-		m_hostMesh->meshInfoBuffer[0];
-		m_hostMesh->meshInfoBuffer[1];
-		m_hostMesh->meshInfoBuffer[2];
 
 		cudaMalloc(&m_deviceMesh, sizeof(GPU_Mesh));
 		cudaMemcpy(m_deviceMesh, m_hostMesh, sizeof(GPU_Mesh), cudaMemcpyHostToDevice);
@@ -67,10 +64,11 @@ public:
 		cudaFree(m_imageData_GPU);
 	}
 
-	void SetCamera(float3 pos, float3 dir, float fov);
+	void SetCamera(float3 pos, float3 dir);
 	void SetInvViewMat(float4 x, float4 y, float4 z, float4 w);
 	void SetInvProjMat(float4 x, float4 y, float4 z, float4 w);
 	void SetViewMat(float4 x, float4 y, float4 z, float4 w);
+	void SetLocalToWorldMat(float4 x, float4 y, float4 z, float4 w);
 	void Compute(void);
 	void Clear(void);
 	void SetBounces(int bounces) { m_bounces = &bounces; }
@@ -94,7 +92,7 @@ private:
 	float* m_invViewMat = nullptr;
 	float* m_invProjMat = nullptr;
 	float* m_viewMat = nullptr;
-	float m_fov = 50.0f;
+	float* m_localToWorldMat = nullptr;
 	uint32_t* m_imageData = nullptr;
 	float* m_outputBuffer = nullptr;
 	float3* m_accumulationBuffer_GPU = nullptr;

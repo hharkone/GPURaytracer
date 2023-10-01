@@ -80,10 +80,17 @@ void Renderer::Render(const Scene& scene, const Camera& camera)
 		float4 z3 = Utils::vec4Tofloat4(viewMat[2]);
 		float4 w3 = Utils::vec4Tofloat4(viewMat[3]);
 
-		m_cudaRenderer->SetCamera(pos, dir, 50.0f);
+		glm::mat4x4 localToWorldMat = m_activeCamera->GetLocalToWorld();
+		float4 x4 = Utils::vec4Tofloat4(localToWorldMat[0]);
+		float4 y4 = Utils::vec4Tofloat4(localToWorldMat[1]);
+		float4 z4 = Utils::vec4Tofloat4(localToWorldMat[2]);
+		float4 w4 = Utils::vec4Tofloat4(localToWorldMat[3]);
+
+		m_cudaRenderer->SetCamera(pos, dir);
 		m_cudaRenderer->SetInvViewMat(x1, y1, z1, w1);
 		m_cudaRenderer->SetInvProjMat(x2, y2, z2, w2);
 		m_cudaRenderer->SetViewMat(x3, y3, z3, w3);
+		m_cudaRenderer->SetLocalToWorldMat(x4, y4, z4, w4);
 
 		//m_cudaData = m_cudaRenderer->getOutputData();
 		m_cudaRenderer->Compute();
