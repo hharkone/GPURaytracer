@@ -28,12 +28,12 @@ typedef unsigned short ushort;
 #ifndef __CUDACC__
 #include <math.h>
 
-inline float fminf(float a, float b)
+inline float __cdecl fminf(_In_ float a, _In_ float b)
 {
     return a < b ? a : b;
 }
 
-inline float fmaxf(float a, float b)
+inline float __cdecl fmaxf(_In_ float a, _In_ float b)
 {
     return a > b ? a : b;
 }

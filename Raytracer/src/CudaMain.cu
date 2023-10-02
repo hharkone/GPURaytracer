@@ -318,11 +318,11 @@ __device__ HitInfo intersect_scene(const Ray& r, const GPU_Mesh* vbo)
 	HitInfo hit;
 	HitInfo closestHit;
 
-	float n = sizeof(spheres) / sizeof(Sphere);
+	float n = sizeof(spheresSimple) / sizeof(Sphere);
 
 	for (size_t i = 0u; i < size_t(n); i++)
 	{
-		Sphere s = spheres[i];
+		Sphere s = spheresSimple[i];
 		hit = intersect_sphere(r, s);
 
 		if (hit.didHit && hit.dst < closestHit.dst) // If newly computed intersection distance d is smaller than current closest intersection distance
@@ -383,12 +383,12 @@ __device__ float3 radiance(Ray& r, uint32_t& s1, const Scene* scene, size_t boun
 
 		mask = mask * lerp(linearSurfColor, lerp(make_float3(1.0f), linearSurfColor, hitMat.metalness), isSpecularBounce);
 
-		//float p = max(mask.x, max(mask.y, mask.z));
-		//if (randomValue(s1) >= p)
+		float p = fmaxf(mask.x, fmaxf(mask.y, mask.z));
+		if (randomValue(s1) >= p)
 		{
-		//	break;
+			break;
 		}
-		//mask *= 1.0f / p;
+		mask *= 1.0f / p;
 
 		//Debug output
 		//accucolor = { hit.dst*0.01f };
@@ -438,14 +438,14 @@ __global__ void render_kernel(float3* buf, uint32_t width, uint32_t height, Came
 		// Create primary ray, add incoming radiance to pixelcolor
 		Ray ray = Ray(camera.pos, {0.0f, 0.0f, 0.0f});
 
-		float2 defocusJitter = randomPointInCircle(s1) * (1.0f / camera.aperture);
+		float2 defocusJitter = randomPointInCircle(s1) * camera.aperture;
 		ray.origin = camera.pos + camRight * defocusJitter.x + camUp * defocusJitter.y;
 
-		float2 jitter = randomPointInCircle(s1) * 0.01f;
-		float3 jitteredViewPoint = viewPoint + camRight * jitter.x + camUp * jitter.y;
+		//float2 jitter = randomPointInCircle(s1) * 0.01f;
+		//float3 jitteredViewPoint = viewPoint + camRight * jitter.x + camUp * jitter.y;
 
 		//ray.direction = normalize(jitteredViewPoint) * focusDistance;
-		ray.direction = normalize(jitteredViewPoint - ray.origin);
+		ray.direction = normalize(viewPoint - ray.origin);
 
 		lightContribution += radiance(ray, s1, scene, bounces, vbo) * (1.0 / samples);
 	}
