@@ -32,9 +32,9 @@ public:
 		m_localToWorldMat = new float[16];
 
 		m_hostMesh = new GPU_Mesh();
-		m_hostMesh->LoadOBJFile("T:\\GIT\\GPURaytracer\\Raytracer\\cube.obj", 1u);
-		m_hostMesh->LoadOBJFile("T:\\GIT\\GPURaytracer\\Raytracer\\suzanne.obj", 0u);
-		m_hostMesh->LoadOBJFile("T:\\GIT\\GPURaytracer\\Raytracer\\light.obj", 7u);
+		m_hostMesh->LoadOBJFile("cube.obj", 1u);
+		m_hostMesh->LoadOBJFile("suzanne.obj", 0u);
+		m_hostMesh->LoadOBJFile("light.obj", 7u);
 
 		cudaMalloc(&m_deviceMesh, sizeof(GPU_Mesh));
 		cudaMemcpy(m_deviceMesh, m_hostMesh, sizeof(GPU_Mesh), cudaMemcpyHostToDevice);
@@ -64,7 +64,7 @@ public:
 		cudaFree(m_imageData_GPU);
 	}
 
-	void SetCamera(float3 pos, float3 dir);
+	void SetCamera(float3 pos, float3 dir, float aperture, float focusDist);
 	void SetInvViewMat(float4 x, float4 y, float4 z, float4 w);
 	void SetInvProjMat(float4 x, float4 y, float4 z, float4 w);
 	void SetViewMat(float4 x, float4 y, float4 z, float4 w);
@@ -79,6 +79,8 @@ public:
 	uint32_t m_height;
 
 private:
+	float m_aperture;
+	float m_focusDist;
 	const Scene** m_scene;
 	Scene* m_deviceScene;
 	GPU_Mesh* m_hostMesh;

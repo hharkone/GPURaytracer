@@ -86,7 +86,7 @@ void Renderer::Render(const Scene& scene, const Camera& camera)
 		float4 z4 = Utils::vec4Tofloat4(localToWorldMat[2]);
 		float4 w4 = Utils::vec4Tofloat4(localToWorldMat[3]);
 
-		m_cudaRenderer->SetCamera(pos, dir);
+		m_cudaRenderer->SetCamera(pos, dir, m_activeCamera->m_aperture, m_activeCamera->m_focusDistance);
 		m_cudaRenderer->SetInvViewMat(x1, y1, z1, w1);
 		m_cudaRenderer->SetInvProjMat(x2, y2, z2, w2);
 		m_cudaRenderer->SetViewMat(x3, y3, z3, w3);

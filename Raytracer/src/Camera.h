@@ -28,6 +28,10 @@ public:
 	void RecalculateProjection();
 	void RecalculateView();
 	void RecalculateLocalToWorld();
+
+	float m_aperture = 2.0f;
+	float m_focusDistance = 5.0f;
+
 private:
 	glm::mat4 m_View{ 1.0f };
 	glm::mat4 m_InverseView{ 1.0f };

@@ -133,5 +133,5 @@ void Camera::RecalculateView()
 
 void Camera::RecalculateLocalToWorld()
 {
-	m_localToWorld = m_InverseView * m_InverseProjection;
+	m_localToWorld = glm::inverse(m_Projection * m_View);
 }

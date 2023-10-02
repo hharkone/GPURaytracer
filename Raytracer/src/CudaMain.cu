@@ -68,6 +68,8 @@ struct Camera_GPU
 	float invViewMat[16];
 	float invProjMat[16];
 	float viewMat[16];
+	float aperture;
+	float focusDist;
 	float3 pos;
 };
 
@@ -337,7 +339,7 @@ __device__ float3 radiance(Ray& r, uint32_t& s1, const Scene* scene, size_t boun
 	float3 accucolor = make_float3(0.0f, 0.0f, 0.0f); // Accumulates ray colour with each iteration through bounce loop
 	float3 mask = make_float3(1.0f, 1.0f, 1.0f);
 
-	for (size_t b = 0; b < 5u; b++)
+	for (size_t b = 0; b < bounces; b++)
 	{
 		// Test ray for intersection with scene
 		HitInfo hit = intersect_scene(r, vbo);
@@ -413,43 +415,35 @@ __global__ void render_kernel(float3* buf, uint32_t width, uint32_t height, Came
 	// Reset r to zero for every pixel
 	lightContribution = make_float3(0.0f);
 
-	float focusDistance = float(bounces)/5.0f;
-
-	//float planeHeight = focusDistance * tan(camera.fov * 0.5f * M_DEG2RAD) * 2.0f;
-	//float planeWidth = planeHeight * (float)height / (float)width;
-
-	float3 viewParams = make_float3(focusDistance, focusDistance, focusDistance);
-
 	// Calculate focus point
 	float viewPointLocal[4] = { coord.x, coord.y, 1.0f, 1.0f };
 	float target[4];
 	vector4_matrix4_mult(&viewPointLocal[0], &camera.localToWorldMatrix[0], target);
 
-	float3 viewPoint = make_float3(target[0], target[1], target[2]);
+	float3 viewPoint = make_float3(target[0], target[1], target[2]) * camera.focusDist + camera.pos;
 	float3 camRight = make_float3(camera.localToWorldMatrix[0], camera.localToWorldMatrix[1], camera.localToWorldMatrix[2]);
 	float3 camUp = make_float3(camera.localToWorldMatrix[4], camera.localToWorldMatrix[5], camera.localToWorldMatrix[6]);
 
 	// Samples per pixel
-	//for (size_t s = 0; s < samples; s++)
-	//{
+	for (size_t s = 0; s < samples; s++)
+	{
 		// Create primary ray, add incoming radiance to pixelcolor
 		Ray ray = Ray(camera.pos, {0.0f, 0.0f, 0.0f});
 
-		float2 defocusJitter = randomPointInCircle(s1) * 0.001f;
+		float2 defocusJitter = randomPointInCircle(s1) * (1.0f / camera.aperture);
 		ray.origin = camera.pos + camRight * defocusJitter.x + camUp * defocusJitter.y;
 
-		float2 jitter = randomPointInCircle(s1) * 0.0f;
+		float2 jitter = randomPointInCircle(s1) * 0.01f;
 		float3 jitteredViewPoint = viewPoint + camRight * jitter.x + camUp * jitter.y;
 
 		//ray.direction = normalize(jitteredViewPoint) * focusDistance;
-		ray.direction = normalize(jitteredViewPoint);
+		ray.direction = normalize(jitteredViewPoint - ray.origin);
 
 		lightContribution += radiance(ray, s1, scene, bounces, vbo) * (1.0 / samples);
-	//}
+	}
 
 	// Write rgb value of pixel to image buffer on the GPU
 	buf[i] += lightContribution;
-	//buf[i] += normalize((cameraPos + viewPoint * focusDistance) - cameraPos);//make_float3(viewPointLocal[0], viewPointLocal[1], viewPointLocal[2]);
 }
 
 __global__ void floatToImageData_kernel(uint32_t* outputBuffer, float3* inputBuffer, uint32_t width, uint32_t height, uint32_t sampleIndex)
@@ -488,51 +482,7 @@ void CudaRenderer::Compute(void)
 
 	cudaMalloc(&m_deviceScene, sizeof(Scene));
 	cudaMemcpy(m_deviceScene, *m_scene, sizeof(Scene), cudaMemcpyHostToDevice);
-	/*
-	if (m_gpuMesh->hasChanged || deviceStruct == nullptr)
-	{
-		cudaStatus = cudaMalloc(&deviceStruct, sizeof(GPU_Mesh::GPU_MeshList));
-		if (cudaStatus != cudaSuccess)
-		{
-			fprintf(stderr, "cudaMalloc failed!");
-			goto Error;
-		}
 
-		cudaStatus = cudaMemcpy(deviceStruct, m_meshList, sizeof(GPU_Mesh::GPU_MeshList), cudaMemcpyHostToDevice);
-		if (cudaStatus != cudaSuccess)
-		{
-			fprintf(stderr, "cudaMemcpy failed!");
-			goto Error;
-		}
-
-		float* d_vbo;
-		cudaMalloc(&d_vbo, m_meshList->meshOffsets[0]);
-		cudaMemcpy(d_vbo, m_meshList->vertexBuffer, m_meshList->meshOffsets[0], cudaMemcpyHostToDevice);
-		cudaMemcpy(&deviceStruct->vertexBuffer, &d_vbo, sizeof(float*), cudaMemcpyHostToDevice);
-
-		size_t* d_meshOffsets;
-		cudaMalloc(&d_meshOffsets, m_meshList->meshCount * sizeof(size_t));
-		cudaMemcpy(d_meshOffsets, m_meshList->meshOffsets, m_meshList->meshCount * sizeof(size_t), cudaMemcpyHostToDevice);
-		cudaMemcpy(&deviceStruct->meshOffsets, &d_meshOffsets, sizeof(size_t*), cudaMemcpyHostToDevice);
-
-		size_t* d_vertexCounts;
-		cudaMalloc(&d_vertexCounts, m_meshList->meshCount * sizeof(size_t));
-		cudaMemcpy(d_vertexCounts, m_meshList->vertexCounts, m_meshList->meshCount * sizeof(size_t), cudaMemcpyHostToDevice);
-		cudaMemcpy(&deviceStruct->vertexCounts, &d_vertexCounts, sizeof(size_t*), cudaMemcpyHostToDevice);
-
-		float3* d_bboxMin;
-		cudaMalloc(&d_bboxMin, m_meshList->meshCount * sizeof(float3));
-		cudaMemcpy(d_bboxMin, &m_meshList->bboxMins[0], m_meshList->meshCount * sizeof(float3), cudaMemcpyHostToDevice);
-		cudaMemcpy(&deviceStruct->bboxMins, &d_bboxMin, sizeof(float3*), cudaMemcpyHostToDevice);
-
-		float3* d_bboxMax;
-		cudaMalloc(&d_bboxMax, m_meshList->meshCount * sizeof(float3));
-		cudaMemcpy(d_bboxMax, &m_meshList->bboxMins[0], m_meshList->meshCount * sizeof(float3), cudaMemcpyHostToDevice);
-		cudaMemcpy(&deviceStruct->bboxMaxs, &d_bboxMax, sizeof(float3*), cudaMemcpyHostToDevice);
-
-		m_gpuMesh->hasChanged = false;
-	}
-	*/
 	cudaStatus = cudaGetLastError();
 	if (cudaStatus != cudaSuccess)
 	{
@@ -546,6 +496,8 @@ void CudaRenderer::Compute(void)
 	memcpy(&camera_buffer_obj.viewMat[0],			 m_viewMat,         sizeof(float) * 16);
 	memcpy(&camera_buffer_obj.localToWorldMatrix[0], m_localToWorldMat, sizeof(float) * 16);
 	camera_buffer_obj.pos = m_cameraPos;
+	camera_buffer_obj.aperture = m_aperture;
+	camera_buffer_obj.focusDist = m_focusDist;
 
 	render_kernel <<<blocks, threads>>> (m_accumulationBuffer_GPU, m_width, m_height, camera_buffer_obj, m_deviceScene, m_samples, *m_bounces, *m_sampleIndex, m_deviceMesh);
 
@@ -595,10 +547,12 @@ void CudaRenderer::Compute(void)
 	Error:
 }
 
-void CudaRenderer::SetCamera(float3 pos, float3 dir)
+void CudaRenderer::SetCamera(float3 pos, float3 dir, float aperture, float focusDist)
 {
 	m_cameraPos = pos;
 	m_cameraDir = dir;
+	m_aperture = aperture;
+	m_focusDist = focusDist;
 }
 
 void CudaRenderer::SetInvViewMat(float4 x, float4 y, float4 z, float4 w)
