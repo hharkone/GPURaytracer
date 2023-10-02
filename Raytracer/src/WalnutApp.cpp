@@ -15,7 +15,7 @@ class ExampleLayer : public Walnut::Layer
 public:
 
 	ExampleLayer()
-		: m_camera(50.0f, 0.1f, 1000.0f)
+		: m_camera(50.0f, 0.1f, 1000000.0f)
 	{
 		m_rendetTimeVec.resize(20);
 		/*

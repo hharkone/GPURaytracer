@@ -85,17 +85,17 @@ void CudaRenderer::Clear()
 // SCENE 9 spheres forming a Cornell box small enough to be in constant GPU memory 
 __constant__ Sphere spheres[] =
 {
-	  { 1e5f,{ 1e5f + 1.0f, 40.8f, 81.6f },     0u }, //Left
-	  { 1e5f,{ -1e5f + 99.0f, 40.8f, 81.6f },   1u }, //Right
-	  { 1e5f,{ 50.0f, 40.8f, 1e5f },            3u }, //Back
-	  { 1e5f,{ 50.0f, 40.8f, -1e5f + 600.0f },  2u }, //Frnt     	   
-	  { 1e5f,{ 50.0f, 1e5f, 81.6f },            2u }, //Botm
-	  { 1e5f,{ 50.0f, -1e5f + 81.6f, 81.6f },   2u }, //Top			   
+	  { 1e4f,{ -1e4f - 80.0f, 40.8f, 81.6f },     0u }, //Left
+	  { 1e4f,{ 1e4f + 150.0f, 40.8f, 81.6f },   1u }, //Right
+	  { 1e4f,{ 50.0f, 40.8f, -1e4f },            3u }, //Back
+	  { 1e4f,{ 50.0f, 40.8f, 1e4f + 200.0f },  2u }, //Frnt     	   
+	  { 1e4f,{ 50.0f, -1e4f, 81.6f },            2u }, //Botm
+	  { 1e4f,{ 50.0f, 1e4f + 81.6f, 81.6f },   2u }, //Top			   
 	  { 16.5f,{ 27.0f, 16.5f, 47.0f },          2u }, // small sphere 1
 	  { 16.5f,{ 73.0f, 16.5f, 78.0f },          4u }, // gold sphere 2
 	  { 16.5f,{ 73.0f, 16.5f, 118.0f },         5u }, // copper sphere 2
 	  { 100.0f,{ 30.0f, 181.6f - 1.9f, 80.0f }, 6u }, // Light
-	  { 100.0f,{ 70.0f, 181.6f - 1.9f, 80.0f }, 7u }  // Light
+	  { 100.0f,{ 150.0f, 181.6f - 1.9f, 80.0f }, 7u }  // Light
 	  //{ 2.1f,{ 40.0f, 40.5f, 47.0f }, Material{ { 0.8f, 0.8f, 0.8f }, 0.1f, { 150.0f, 160.0f, 180.0f }, 0.0f} }      // Light
 };
 
@@ -144,11 +144,6 @@ __device__ float2 randomPointInCircle(uint32_t& state)
 	return pointOnCircle * fsqrtf(randomValue(state));
 }
 
-__device__ float3 inUnitSphere(uint32_t& state)
-{
-	return normalize(make_float3(randomValue(state) * 2.0f - 1.0f, randomValue(state) * 2.0f - 1.0f, randomValue(state) * 2.0f - 1.0f));
-}
-
 __device__ float randomValueNormalDistribution(uint32_t& state)
 {
 	// Thanks to https://stackoverflow.com/a/6178290
@@ -166,6 +161,19 @@ __device__ float3 randomDirection(uint32_t& state)
 	float z = randomValueNormalDistribution(state);
 
 	return normalize(make_float3(x, y, z));
+}
+
+__device__ float3 randomInUnitSphere(uint32_t& state)
+{
+	// Thanks to https://math.stackexchange.com/a/1585996
+	float x = randomValueNormalDistribution(state);
+	float y = randomValueNormalDistribution(state);
+	float z = randomValueNormalDistribution(state);
+
+	float distance = randomValue(state);
+	float dsqr = fsqrtf(distance);
+
+	return normalize(make_float3(x, y, z)) * dsqr;
 }
 
 __device__ void vector4_matrix4_mult(float* vec, float* mat, float* out)
@@ -310,11 +318,11 @@ __device__ HitInfo intersect_scene(const Ray& r, const GPU_Mesh* vbo)
 	HitInfo hit;
 	HitInfo closestHit;
 
-	float n = sizeof(spheresSimple) / sizeof(Sphere);
+	float n = sizeof(spheres) / sizeof(Sphere);
 
 	for (size_t i = 0u; i < size_t(n); i++)
 	{
-		Sphere s = spheresSimple[i];
+		Sphere s = spheres[i];
 		hit = intersect_sphere(r, s);
 
 		if (hit.didHit && hit.dst < closestHit.dst) // If newly computed intersection distance d is smaller than current closest intersection distance
@@ -366,9 +374,9 @@ __device__ float3 radiance(Ray& r, uint32_t& s1, const Scene* scene, size_t boun
 		bool isSpecularBounce = max(hitMat.metalness, max(f, 0.02f)) >= randomValue(s1);
 
 		float3 diffuseDir = normalize(hit.normal + randomDirection(s1));
-		float3 specularDir = reflect(r.direction, normalize(hit.normal + randomDirection(s1) * hitMat.roughness));
+		float3 specularDir = reflect(r.direction, normalize(hit.normal + randomInUnitSphere(s1) * hitMat.roughness));
 
-		float3 linearSurfColor = powf(hitMat.albedo, 2.2f);
+		float3 linearSurfColor = srgbToLinear(hitMat.albedo);
 
 		r.direction = normalize(lerp(diffuseDir, specularDir, isSpecularBounce));
 		r.origin = hit.hitPoint + hit.normal * 0.001f; // offset ray origin slightly to prevent self intersection
