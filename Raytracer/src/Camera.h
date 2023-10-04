@@ -29,7 +29,7 @@ public:
 	void RecalculateView();
 	void RecalculateLocalToWorld();
 
-	float m_aperture = 2.0f;
+	float m_aperture = 0.0f;
 	float m_focusDistance = 5.0f;
 
 private:

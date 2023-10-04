@@ -43,6 +43,7 @@ struct Ray
 {
 	float3 origin; // ray origin
 	float3 direction;  // ray direction
+
 	__device__ Ray(float3 o_, float3 d_) : origin(o_), direction(d_) {}
 };
 
@@ -52,7 +53,7 @@ struct HitInfo
 	float dst = FLT_MAX;
 	float3 hitPoint {0.0f, 0.0f, 0.0f};
 	float3 normal{ 0.0f, 0.0f, 0.0f };
-	size_t materialIndex;
+	size_t materialIndex = 0u;
 };
 
 struct Sphere
@@ -106,7 +107,7 @@ __constant__  Sphere spheresSimple[] =
 	  { 19.0f, { 0.0f, -19.0f, 0.0f }, 2u},
 	  { 1.0f, { -6.5f, 1.0f, 0.0f }, 2u}
 };
-
+/*
 __constant__ static float jitterMatrix[10] =
 {
    -0.25,  0.75,
@@ -115,7 +116,7 @@ __constant__ static float jitterMatrix[10] =
 	0.25, -0.75,
 	0.0f, 0.0f
 };
-
+*/
 __device__ static float fresnel_schlick_ratio(float cos_theta_incident, float power)
 {
 	float p = 1.0f - cos_theta_incident;
@@ -240,12 +241,12 @@ __device__ HitInfo intersect_sphere(const Ray& r, const Sphere& s)
 	return hit;
 }
 
-__device__ HitInfo rayTriangleIntersect(const Ray& ray, const GPU_Mesh::Triangle& tri)
+__device__ HitInfo rayTriangleIntersect(const Ray& ray, const GPU_Mesh::Triangle* tri)
 {
-	float3 edgeAB = tri.pos1 - tri.pos0;
-	float3 edgeAC = tri.pos2 - tri.pos0;
+	float3 edgeAB = tri->pos1 - tri->pos0;
+	float3 edgeAC = tri->pos2 - tri->pos0;
 	float3 normalVector = cross(edgeAB, edgeAC);
-	float3 ao = (ray.origin) - tri.pos0;
+	float3 ao = (ray.origin) - tri->pos0;
 	float3 dao = cross(ao, ray.direction);
 
 	float determinant = -dot(ray.direction, normalVector);
@@ -261,11 +262,32 @@ __device__ HitInfo rayTriangleIntersect(const Ray& ray, const GPU_Mesh::Triangle
 	HitInfo hit;
 	hit.didHit = determinant >= 1E-6 && dst >= 0.0f && u >= 0.0f && v >= 0.0f && w >= 0.0f;
 	hit.hitPoint = (ray.origin) + ray.direction * dst;
-	hit.normal = normalize(tri.n0 * w + tri.n1 * u + tri.n2 * v);
+	hit.normal = normalize(tri->n0 * w + tri->n1 * u + tri->n2 * v);
 	//hit.normal = normalVector;
 	hit.dst = dst;
 
 	return hit;
+}
+
+void __device__ IntersectTri(Ray& ray, HitInfo& hit, GPU_Mesh::Triangle* tri)
+{
+	float3 edge1 = tri->pos1 - tri->pos0, edge2 = tri->pos2 - tri->pos0;
+	float3 h = cross(ray.direction, edge2);
+	float a = dot(edge1, h);
+	if (a > -0.00001f && a < 0.00001f) return; // ray parallel to triangle
+	float f = 1 / a;
+	float3 s = ray.origin - tri->pos0;
+	float u = f * dot(s, h);
+	if (u < 0 || u > 1) return;
+	float3 q = cross(s, edge1);
+	float v = f * dot(ray.direction, q);
+	if (v < 0 || u + v > 1) return;
+	float t = f * dot(edge2, q);
+	if (t > 0.0001f && t < hit.dst)
+	{
+		hit.dst = t;
+		hit.didHit = true;
+	}
 }
 
 __device__ bool rayBoxIntersection(const Ray& r, const float3& min, const float3& max)
@@ -284,6 +306,48 @@ __device__ bool rayBoxIntersection(const Ray& r, const float3& min, const float3
 	return (t[8] < 0 || t[7] > t[8]);
 }
 
+__device__ bool rayBoxIntersectionDebug(const Ray& ray, HitInfo& hit, const float3& bmin, const float3& bmax)
+{
+	float tx1 = (bmin.x - ray.origin.x) / ray.direction.x, tx2 = (bmax.x - ray.origin.x) / ray.direction.x;
+	float tmin = min(tx1, tx2), tmax = max(tx1, tx2);
+	float ty1 = (bmin.y - ray.origin.y) / ray.direction.y, ty2 = (bmax.y - ray.origin.y) / ray.direction.y;
+	tmin = max(tmin, min(ty1, ty2)), tmax = min(tmax, max(ty1, ty2));
+	float tz1 = (bmin.z - ray.origin.z) / ray.direction.z, tz2 = (bmax.z - ray.origin.z) / ray.direction.z;
+	tmin = max(tmin, min(tz1, tz2)), tmax = min(tmax, max(tz1, tz2));
+
+	bool didHit (tmax >= tmin && tmin < hit.dst && tmax > 0);
+
+	float3 c = (bmin + bmax) * 0.5f;
+
+	hit.didHit = didHit;
+	hit.dst = tmin;
+	hit.hitPoint = ray.direction * tmin + ray.origin;
+
+	float3 p = hit.hitPoint - c;
+	float3 d = (bmin - bmax) * 0.5f;
+
+	float bias = 1.0001f;
+
+	hit.normal = normalize( make_float3(float(int(p.x / abs(d.x) * bias)),
+										float(int(p.y / abs(d.y) * bias)),
+										float(int(p.z / abs(d.z) * bias))) );
+
+	//hit.hitPoint = c;
+
+	return didHit;
+}
+
+__device__ float IntersectAABB(const Ray& ray, const HitInfo& hit, const float3 bmin, const float3 bmax)
+{
+	float tx1 = (bmin.x - ray.origin.x) / ray.direction.x, tx2 = (bmax.x - ray.origin.x) / ray.direction.x;
+	float tmin = min(tx1, tx2), tmax = max(tx1, tx2);
+	float ty1 = (bmin.y - ray.origin.y) / ray.direction.y, ty2 = (bmax.y - ray.origin.y) / ray.direction.y;
+	tmin = max(tmin, min(ty1, ty2)), tmax = min(tmax, max(ty1, ty2));
+	float tz1 = (bmin.z - ray.origin.z) / ray.direction.z, tz2 = (bmax.z - ray.origin.z) / ray.direction.z;
+	tmin = max(tmin, min(tz1, tz2)), tmax = min(tmax, max(tz1, tz2));
+	if( tmax >= tmin && tmin < hit.dst && tmax > 0) return tmin; else return FLT_MAX;
+}
+/*
 __device__ HitInfo intersect_triangles(const Ray& r, const GPU_Mesh* vbo)
 {
 	HitInfo hit;
@@ -312,8 +376,108 @@ __device__ HitInfo intersect_triangles(const Ray& r, const GPU_Mesh* vbo)
 	
 	return closestHit;
 }
+*/
+__device__ void IntersectBVH(Ray& ray, HitInfo& hit, const GPU_Mesh* vbo, int debug)
+{
 
-__device__ HitInfo intersect_scene(const Ray& r, const GPU_Mesh* vbo)
+#define USE_BVH 2
+
+#if	USE_BVH == 0
+	HitInfo closestHit;
+
+	for (uint16_t i = 0; i < vbo->numTris; i++)
+	{
+		hit = rayTriangleIntersect(ray, &vbo->triangleBuffer[i]);
+
+		if (hit.didHit && hit.dst < closestHit.dst)
+		{
+			closestHit = hit;
+		}
+	}
+
+	hit = closestHit;
+
+#endif
+
+#if USE_BVH == 1
+
+	GPU_Mesh::BVHNode* node = &vbo->bvhNode[0];
+	GPU_Mesh::BVHNode* stack[32];
+
+	uint32_t stackPtr = 0;
+
+	HitInfo closestHit;
+
+	while (1)
+	{
+		if (node->triCount > 0) // isLeaf()
+		{
+			for (uint16_t i = 0; i < node->triCount; i++)
+			{
+				uint16_t instPrim = vbo->triIdx[node->leftFirst + i];
+				GPU_Mesh::Triangle* triangle = &vbo->triangleBuffer[instPrim];
+
+				//if(stackPtr < debug)
+				hit = rayTriangleIntersect(ray, triangle);
+
+				if (hit.didHit && hit.dst < closestHit.dst)
+				{
+					closestHit = hit;
+				}
+			}
+			if (stackPtr == 0) break; else node = stack[--stackPtr];
+			continue;
+		}
+
+		GPU_Mesh::BVHNode* child1 = &vbo->bvhNode[node->leftFirst];
+		GPU_Mesh::BVHNode* child2 = &vbo->bvhNode[node->leftFirst +1];
+
+		float dist1 = IntersectAABB(ray, closestHit, child1->aabbMin, child1->aabbMax);
+		float dist2 = IntersectAABB(ray, closestHit, child2->aabbMin, child2->aabbMax);
+
+		//
+		//hit.dst = fminf(dist1, dist2);
+
+		if (dist1 > dist2)
+		{
+			float d = dist1; dist1 = dist2; dist2 = d;
+			GPU_Mesh::BVHNode* c = child1; child1 = child2; child2 = c;
+		}
+		if (dist1 == FLT_MAX)
+		{
+			if (stackPtr == 0)
+			{
+				break;
+			}
+			else
+			{
+				node = stack[--stackPtr];
+			}
+		}
+		else
+		{
+			node = child1;
+			if (dist2 != FLT_MAX) stack[stackPtr++] = child2;
+		}
+	}
+
+	hit = closestHit;
+
+#elif USE_BVH == 2
+
+	HitInfo closestHit;
+
+	GPU_Mesh::BVHNode* child1 = &vbo->bvhNode[debug];
+
+	if (rayBoxIntersectionDebug(ray, closestHit, child1->aabbMin, child1->aabbMax))
+	{
+		hit = closestHit;
+	}
+
+#endif
+}
+
+__device__ HitInfo intersect_scene(Ray& r, const GPU_Mesh* vbo, int debug)
 {
 	HitInfo hit;
 	HitInfo closestHit;
@@ -331,7 +495,7 @@ __device__ HitInfo intersect_scene(const Ray& r, const GPU_Mesh* vbo)
 		}
 	}
 
-	hit = intersect_triangles(r, vbo);
+	IntersectBVH(r, hit, vbo, debug);
 
 	if (hit.didHit && hit.dst < closestHit.dst)
 	{
@@ -342,7 +506,7 @@ __device__ HitInfo intersect_scene(const Ray& r, const GPU_Mesh* vbo)
 	return closestHit;
 }
 
-__device__ float3 radiance(Ray& r, uint32_t& s1, const Scene* scene, size_t bounces, const GPU_Mesh* vbo) // Returns ray color
+__device__ float3 radiance(Ray& r, uint32_t& s1, const Scene* scene, size_t bounces, const GPU_Mesh* vbo, int debug) // Returns ray color
 {
 	float3 accucolor = make_float3(0.0f, 0.0f, 0.0f); // Accumulates ray colour with each iteration through bounce loop
 	float3 mask = make_float3(1.0f, 1.0f, 1.0f);
@@ -350,7 +514,7 @@ __device__ float3 radiance(Ray& r, uint32_t& s1, const Scene* scene, size_t boun
 	for (size_t b = 0; b < bounces; b++)
 	{
 		// Test ray for intersection with scene
-		HitInfo hit = intersect_scene(r, vbo);
+		HitInfo hit = intersect_scene(r, vbo, debug);
 
 		if (!hit.didHit)
 		{
@@ -391,14 +555,14 @@ __device__ float3 radiance(Ray& r, uint32_t& s1, const Scene* scene, size_t boun
 		mask *= 1.0f / p;
 
 		//Debug output
-		//accucolor = { hit.dst*0.01f };
+		//accucolor = { hit.normal };
 	}
 
 
 	return accucolor;
 }
 
-__global__ void render_kernel(float3* buf, uint32_t width, uint32_t height, Camera_GPU camera, const Scene* scene, size_t samples,
+__global__ void render_kernel(float3* buf, uint32_t width, uint32_t height, Camera_GPU camera, const Scene* scene, int samples,
 							  size_t bounces, uint32_t sampleIndex, const GPU_Mesh* vbo)
 {
 	// Assign a CUDA thread to every pixel (x,y) blockIdx, blockDim and threadIdx are CUDA specific
@@ -433,7 +597,7 @@ __global__ void render_kernel(float3* buf, uint32_t width, uint32_t height, Came
 	float3 camUp = make_float3(camera.localToWorldMatrix[4], camera.localToWorldMatrix[5], camera.localToWorldMatrix[6]);
 
 	// Samples per pixel
-	for (size_t s = 0; s < samples; s++)
+	for (size_t s = 0; s < 1u; s++)
 	{
 		// Create primary ray, add incoming radiance to pixelcolor
 		Ray ray = Ray(camera.pos, {0.0f, 0.0f, 0.0f});
@@ -447,7 +611,7 @@ __global__ void render_kernel(float3* buf, uint32_t width, uint32_t height, Came
 		//ray.direction = normalize(jitteredViewPoint) * focusDistance;
 		ray.direction = normalize(viewPoint - ray.origin);
 
-		lightContribution += radiance(ray, s1, scene, bounces, vbo) * (1.0 / samples);
+		lightContribution += radiance(ray, s1, scene, bounces, vbo, samples);// *(1.0 / samples);
 	}
 
 	// Write rgb value of pixel to image buffer on the GPU
@@ -507,7 +671,7 @@ void CudaRenderer::Compute(void)
 	camera_buffer_obj.aperture = m_aperture;
 	camera_buffer_obj.focusDist = m_focusDist;
 
-	render_kernel <<<blocks, threads>>> (m_accumulationBuffer_GPU, m_width, m_height, camera_buffer_obj, m_deviceScene, m_samples, *m_bounces, *m_sampleIndex, m_deviceMesh);
+	render_kernel <<<blocks, threads>>> (m_accumulationBuffer_GPU, m_width, m_height, camera_buffer_obj, m_deviceScene, *m_samples, *m_bounces, *m_sampleIndex, m_deviceMesh);
 
 	// Check for any errors launching the kernel
 	cudaStatus = cudaGetLastError();
@@ -519,9 +683,11 @@ void CudaRenderer::Compute(void)
 
 	cudaDeviceSynchronize();
 
+	cudaStatus = cudaGetLastError();
+
 	if (cudaStatus != cudaSuccess)
 	{
-		fprintf(stderr, "cudaDeviceSynchronize returned error code %d after launching render_kernel!\n", cudaStatus);
+		fprintf(stderr, "cudaDeviceSynchronize returned error code %s after launching render_kernel!\n", cudaGetErrorString(cudaStatus));
 		goto Error;
 	}
 
@@ -539,7 +705,7 @@ void CudaRenderer::Compute(void)
 
 	if (cudaStatus != cudaSuccess)
 	{
-		fprintf(stderr, "cudaDeviceSynchronize returned error code %d after launching floatToImageData_kernel!\n", cudaStatus);
+		fprintf(stderr, "cudaDeviceSynchronize returned error code %s after launching floatToImageData_kernel!\n", cudaGetErrorString(cudaStatus));
 		goto Error;
 	}
 
@@ -552,7 +718,8 @@ void CudaRenderer::Compute(void)
 	}
 	//cudaFree(output_buffer_gpu);
 
-	Error:
+Error:
+	printf("");
 }
 
 void CudaRenderer::SetCamera(float3 pos, float3 dir, float aperture, float focusDist)

@@ -1,10 +1,9 @@
 #include <iostream>
 #include <fstream>
-#include <vector>
+
 #include <memory>
 
 #include "GPU_Mesh.h"
-#include "cutil_math.cuh"
 
 void GPU_Mesh::CalculateBbox(GPU_Mesh::MeshInfo& meshInfo)
 {
@@ -28,10 +27,9 @@ void GPU_Mesh::CalculateBbox(GPU_Mesh::MeshInfo& meshInfo)
     }
 }
 
-
-void GPU_Mesh::LoadOBJFile(const std::string& path, size_t materialIndex)
+void GPU_Mesh::LoadOBJFile(const std::string& path, uint16_t materialIndex)
 {
-    size_t importTriangleCount = 0u;
+    uint16_t importTriangleCount = 0u;
 
     std::ifstream infile(path, std::ifstream::in);
     std::string line;
@@ -87,9 +85,9 @@ void GPU_Mesh::LoadOBJFile(const std::string& path, size_t materialIndex)
 
     }
 
-    size_t meshTriCount = 0u;
+    uint16_t meshTriCount = 0u;
 
-    for (size_t i = 0u; i < numMeshes; i++)
+    for (uint16_t i = 0u; i < numMeshes; i++)
     {
         meshTriCount += meshInfoBuffer[i].triangleCount;
     }
@@ -99,7 +97,7 @@ void GPU_Mesh::LoadOBJFile(const std::string& path, size_t materialIndex)
     std::memset(newTriBuf, 0, (meshTriCount + importTriangleCount) * sizeof(Triangle));
     std::memcpy(newTriBuf, triangleBuffer, meshTriCount * sizeof(Triangle));
 
-    for (size_t i = 0, j = 0; i < importTriangleCount; i++, j+=9)
+    for (uint16_t i = 0, j = 0; i < importTriangleCount; i++, j+=9)
     {
         Triangle newTri;
 
@@ -134,7 +132,116 @@ void GPU_Mesh::LoadOBJFile(const std::string& path, size_t materialIndex)
     std::memcpy(&newMeshInfoBuf[numMeshes], &newMeshInfo, sizeof(MeshInfo));
 
     meshInfoBuffer = newMeshInfoBuf;
-    //std::memcpy(&meshInfoBuffer[numMeshes], newMeshInfoBuf, sizeof(MeshInfo));
 
     numMeshes++;
+}
+
+void GPU_Mesh::UpdateNodeBounds(uint32_t nodeIdx)
+{
+    BVHNode& node = bvhNode[nodeIdx];
+    //BVHNode& node = bvhNodeVector.at(nodeIdx);
+    node.aabbMin = make_float3(1e30f, 1e30f, 1e30f);
+    node.aabbMax = make_float3(-1e30f, -1e30f, -1e30f);
+
+    for (uint32_t first = node.leftFirst, i = 0; i < node.triCount; i++)
+    {
+        uint32_t leafTriIdx = triIdx[first + i];
+        Triangle& leafTri = triangleBuffer[leafTriIdx];
+        node.aabbMin = cfminf(node.aabbMin, leafTri.pos0),
+        node.aabbMin = cfminf(node.aabbMin, leafTri.pos1),
+        node.aabbMin = cfminf(node.aabbMin, leafTri.pos2),
+        node.aabbMax = cfmaxf(node.aabbMax, leafTri.pos0),
+        node.aabbMax = cfmaxf(node.aabbMax, leafTri.pos1),
+        node.aabbMax = cfmaxf(node.aabbMax, leafTri.pos2);
+    }
+}
+
+void GPU_Mesh::Subdivide(uint32_t nodeIdx)
+{
+    // terminate recursion
+    BVHNode& node = bvhNode[nodeIdx];
+    //BVHNode& node = bvhNodeVector.at(nodeIdx);
+
+    if (node.triCount <= 2)
+    {
+        return;
+    }
+    if (nodesUsed >= 7)
+    {
+        int debug = 1;
+    }
+
+    // determine split axis and position
+    float3 extent = node.aabbMax - node.aabbMin;
+    int axis = 0;
+    if (extent.y > extent.x) axis = 1;
+    if (extent.z > (&extent.x)[axis]) axis = 2;
+    float splitPos = (&node.aabbMin.x)[axis] + (&extent.x)[axis] * 0.5f;
+
+    // in-place partition
+    uint32_t i = node.leftFirst;
+    uint32_t j = i + node.triCount - 1;
+    while (i <= j)
+    {
+        if ((&triangleBuffer[triIdx[i]].centroid.x)[axis] < splitPos)
+            i++;
+        else
+            std::swap(triIdx[i], triIdx[j--]);
+    }
+
+    // abort split if one of the sides is empty
+    uint32_t leftCount = i - node.leftFirst;
+    if (leftCount == 0 || leftCount == node.triCount) return;
+
+    // create child nodes
+    uint32_t leftChildIdx = nodesUsed++;
+    uint32_t rightChildIdx = nodesUsed++;
+    bvhNode[leftChildIdx].leftFirst = node.leftFirst;
+    bvhNode[leftChildIdx].triCount = leftCount;
+    bvhNode[rightChildIdx].leftFirst = i;
+    bvhNode[rightChildIdx].triCount = node.triCount - leftCount;
+
+    //bvhNodeVector.at(leftChildIdx).leftFirst = node.leftFirst;
+    //bvhNodeVector.at(leftChildIdx).triCount = leftCount;
+    //bvhNodeVector.at(rightChildIdx).leftFirst = i;
+    //bvhNodeVector.at(rightChildIdx).triCount = node.triCount - leftCount;
+
+    node.leftFirst = leftChildIdx;
+    node.triCount = 0;
+
+    UpdateNodeBounds(leftChildIdx);
+    UpdateNodeBounds(rightChildIdx);
+    // recurse
+    Subdivide(leftChildIdx);
+    Subdivide(rightChildIdx);
+}
+
+void GPU_Mesh::BuildBVH()
+{
+    bvhNode = new BVHNode[numTris * 2 - 1];
+    triIdx = new uint32_t[numTris];
+    //bvhNodeVector.resize(numTris * 2 - 1);
+
+    for (uint32_t i = 0; i < numTris; i++)
+    {
+        triangleBuffer[i].centroid = (triangleBuffer[i].pos0 + triangleBuffer[i].pos1 + triangleBuffer[i].pos2) * 0.3333f;
+        triIdx[i] = i;
+    }
+
+    // assign all triangles to root node
+    BVHNode& root = bvhNode[rootNodeIdx];
+    //BVHNode& root = bvhNodeVector.at(rootNodeIdx);
+
+    root.leftFirst = 0;
+    root.triCount = numTris;
+
+    UpdateNodeBounds(rootNodeIdx);
+    // subdivide recursively
+    Subdivide(rootNodeIdx);
+
+    //Resize
+    BVHNode* newArr = new BVHNode[nodesUsed];
+    memcpy(newArr, bvhNode, nodesUsed * sizeof(BVHNode));
+    delete[] bvhNode;
+    bvhNode = newArr;
 }

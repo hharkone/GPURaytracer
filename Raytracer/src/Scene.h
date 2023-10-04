@@ -17,7 +17,7 @@ struct Scene
     float skyBrightness = 1.2f;
     float3 skyColorHorizon = make_float3(0.55f, 0.66f, 0.9f);
     float3 skyColorZenith  = make_float3(0.28f, 0.28f, 0.75f);
-    float3 groundColor     = make_float3(0.08f, 0.08f, 0.08f);
+    float3 groundColor     = make_float3(0.47f, 0.519, 0.682f);
     float sunFocus = 50.0f;
     float sunIntensity = 10.0f;
 

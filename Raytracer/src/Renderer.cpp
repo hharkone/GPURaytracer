@@ -38,16 +38,7 @@ void Renderer::OnResize(uint32_t width, uint32_t height)
 	delete[] m_imageData;
 	m_imageData = new uint32_t[width * height];
 
-	m_imgHorizontalIterator.resize(width);
-	m_imgVerticalIterator.resize(height);
-
-	for (uint32_t i = 0; i < width; i++)
-		m_imgHorizontalIterator[i] = i;
-
-	for (uint32_t i = 0; i < height; i++)
-		m_imgVerticalIterator[i] = i;
-
-	m_cudaRenderer = std::shared_ptr<CudaRenderer>(new CudaRenderer(width, height, &m_activeScene, &m_frameIndex, 1u, &m_settings.bounces));
+	m_cudaRenderer = std::shared_ptr<CudaRenderer>(new CudaRenderer(width, height, &m_activeScene, &m_frameIndex, &GetSettings().samples, &m_settings.bounces));
 }
 
 void Renderer::Render(const Scene& scene, const Camera& camera)
@@ -92,7 +83,6 @@ void Renderer::Render(const Scene& scene, const Camera& camera)
 		m_cudaRenderer->SetViewMat(x3, y3, z3, w3);
 		m_cudaRenderer->SetLocalToWorldMat(x4, y4, z4, w4);
 
-		//m_cudaData = m_cudaRenderer->getOutputData();
 		m_cudaRenderer->Compute();
 
 		m_imageData = m_cudaRenderer->getImageData();

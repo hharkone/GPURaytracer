@@ -21,6 +21,7 @@ public:
     {
         bool accumulate = true;
         int bounces = 5;
+        int samples = 0;
     };
 
 public:
@@ -61,7 +62,6 @@ private:
     const Scene* m_activeScene = nullptr;
     const Camera* m_activeCamera = nullptr;
     std::shared_ptr<Walnut::Image> m_finalImage;
-    std::vector<uint32_t> m_imgHorizontalIterator, m_imgVerticalIterator;
 
     uint32_t* m_imageData = nullptr;
     Settings m_settings;

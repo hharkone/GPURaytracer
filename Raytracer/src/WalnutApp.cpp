@@ -7,6 +7,7 @@
 #include "Walnut/Timer.h"
 #include "Renderer.h"
 #include "Camera.h"
+#include "cuda_runtime.h"
 
 using namespace Walnut;
 
@@ -18,6 +19,7 @@ public:
 		: m_camera(50.0f, 0.1f, 1000000.0f)
 	{
 		m_rendetTimeVec.resize(20);
+		cudaGetDeviceProperties(&prop, 0);
 		/*
 		{
 			Sphere sphere;
@@ -185,7 +187,9 @@ public:
 		ImGui::SetColorEditOptions(ImGuiColorEditFlags_Float | ImGuiColorEditFlags_HDR | ImGuiColorEditFlags_PickerHueWheel);
 
 		ImGui::Begin("Settings");
+		ImGui::Text("CUDA Device: %s", prop.name);
 		ImGui::Text("Last render time: %.3f ms", m_renderTimeMs);
+		ImGui::Text("%i Million primary rays per second", m_raysPerSec);
 		ImGui::Text("Sample Index: %i", m_renderer.GetFrameIndex());
 		/*
 		//ImGui::Text("Camera DirX: %.2f, %.2f, %.2f, %.2f", m_camera.GetProjection()[0].x, m_camera.GetProjection()[0].y, m_camera.GetProjection()[0].z, m_camera.GetProjection()[0].w);
@@ -204,6 +208,7 @@ public:
 		if (ImGui::DragFloat("Aperture", &m_camera.m_aperture, 0.01f, 0.0f, 1.0f)) { m_sceneChanged = true; }
 		if (ImGui::DragFloat("Focus Distance", &m_camera.m_focusDistance, 0.1f, 0.01f, 1000.0f)) { m_sceneChanged = true; }
 		if (ImGui::SliderInt("Max Bounces", &m_renderer.GetSettings().bounces, 0, 30)) { m_sceneChanged = true; }
+		if (ImGui::SliderInt("BVH Debug", &m_renderer.GetSettings().samples, 0, 64)) { m_sceneChanged = true; }
 
 		if (ImGui::Button("Reset") || m_sceneChanged)
 		{
@@ -302,6 +307,11 @@ public:
 			sum += m_rendetTimeVec.at(i);
 		}
 		m_renderTimeMs = sum / m_rendetTimeVec.size();
+
+		if (m_renderTimeMs > 10)
+		{
+			m_raysPerSec = (m_viewportWidth * m_viewportHeight) * (1000u / (size_t)m_renderTimeMs) / 1000000u;
+		}
 	}
 
 private:
@@ -310,7 +320,9 @@ private:
 	float m_renderTimeMs = 0.0f;
 	std::deque<float> m_rendetTimeVec;
 	uint32_t m_viewportWidth = 0, m_viewportHeight = 0;
+	uint32_t m_raysPerSec;
 	Scene m_scene;
+	cudaDeviceProp prop;
 	bool m_sceneChanged = false;
 };
 
