@@ -429,6 +429,15 @@ inline __host__ __device__ float3 reflect(float3 i, float3 n)
 {
     return i - 2.0f * n * dot(n, i);
 }
+inline __host__ __device__ float3 refract(float3 i, float3 n, float eta)
+{
+   float d = dot(n, i);
+   float  k = 1.0f - eta * eta * (1.0 - d * d);
+    if (k < 0.0)
+        return make_float3(0.0f, 0.0f, 0.0f);
+    else
+        return eta * i - (eta * d + fsqrtf(k)) * n;
+}
 
 // absolute value
 inline __host__ __device__ float3 fabs(float3 v)

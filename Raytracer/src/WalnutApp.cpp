@@ -191,22 +191,8 @@ public:
 		ImGui::Text("Last render time: %.3f ms", m_renderTimeMs);
 		ImGui::Text("%i Million primary rays per second", m_raysPerSec);
 		ImGui::Text("Sample Index: %i", m_renderer.GetFrameIndex());
-		/*
-		//ImGui::Text("Camera DirX: %.2f, %.2f, %.2f, %.2f", m_camera.GetProjection()[0].x, m_camera.GetProjection()[0].y, m_camera.GetProjection()[0].z, m_camera.GetProjection()[0].w);
-		//ImGui::Text("Camera DirY: %.2f, %.2f, %.2f, %.2f", m_camera.GetProjection()[1].x, m_camera.GetProjection()[1].y, m_camera.GetProjection()[1].z, m_camera.GetProjection()[1].w);
-		//ImGui::Text("Camera DirZ: %.2f, %.2f, %.2f, %.2f", m_camera.GetProjection()[2].x, m_camera.GetProjection()[2].y, m_camera.GetProjection()[2].z, m_camera.GetProjection()[2].w);
-		//ImGui::Text("Camera DirW: %.2f, %.2f, %.2f, %.2f", m_camera.GetProjection()[3].x, m_camera.GetProjection()[3].y, m_camera.GetProjection()[3].z, m_camera.GetProjection()[3].w);
-		//ImGui::Text("Camera ViewX: %.2f, %.2f, %.2f, %.2f", m_camera.GetView()[0].x, m_camera.GetView()[0].y, m_camera.GetView()[0].z, m_camera.GetView()[0].w);
-		//ImGui::Text("Camera ViewY: %.2f, %.2f, %.2f, %.2f", m_camera.GetView()[1].x, m_camera.GetView()[1].y, m_camera.GetView()[1].z, m_camera.GetView()[1].w);
-		//ImGui::Text("Camera ViewZ: %.2f, %.2f, %.2f, %.2f", m_camera.GetView()[2].x, m_camera.GetView()[2].y, m_camera.GetView()[2].z, m_camera.GetView()[2].w);
-		//ImGui::Text("Camera ViewW: %.2f, %.2f, %.2f, %.2f", m_camera.GetView()[3].x, m_camera.GetView()[3].y, m_camera.GetView()[3].z, m_camera.GetView()[3].w);
-		*/
-		ImGui::Text("Camera POS: %.2f, %.2f, %.2f", m_camera.GetPosition().x, m_camera.GetPosition().y, m_camera.GetPosition().z);
+
 		ImGui::Checkbox("Accumulate", &m_renderer.GetSettings().accumulate);
-		ImGui::DragFloat("Camera Speed", &m_camera.GetSpeed(), 0.1f);
-		if (ImGui::DragFloat("Camera FOV", &m_camera.GetFOV(), 0.1f, 0.01f, 179.0f)) { m_sceneChanged = true; m_camera.RecalculateProjection(); }
-		if (ImGui::DragFloat("Aperture", &m_camera.m_aperture, 0.01f, 0.0f, 1.0f)) { m_sceneChanged = true; }
-		if (ImGui::DragFloat("Focus Distance", &m_camera.m_focusDistance, 0.01f, 0.01f, 1000.0f)) { m_sceneChanged = true; }
 		if (ImGui::SliderInt("Max Bounces", &m_renderer.GetSettings().bounces, 0, 30)) { m_sceneChanged = true; }
 		if (ImGui::SliderInt("BVH Debug", &m_renderer.GetSettings().samples, 0, 1000)) { m_sceneChanged = true; }
 
@@ -218,7 +204,7 @@ public:
 
 		ImGui::End();
 
-		ImGui::Begin("Scene");
+		ImGui::Begin("Scene Settings");
 		ImGuiColorEditFlags misc_flags = ImGuiColorEditFlags_HDR;
 		static ImGuiSliderFlags flags = ImGuiSliderFlags_None;
 		static ImGuiSliderFlags flagLog = ImGuiSliderFlags_Logarithmic;
@@ -231,6 +217,37 @@ public:
 		if (ImGui::ColorEdit3("Sky Color Zenith", &(m_scene.skyColorZenith.x))) { m_sceneChanged = true; }
 		if (ImGui::ColorEdit3("Ground Color", &(m_scene.groundColor.x))) { m_sceneChanged = true; }
 
+		ImGui::End();
+
+		ImGui::Begin("Camera");
+
+		ImGui::Text("Camera POS: %.2f, %.2f, %.2f", m_camera.GetPosition().x, m_camera.GetPosition().y, m_camera.GetPosition().z);
+		
+		ImGui::DragFloat("Camera Speed", &m_camera.GetSpeed(), 0.01f, 0.01f, 100.0f);
+		if (ImGui::DragFloat("Camera FOV", &m_camera.GetFOV(), 0.1f, 0.01f, 179.0f)) { m_sceneChanged = true; m_camera.RecalculateProjection(); }
+		if (ImGui::DragFloat("Aperture", &m_camera.m_aperture, 0.01f, 0.0f, 1.0f)) { m_sceneChanged = true; }
+		if (ImGui::DragFloat("Focus Distance", &m_camera.m_focusDistance, 0.01f, 0.01f, 1000.0f)) { m_sceneChanged = true; }
+
+		ImGui::End();
+
+		ImGui::Begin("Scene");
+		for (size_t i = 0u; i < m_scene.sphereCount; i++)
+		{
+			ImGui::PushID((int)i);
+			ImGui::AlignTextToFramePadding();
+
+			Sphere& sphere = m_scene.spheresSimple[i];
+			int dragInt = (int)sphere.materialIndex;
+
+			ImGui::Text("Sphere: %i", i);
+			if (ImGui::DragFloat("Radius", &sphere.rad, 0.1f, 0.01f, 179.0f)) { m_sceneChanged = true; }
+			if (ImGui::DragFloat3("Position", &sphere.pos.x, 0.1f, -100.0f, 100.0f)) { m_sceneChanged = true; }
+			if (ImGui::SliderInt("Material ID", &dragInt, 0, m_scene.materialCount-1)) { m_sceneChanged = true; }
+			sphere.materialIndex = (uint16_t)dragInt;
+
+			ImGui::Separator();
+			ImGui::PopID();
+		}
 		ImGui::End();
 
 		ImGui::Begin("Materials");
@@ -247,6 +264,11 @@ public:
 			if (ImGui::SliderFloat("Roughness", &(mat.roughness), 0.0f, 1.0f, "%.3f")) { m_sceneChanged = true; }
 			if (ImGui::ColorEdit3("Emission", &(mat.emission.x))) { m_sceneChanged = true; }
 			if (ImGui::SliderFloat("Emission Intensity", &(mat.emissionIntensity), 0.0f, 1000.0f, "%.3f", flagLog)) { m_sceneChanged = true; }
+			if (ImGui::ColorEdit3("Transmission Color", &(mat.transmissionColor.x))) { m_sceneChanged = true; }
+			if (ImGui::SliderFloat("Transmission", &mat.transmission, 0.0f, 1.0f, "%.3f")) { m_sceneChanged = true; }
+			if (ImGui::SliderFloat("Transmission Roughness", &mat.transmissionRoughness, 0.0f, 1.0f, "%.3f")) { m_sceneChanged = true; }
+			if (ImGui::SliderFloat("Transmission Density", &mat.transmissionDensity, 0.0f, 1.0f, "%.3f")) { m_sceneChanged = true; }
+			if (ImGui::SliderFloat("IOR", &mat.ior, 1.0f, 32.0f, "%.3f", flagLog)) { m_sceneChanged = true; }
 			ImGui::Separator();
 			ImGui::PopID();
 		}
@@ -308,9 +330,9 @@ public:
 		}
 		m_renderTimeMs = sum / m_rendetTimeVec.size();
 
-		if (m_renderTimeMs > 10)
+		if (m_renderTimeMs > 0.0f)
 		{
-			m_raysPerSec = (m_viewportWidth * m_viewportHeight) * (1000u / (size_t)m_renderTimeMs) / 1000000u;
+			m_raysPerSec = uint32_t((m_viewportWidth * m_viewportHeight) * (1000.0 / m_renderTimeMs) / 1000000);
 		}
 	}
 

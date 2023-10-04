@@ -38,27 +38,6 @@ public:
 
 private:
 
-    struct Hit
-    {
-        bool didHit = false;
-        int debugHit = 0;
-        float hitDistance = std::numeric_limits<float>::max();
-        glm::vec3 worldPosition = glm::vec3(0.0);
-        glm::vec3 worldNormal = glm::vec3(0.0);
-        int objectIndex = -1;
-        int primIndex = -1;
-        int materialIndex;
-    };
-    /*
-    glm::vec4 PerPixel(uint32_t x, uint32_t y);
-    glm::vec3 TraceRay(RayCPU& ray, uint32_t& seed);
-    Hit raySphere(const RayCPU& ray, const Sphere& sphere);
-    Hit rayTriangleIntersect(const RayCPU& ray, const Mesh::Triangle& tri, const glm::vec3& origin);
-    Hit CalculateRayCollision(const RayCPU& ray);
-    glm::vec3 GetEnvironmentLight(RayCPU& ray);
-    */
-private:
-
     const Scene* m_activeScene = nullptr;
     const Camera* m_activeCamera = nullptr;
     std::shared_ptr<Walnut::Image> m_finalImage;

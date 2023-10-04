@@ -50,17 +50,11 @@ struct Ray
 struct HitInfo
 {
 	bool didHit = false;
+	bool inside = false;
 	float dst = FLT_MAX;
 	float3 hitPoint {0.0f, 0.0f, 0.0f};
 	float3 normal{ 0.0f, 0.0f, 0.0f };
 	size_t materialIndex = 0u;
-};
-
-struct Sphere
-{
-	float rad;            // Radius
-	float3 pos;           // Position
-	size_t materialIndex; // Material Index
 };
 
 struct Camera_GPU
@@ -82,7 +76,7 @@ void CudaRenderer::Clear()
 	cudaMemset(m_accumulationBuffer_GPU, 0, m_bufferSize);
 	cudaMemset(m_imageData_GPU, 0, m_width * m_height * sizeof(uint32_t));
 }
-
+/*
 // SCENE 9 spheres forming a Cornell box small enough to be in constant GPU memory 
 __constant__ Sphere spheres[] =
 {
@@ -99,14 +93,7 @@ __constant__ Sphere spheres[] =
 	  { 100.0f,{ 150.0f, 181.6f - 1.9f, 80.0f }, 7u }  // Light
 	  //{ 2.1f,{ 40.0f, 40.5f, 47.0f }, Material{ { 0.8f, 0.8f, 0.8f }, 0.1f, { 150.0f, 160.0f, 180.0f }, 0.0f} }      // Light
 };
-
-__constant__  Sphere spheresSimple[] =
-{
-	//{ float radius, { float3 position }, { Material }}
-	  { 1.0f, { -6.0f, 1.0f, 0.0f }, 4u},
-	  { 19.0f, { 0.0f, -19.0f, 0.0f }, 1u},
-	  { 1.0f, { -8.5f, 1.0f, 0.0f }, 2u}
-};
+*/
 /*
 __constant__ static float jitterMatrix[10] =
 {
@@ -260,11 +247,13 @@ __device__ HitInfo rayTriangleIntersect(const Ray& ray, const GPU_Mesh::Triangle
 
 	// Initialize hit info
 	HitInfo hit;
-	hit.didHit = determinant >= 1E-6 && dst >= 0.0f && u >= 0.0f && v >= 0.0f && w >= 0.0f;
+	//hit.didHit = determinant >= 1E-6 && dst >= 0.0f && u >= 0.0f && v >= 0.0f && w >= 0.0f;
+	hit.didHit = dst >= 0.0f && u >= 0.0f && v >= 0.0f && w >= 0.0f;
 	hit.hitPoint = (ray.origin) + ray.direction * dst;
 	hit.normal = normalize(tri->n0 * w + tri->n1 * u + tri->n2 * v);
-	//hit.normal = normalVector;
+	//hit.normal = normalize(normalVector);
 	hit.dst = dst;
+	hit.inside = (dot(normalVector, ray.direction) > 0.0f ? true : false);
 
 	return hit;
 }
@@ -402,7 +391,7 @@ __device__ void IntersectBVH(Ray& ray, HitInfo& hit, const GPU_Mesh* vbo, int de
 #if USE_BVH == 1
 
 	GPU_Mesh::BVHNode* node = &vbo->bvhNode[0];
-	GPU_Mesh::BVHNode* stack[32];
+	GPU_Mesh::BVHNode* stack[256];
 
 	uint32_t stackPtr = 0;
 
@@ -477,16 +466,14 @@ __device__ void IntersectBVH(Ray& ray, HitInfo& hit, const GPU_Mesh* vbo, int de
 #endif
 }
 
-__device__ HitInfo intersect_scene(Ray& r, const GPU_Mesh* vbo, int debug)
+__device__ HitInfo intersect_scene(Ray& r, const Scene* scene, const GPU_Mesh* vbo, int debug)
 {
 	HitInfo hit;
 	HitInfo closestHit;
 
-	float n = sizeof(spheresSimple) / sizeof(Sphere);
-
-	for (size_t i = 0u; i < size_t(n); i++)
+	for (size_t i = 0u; i < scene->sphereCount; i++)
 	{
-		Sphere s = spheresSimple[i];
+		Sphere s = scene->spheresSimple[i];
 		hit = intersect_sphere(r, s);
 
 		if (hit.didHit && hit.dst < closestHit.dst) // If newly computed intersection distance d is smaller than current closest intersection distance
@@ -506,6 +493,37 @@ __device__ HitInfo intersect_scene(Ray& r, const GPU_Mesh* vbo, int debug)
 	return closestHit;
 }
 
+__device__ float3 refractionRay(const float3 d, const float3 n, float ior)
+{
+	float cosI = clamp(dot(n, d), -1.0f, 1.0f);
+
+	float eta;
+	float3 normal = n;
+
+	if (cosI < 0.0f)
+	{
+		eta = 1.0f / ior;
+		cosI = -cosI;
+	}
+	else
+	{
+		eta = ior;
+		normal = -normal;
+	}
+
+	float k = 1.0f - eta * eta * (1.0f - cosI * cosI);
+
+	if (k < 0.0f)
+	{
+		return reflect(d, normal);
+		//return make_float3(0.0f, 0.0f, 0.0f);
+	}
+	else
+	{
+		return normalize(d * eta + normal * (eta * cosI - fsqrtf(k)));
+	}
+}
+
 __device__ float3 radiance(Ray& r, uint32_t& s1, const Scene* scene, size_t bounces, const GPU_Mesh* vbo, int debug) // Returns ray color
 {
 	float3 accucolor = make_float3(0.0f, 0.0f, 0.0f); // Accumulates ray colour with each iteration through bounce loop
@@ -514,7 +532,7 @@ __device__ float3 radiance(Ray& r, uint32_t& s1, const Scene* scene, size_t boun
 	for (size_t b = 0; b < bounces; b++)
 	{
 		// Test ray for intersection with scene
-		HitInfo hit = intersect_scene(r, vbo, debug);
+		HitInfo hit = intersect_scene(r, scene, vbo, debug);
 
 		if (!hit.didHit)
 		{
@@ -532,20 +550,29 @@ __device__ float3 radiance(Ray& r, uint32_t& s1, const Scene* scene, size_t boun
 		float r2 = randomValue(s1);            // Pick random number for elevation
 		float r2s = sqrtf(r2);
 
-		float ndotl = fmaxf(dot(-r.direction, hit.normal), 0.0f);
+		float3 flippedNormal = (hit.inside ? -hit.normal : hit.normal);
+
+		float ndotl = fmaxf(dot(-r.direction, flippedNormal), 0.0f);
 		float f = fresnel_schlick_ratio(ndotl, 8.0f);
 
 		bool isSpecularBounce = max(hitMat.metalness, max(f, 0.02f)) >= randomValue(s1);
+		bool isTransmissionBounce = lerp(0.0f, 1.0f-max(f, 0.02f), hitMat.transmission) > randomValue(s1);
 
-		float3 diffuseDir = normalize(hit.normal + randomDirection(s1));
-		float3 specularDir = reflect(r.direction, normalize(hit.normal + randomInUnitSphere(s1) * hitMat.roughness));
+		float3 diffuseDir = normalize(flippedNormal + randomDirection(s1));
+		float3 specularDir = reflect(r.direction, normalize(flippedNormal + randomInUnitSphere(s1) * hitMat.roughness));
+		float3 transmissionDir = refractionRay(r.direction, normalize(hit.normal + randomInUnitSphere(s1) * hitMat.transmissionRoughness), hitMat.ior);
 
 		float3 linearSurfColor = srgbToLinear(hitMat.albedo);
+		float3 linearTransmissionColor = lerp(make_float3(1.0f, 1.0f, 1.0f), srgbToLinear(hitMat.transmissionColor), hit.inside);
 
-		r.direction = normalize(lerp(diffuseDir, specularDir, isSpecularBounce));
-		r.origin = hit.hitPoint + hit.normal * 0.001f; // offset ray origin slightly to prevent self intersection
+		float transmissionDistance = length(hit.hitPoint - r.origin) * (1.0/(1.0f-hitMat.transmissionDensity));
+		float transmissionDensity = 1.0f - expf(-transmissionDistance * 1.442965f);
+		float3 absorptionColor = powf(linearTransmissionColor, transmissionDensity * (1.0 / (1.0f - hitMat.transmissionDensity)));
 
-		mask = mask * lerp(linearSurfColor, lerp(make_float3(1.0f), linearSurfColor, hitMat.metalness), isSpecularBounce);
+		r.direction = normalize(lerp(lerp(diffuseDir, transmissionDir, isTransmissionBounce), specularDir, isSpecularBounce));
+		r.origin = hit.hitPoint + flippedNormal * (isTransmissionBounce ? -0.00001f : 0.0000001f); // offset ray origin slightly to prevent self intersection
+
+		mask = mask * lerp(lerp(linearSurfColor, lerp(make_float3(1.0f), linearSurfColor, hitMat.metalness), isSpecularBounce), absorptionColor, isTransmissionBounce);
 
 		float p = fmaxf(mask.x, fmaxf(mask.y, mask.z));
 		if (randomValue(s1) >= p)
@@ -555,7 +582,7 @@ __device__ float3 radiance(Ray& r, uint32_t& s1, const Scene* scene, size_t boun
 		mask *= 1.0f / p;
 
 		//Debug output
-		//accucolor = { hit.normal };
+		//accucolor = { };
 	}
 
 
@@ -605,7 +632,7 @@ __global__ void render_kernel(float3* buf, uint32_t width, uint32_t height, Came
 		float2 defocusJitter = randomPointInCircle(s1) * camera.aperture;
 		ray.origin = camera.pos + camRight * defocusJitter.x + camUp * defocusJitter.y;
 
-		float2 jitter = randomPointInCircle(s1) * 0.01f;
+		float2 jitter = randomPointInCircle(s1) * 0.00f;
 		float3 jitteredViewPoint = viewPoint + camRight * jitter.x + camUp * jitter.y;
 
 		//ray.direction = normalize(jitteredViewPoint) * focusDistance;

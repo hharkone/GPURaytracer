@@ -35,7 +35,7 @@ public:
 		//m_hostMesh->LoadOBJFile("cube.obj", 1u);
 		m_hostMesh->LoadOBJFile("dragon.obj", 1u);
 		//m_hostMesh->LoadOBJFile("suzanne.obj", 1u);
-		//m_hostMesh->LoadOBJFile("dragonxyz.obj", 2u);
+		//m_hostMesh->LoadOBJFile("rk.obj", 2u);
 		//m_hostMesh->LoadOBJFile("light.obj", 7u);
 		m_hostMesh->BuildBVH();
 

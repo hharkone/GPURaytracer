@@ -8,7 +8,19 @@ struct Material
     float  roughness{ 0.6f };
     float3 emission{ 0.0f, 0.0f, 0.0f };
     float emissionIntensity = 0.0f;
+    float ior = 1.5f;
+    float transmission = 0.0f;
+    float transmissionRoughness = 0.0f;
+    float transmissionDensity = 0.0f;
+    float3 transmissionColor{ 0.0f, 0.0f, 0.0f };
     float  metalness = 0.0f;
+};
+
+struct Sphere
+{
+    float rad;            // Radius
+    float3 pos;           // Position
+    uint16_t materialIndex; // Material Index
 };
 
 struct Scene
@@ -23,16 +35,25 @@ struct Scene
 
     Material materials[8] =
     {
-        Material{ { 0.7f, 0.7f,  0.7f  }, 0.05f, { 0.0f, 0.0f, 0.0f }, 0.0f, 0.0f }, //White
-        Material{ { 0.7f, 0.1f,  0.1f  }, 0.05f, { 0.0f, 0.0f, 0.0f }, 0.0f, 0.0f }, //Red	
-        Material{ { 0.5f, 0.7f,  0.8f  }, 0.1f,  { 0.0f, 0.0f, 0.0f }, 0.0f, 0.0f }, //Blue
-        Material{ { 1.0f, 1.0f,  1.0f  }, 0.0f,  { 0.0f, 0.0f, 0.0f }, 0.0f, 1.0f }, //Mirror
-        Material{ { 1.0f, 0.9f,  0.6f  }, 0.1f,  { 0.0f, 0.0f, 0.0f }, 0.0f, 1.0f }, //Gold
-        Material{ { 0.98f,0.815f,0.75f }, 0.1f,  { 0.0f, 0.0f, 0.0f }, 0.0f, 1.0f }, //Copper
-        Material{ { 0.0f, 0.0f,  0.0f  }, 0.1f,  { 8.0f, 6.0f, 5.0f }, 1.0f, 0.0f }, //Light1
-        Material{ { 0.0f, 0.0f,  0.0f  }, 0.1f,  { 5.0f, 6.0f, 8.0f }, 1.0f, 0.0f }	 //Light2
+        Material{ { 0.7f, 0.7f,  0.7f  }, 0.05f, { 0.0f, 0.0f, 0.0f }, 0.0f, 1.5f, 0.0f, 0.0f, 0.1f, { 1.0f, 1.0f, 1.0f }, 0.0f }, //White
+        Material{ { 0.7f, 0.1f,  0.1f  }, 0.05f, { 0.0f, 0.0f, 0.0f }, 0.0f, 1.5f, 0.0f, 0.0f, 0.1f, { 1.0f, 1.0f, 1.0f }, 0.0f }, //Red	
+        Material{ { 0.5f, 0.7f,  0.8f  }, 0.1f,  { 0.0f, 0.0f, 0.0f }, 0.0f, 1.5f, 0.0f, 0.0f, 0.1f, { 1.0f, 1.0f, 1.0f }, 0.0f }, //Blue
+        Material{ { 1.0f, 1.0f,  1.0f  }, 0.0f,  { 0.0f, 0.0f, 0.0f }, 0.0f, 1.5f, 0.0f, 0.0f, 0.1f, { 1.0f, 1.0f, 1.0f }, 1.0f }, //Mirror
+        Material{ { 1.0f, 0.9f,  0.6f  }, 0.1f,  { 0.0f, 0.0f, 0.0f }, 0.0f, 1.5f, 0.0f, 0.0f, 0.1f, { 1.0f, 1.0f, 1.0f }, 1.0f }, //Gold
+        Material{ { 0.98f,0.815f,0.75f }, 0.1f,  { 0.0f, 0.0f, 0.0f }, 0.0f, 1.5f, 0.0f, 0.0f, 0.1f, { 1.0f, 1.0f, 1.0f }, 1.0f }, //Copper
+        Material{ { 0.0f, 0.0f,  0.0f  }, 0.1f,  { 1.0f, 0.8f, 0.6f }, 5.0f, 1.5f, 0.0f, 0.0f, 0.1f, { 1.0f, 1.0f, 1.0f }, 0.0f }, //Light1
+        Material{ { 0.0f, 0.0f,  0.0f  }, 0.1f,  { 0.6f, 0.8f, 1.0f }, 5.0f, 1.5f, 0.0f, 0.0f, 0.1f, { 1.0f, 1.0f, 1.0f }, 0.0f }  //Light2
+    };
+
+    Sphere spheresSimple[3] =
+    {
+        //{ float radius, { float3 position }, { Material }}
+          Sphere{ 1.0f,  { -6.0f, 1.0f, 0.0f   }, 4u},
+          Sphere{ 19.0f, {  0.0f, -19.0f, 0.0f }, 1u},
+          Sphere{ 1.0f,  { -8.5f, 1.0f, 0.0f   }, 2u}
     };
 
     size_t materialCount = 8u;
+    size_t sphereCount = 3u;
 
 };
