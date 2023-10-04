@@ -32,10 +32,11 @@ public:
 		m_localToWorldMat = new float[16];
 
 		m_hostMesh = new GPU_Mesh();
-		m_hostMesh->LoadOBJFile("cube.obj", 1u);
+		//m_hostMesh->LoadOBJFile("cube.obj", 1u);
 		//m_hostMesh->LoadOBJFile("suzanne_high.obj", 1u);
 		m_hostMesh->LoadOBJFile("suzanne.obj", 1u);
-		m_hostMesh->LoadOBJFile("light.obj", 7u);
+		m_hostMesh->LoadOBJFile("test.obj", 2u);
+		//m_hostMesh->LoadOBJFile("light.obj", 7u);
 		m_hostMesh->BuildBVH();
 
 		cudaMalloc(&m_deviceMesh, sizeof(GPU_Mesh));

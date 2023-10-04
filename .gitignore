@@ -12,3 +12,4 @@ Raytracer/x64/**
 
 # Exclude
 !vendor/bin
+Raytracer/test.obj

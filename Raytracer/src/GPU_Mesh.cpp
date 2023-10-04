@@ -175,7 +175,7 @@ void GPU_Mesh::Subdivide(uint32_t nodeIdx)
     float3 extent = node.aabbMax - node.aabbMin;
     int axis = 0;
     if (extent.y > extent.x) axis = 1;
-    if (extent.z > (&extent.x)[axis]) axis = 2;
+    if (extent.z >= (&extent.x)[axis]) axis = 2;
     float splitPos = (&node.aabbMin.x)[axis] + (&extent.x)[axis] * 0.5f;
 
     // in-place partition

@@ -103,9 +103,9 @@ __constant__ Sphere spheres[] =
 __constant__  Sphere spheresSimple[] =
 {
 	//{ float radius, { float3 position }, { Material }}
-	  { 1.0f, { -4.0f, 1.0f, 0.0f }, 4u},
-	  { 19.0f, { 0.0f, -19.0f, 0.0f }, 2u},
-	  { 1.0f, { -6.5f, 1.0f, 0.0f }, 2u}
+	  { 1.0f, { -6.0f, 1.0f, 0.0f }, 4u},
+	  { 19.0f, { 0.0f, -19.0f, 0.0f }, 1u},
+	  { 1.0f, { -8.5f, 1.0f, 0.0f }, 2u}
 };
 /*
 __constant__ static float jitterMatrix[10] =
@@ -380,7 +380,7 @@ __device__ HitInfo intersect_triangles(const Ray& r, const GPU_Mesh* vbo)
 __device__ void IntersectBVH(Ray& ray, HitInfo& hit, const GPU_Mesh* vbo, int debug)
 {
 
-#define USE_BVH 2
+#define USE_BVH 1
 
 #if	USE_BVH == 0
 	HitInfo closestHit;
@@ -605,11 +605,11 @@ __global__ void render_kernel(float3* buf, uint32_t width, uint32_t height, Came
 		float2 defocusJitter = randomPointInCircle(s1) * camera.aperture;
 		ray.origin = camera.pos + camRight * defocusJitter.x + camUp * defocusJitter.y;
 
-		//float2 jitter = randomPointInCircle(s1) * 0.01f;
-		//float3 jitteredViewPoint = viewPoint + camRight * jitter.x + camUp * jitter.y;
+		float2 jitter = randomPointInCircle(s1) * 0.01f;
+		float3 jitteredViewPoint = viewPoint + camRight * jitter.x + camUp * jitter.y;
 
 		//ray.direction = normalize(jitteredViewPoint) * focusDistance;
-		ray.direction = normalize(viewPoint - ray.origin);
+		ray.direction = normalize(jitteredViewPoint - ray.origin);
 
 		lightContribution += radiance(ray, s1, scene, bounces, vbo, samples);// *(1.0 / samples);
 	}
