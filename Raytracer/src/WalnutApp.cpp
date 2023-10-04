@@ -206,7 +206,7 @@ public:
 		ImGui::DragFloat("Camera Speed", &m_camera.GetSpeed(), 0.1f);
 		if (ImGui::DragFloat("Camera FOV", &m_camera.GetFOV(), 0.1f, 0.01f, 179.0f)) { m_sceneChanged = true; m_camera.RecalculateProjection(); }
 		if (ImGui::DragFloat("Aperture", &m_camera.m_aperture, 0.01f, 0.0f, 1.0f)) { m_sceneChanged = true; }
-		if (ImGui::DragFloat("Focus Distance", &m_camera.m_focusDistance, 0.1f, 0.01f, 1000.0f)) { m_sceneChanged = true; }
+		if (ImGui::DragFloat("Focus Distance", &m_camera.m_focusDistance, 0.01f, 0.01f, 1000.0f)) { m_sceneChanged = true; }
 		if (ImGui::SliderInt("Max Bounces", &m_renderer.GetSettings().bounces, 0, 30)) { m_sceneChanged = true; }
 		if (ImGui::SliderInt("BVH Debug", &m_renderer.GetSettings().samples, 0, 1000)) { m_sceneChanged = true; }
 

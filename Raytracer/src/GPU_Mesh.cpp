@@ -1,6 +1,5 @@
 #include <iostream>
 #include <fstream>
-
 #include <memory>
 
 #include "GPU_Mesh.h"
@@ -29,7 +28,7 @@ void GPU_Mesh::CalculateBbox(GPU_Mesh::MeshInfo& meshInfo)
 
 void GPU_Mesh::LoadOBJFile(const std::string& path, uint16_t materialIndex)
 {
-    uint16_t importTriangleCount = 0u;
+    uint32_t importTriangleCount = 0u;
 
     std::ifstream infile(path, std::ifstream::in);
     std::string line;
@@ -63,6 +62,20 @@ void GPU_Mesh::LoadOBJFile(const std::string& path, uint16_t materialIndex)
         }
         else if (test == "f ")
         {
+            if (sscanf_s(line.c_str(), "f %i//%i %i//%i %i//%i\n", &f1, &f2, &f3, &f4, &f5, &f6) == 6 && uv.size() == 0)
+            {
+                tris.push_back(f1 - 1);
+                tris.push_back(f2 - 1);
+
+                tris.push_back(f3 - 1);
+                tris.push_back(f4 - 1);
+
+                tris.push_back(f5 - 1);
+                tris.push_back(f6 - 1);
+
+                importTriangleCount += 1u;
+                numTris++;
+            }
             if (sscanf_s(line.c_str(), "f %i/%i/%i %i/%i/%i %i/%i/%i\n", &f1, &f2, &f3, &f4, &f5, &f6, &f7, &f8, &f9) == 9)
             {
                 tris.push_back(f1 - 1);
@@ -85,9 +98,9 @@ void GPU_Mesh::LoadOBJFile(const std::string& path, uint16_t materialIndex)
 
     }
 
-    uint16_t meshTriCount = 0u;
+    uint32_t meshTriCount = 0u;
 
-    for (uint16_t i = 0u; i < numMeshes; i++)
+    for (uint32_t i = 0u; i < numMeshes; i++)
     {
         meshTriCount += meshInfoBuffer[i].triangleCount;
     }
@@ -97,23 +110,47 @@ void GPU_Mesh::LoadOBJFile(const std::string& path, uint16_t materialIndex)
     std::memset(newTriBuf, 0, (meshTriCount + importTriangleCount) * sizeof(Triangle));
     std::memcpy(newTriBuf, triangleBuffer, meshTriCount * sizeof(Triangle));
 
-    for (uint16_t i = 0, j = 0; i < importTriangleCount; i++, j+=9)
+    if (uv.size() == 0)
     {
-        Triangle newTri;
+        for (uint32_t i = 0, j = 0; i < importTriangleCount; i++, j += 6)
+        {
+            Triangle newTri;
 
-        newTri.pos0 =    pos[tris[j + 0u]];
-        newTri.n0   = normal[tris[j + 1u]];
-        newTri.uv0  =     uv[tris[j + 2u]];
+            newTri.pos0 = pos[tris[j + 0u]];
+            newTri.n0 = normal[tris[j + 1u]];
+            newTri.uv0 = {0.0f, 0.0f};
 
-        newTri.pos1 =    pos[tris[j + 3u]];
-        newTri.n1   = normal[tris[j + 4u]];
-        newTri.uv1  =     uv[tris[j + 5u]];
+            newTri.pos1 = pos[tris[j + 2u]];
+            newTri.n1 = normal[tris[j + 3u]];
+            newTri.uv1 = { 0.0f, 0.0f };
 
-        newTri.pos2 =    pos[tris[j + 6u]];
-        newTri.n2   = normal[tris[j + 7u]];
-        newTri.uv2  =     uv[tris[j + 8u]];
+            newTri.pos2 = pos[tris[j + 4u]];
+            newTri.n2 = normal[tris[j + 5u]];
+            newTri.uv2 = { 0.0f, 0.0f };
 
-        std::memcpy(&newTriBuf[meshTriCount + i], &newTri, sizeof(Triangle));
+            std::memcpy(&newTriBuf[meshTriCount + i], &newTri, sizeof(Triangle));
+        }
+    }
+    else
+    {
+        for (uint32_t i = 0, j = 0; i < importTriangleCount; i++, j += 9)
+        {
+            Triangle newTri;
+
+            newTri.pos0 = pos[tris[j + 0u]];
+            newTri.n0 = normal[tris[j + 1u]];
+            newTri.uv0 = uv[tris[j + 2u]];
+
+            newTri.pos1 = pos[tris[j + 3u]];
+            newTri.n1 = normal[tris[j + 4u]];
+            newTri.uv1 = uv[tris[j + 5u]];
+
+            newTri.pos2 = pos[tris[j + 6u]];
+            newTri.n2 = normal[tris[j + 7u]];
+            newTri.uv2 = uv[tris[j + 8u]];
+
+            std::memcpy(&newTriBuf[meshTriCount + i], &newTri, sizeof(Triangle));
+        }
     }
 
     triangleBuffer = newTriBuf;
@@ -218,6 +255,11 @@ void GPU_Mesh::Subdivide(uint32_t nodeIdx)
 
 void GPU_Mesh::BuildBVH()
 {
+    if (numTris == 0)
+    {
+        return;
+    }
+
     bvhNode = new BVHNode[numTris * 2 - 1];
     triIdx = new uint32_t[numTris];
     //bvhNodeVector.resize(numTris * 2 - 1);

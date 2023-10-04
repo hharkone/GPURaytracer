@@ -4,8 +4,6 @@
 #include "cuda_runtime.h"
 #include "cutil_math.cuh"
 
-#define BINS 8;
-
 class GPU_Mesh
 {
 public:

@@ -412,9 +412,9 @@ __device__ void IntersectBVH(Ray& ray, HitInfo& hit, const GPU_Mesh* vbo, int de
 	{
 		if (node->triCount > 0) // isLeaf()
 		{
-			for (uint16_t i = 0; i < node->triCount; i++)
+			for (uint32_t i = 0; i < node->triCount; i++)
 			{
-				uint16_t instPrim = vbo->triIdx[node->leftFirst + i];
+				uint32_t instPrim = vbo->triIdx[node->leftFirst + i];
 				GPU_Mesh::Triangle* triangle = &vbo->triangleBuffer[instPrim];
 
 				//if(stackPtr < debug)
