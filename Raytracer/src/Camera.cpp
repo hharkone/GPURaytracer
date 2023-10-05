@@ -20,9 +20,10 @@ bool Camera::OnUpdate(float ts)
 {
 	glm::vec2 mousePos = Input::GetMousePosition();
 	glm::vec2 delta = (mousePos - m_LastMousePosition) * 0.002f;
+	float forwardDelta = Input::GetMouseScrollDelta();
 	m_LastMousePosition = mousePos;
 
-	if (!Input::IsMouseButtonDown(MouseButton::Right))
+	if (!Input::IsMouseButtonDown(MouseButton::Right) && !Input::IsMouseButtonDown(MouseButton::Middle) && !forwardDelta)
 	{
 		Input::SetCursorMode(CursorMode::Normal);
 		return false;
@@ -68,18 +69,42 @@ bool Camera::OnUpdate(float ts)
 	}
 
 	// Rotation
-	if (delta.x != 0.0f || delta.y != 0.0f)
+	if ((delta.x != 0.0f || delta.y != 0.0f) && !Input::IsMouseButtonDown(MouseButton::Middle))
 	{
 		float pitchDelta = delta.y * GetRotationSpeed();
 		float yawDelta = delta.x * GetRotationSpeed();
 
-		glm::quat q = glm::normalize(glm::cross(glm::angleAxis(-pitchDelta, rightDirection),
-			glm::angleAxis(-yawDelta, glm::vec3(0.f, 1.0f, 0.0f))));
-		m_ForwardDirection = glm::rotate(q, m_ForwardDirection);
+		if (Input::IsKeyDown(KeyCode::LeftControl))
+		{
+			glm::quat q = glm::normalize(glm::cross(glm::angleAxis(-pitchDelta, rightDirection),
+				glm::angleAxis(-yawDelta, glm::vec3(0.f, 1.0f, 0.0f))));
+			m_ForwardDirection = glm::rotate(q, m_ForwardDirection);
+			m_Position = glm::rotate(q, m_Position);
+		}
+		else
+		{
+			glm::quat q = glm::normalize(glm::cross(glm::angleAxis(-pitchDelta, rightDirection),
+				glm::angleAxis(-yawDelta, glm::vec3(0.f, 1.0f, 0.0f))));
+			m_ForwardDirection = glm::rotate(q, m_ForwardDirection);
+		}
 
 		moved = true;
 	}
+	if (Input::IsMouseButtonDown(MouseButton::Middle))
+	{
+		float rightDelta = delta.x * GetRotationSpeed();
+		float upDelta = delta.y * GetRotationSpeed();
 
+		m_Position += glm::vec3(rightDirection * -rightDelta + upDirection * upDelta);
+
+		moved = true;
+	}
+	if(forwardDelta != 0.0f)
+	{
+		m_Position += glm::vec3(m_ForwardDirection * forwardDelta * GetSpeed() * 0.5f);
+
+		moved = true;
+	}
 	if (moved)
 	{
 		RecalculateView();

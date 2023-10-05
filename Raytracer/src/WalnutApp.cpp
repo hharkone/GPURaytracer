@@ -279,24 +279,6 @@ public:
 		}
 		ImGui::End();
 
-
-		//ImGui::SetWindowCollapsed();
-		/*
-		for (size_t i = 0u; i < m_scene.meshes.size(); i++)
-		{
-			ImGui::PushID((int)i);
-			ImGui::AlignTextToFramePadding();
-
-			Mesh& mesh = m_scene.meshes[i];
-			ImGui::Separator();
-			ImGui::Text("Mesh: %s", mesh.name);
-			if (ImGui::DragFloat3("Position", glm::value_ptr(mesh.Transform), 0.1f)) { m_sceneChanged = true; }
-			ImGui::Separator();
-			ImGui::PopID();
-		}
-		*/
-		
-
 		ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
 		ImGui::Begin("Viewport");
 
