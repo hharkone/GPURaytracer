@@ -36,9 +36,16 @@ void Renderer::OnResize(uint32_t width, uint32_t height)
 	}
 
 	delete[] m_imageData;
-	m_imageData = new uint32_t[width * height];
+	m_imageData = nullptr;
 
-	m_cudaRenderer = std::shared_ptr<CudaRenderer>(new CudaRenderer(width, height, &m_activeScene, &m_frameIndex, &GetSettings().samples, &m_settings.bounces));
+	if (!m_cudaRenderer)
+	{
+		m_cudaRenderer = std::shared_ptr<CudaRenderer>(new CudaRenderer(width, height, &m_activeScene, &m_frameIndex, &GetSettings().samples, &m_settings.bounces));
+	}
+	else
+	{
+		m_cudaRenderer->OnResize(width, height);
+	}
 }
 
 void Renderer::Render(const Scene& scene, const Camera& camera)

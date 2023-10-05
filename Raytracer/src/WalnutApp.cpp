@@ -174,7 +174,7 @@ public:
 
 	virtual void OnUIRender() override
 	{
-		ImGui::ShowDemoWindow();
+		//ImGui::ShowDemoWindow();
 		ImGuiIO& io = ImGui::GetIO();
 		io.FontGlobalScale = 0.8f;
 		ImGuiStyle& style = ImGui::GetStyle();
@@ -183,6 +183,10 @@ public:
 		style.GrabMinSize = 5.0f;
 		style.FrameRounding = 2.0f;
 		style.GrabRounding = 4.0f;
+
+		ImGuiColorEditFlags misc_flags = ImGuiColorEditFlags_HDR;
+		static ImGuiSliderFlags flags = ImGuiSliderFlags_None;
+		static ImGuiSliderFlags flagLog = ImGuiSliderFlags_Logarithmic;
 
 		ImGui::SetColorEditOptions(ImGuiColorEditFlags_Float | ImGuiColorEditFlags_HDR | ImGuiColorEditFlags_PickerHueWheel);
 
@@ -203,29 +207,12 @@ public:
 		}
 
 		ImGui::End();
-
-		ImGui::Begin("Scene Settings");
-		ImGuiColorEditFlags misc_flags = ImGuiColorEditFlags_HDR;
-		static ImGuiSliderFlags flags = ImGuiSliderFlags_None;
-		static ImGuiSliderFlags flagLog = ImGuiSliderFlags_Logarithmic;
-
-		if (ImGui::ColorEdit3("Sky Color", &(m_scene.skyColor.x))) { m_sceneChanged = true; }
-		if (ImGui::SliderFloat("Sky Brightness", &m_scene.skyBrightness, 0.0f, 10.0f, "%.3f", flags))	{ m_sceneChanged = true; }
-		if (ImGui::SliderFloat("Sun Focus", &m_scene.sunFocus, 1.0f, 100000.0f, "%.3f", flagLog)) { m_sceneChanged = true; }
-		if (ImGui::SliderFloat("Sun Intensity", &m_scene.sunIntensity, 0.0f, 100.0f, "%.3f", flags)) { m_sceneChanged = true; }
-		if (ImGui::ColorEdit3("Sky Color Horizon", &(m_scene.skyColorHorizon.x))) { m_sceneChanged = true; }
-		if (ImGui::ColorEdit3("Sky Color Zenith", &(m_scene.skyColorZenith.x))) { m_sceneChanged = true; }
-		if (ImGui::ColorEdit3("Ground Color", &(m_scene.groundColor.x))) { m_sceneChanged = true; }
-
-		ImGui::End();
-
-		ImGui::Begin("Camera");
-
-		ImGui::Text("Camera POS: %.2f, %.2f, %.2f", m_camera.GetPosition().x, m_camera.GetPosition().y, m_camera.GetPosition().z);
 		
-		ImGui::DragFloat("Camera Speed", &m_camera.GetSpeed(), 0.01f, 0.01f, 100.0f);
+		ImGui::Begin("Camera");
+		ImGui::Text("Camera POS: %.2f, %.2f, %.2f", m_camera.GetPosition().x, m_camera.GetPosition().y, m_camera.GetPosition().z);
+		ImGui::SliderFloat("Camera Speed", &m_camera.GetSpeed(), 0.01f, 100.0f, "%.3f", flagLog);
 		if (ImGui::DragFloat("Camera FOV", &m_camera.GetFOV(), 0.1f, 0.01f, 179.0f)) { m_sceneChanged = true; m_camera.RecalculateProjection(); }
-		if (ImGui::DragFloat("Aperture", &m_camera.m_aperture, 0.01f, 0.0f, 1.0f)) { m_sceneChanged = true; }
+		if (ImGui::DragFloat("Aperture", &m_camera.m_aperture, 0.001f, 0.0f, 1.0f)) { m_sceneChanged = true; }
 		if (ImGui::DragFloat("Focus Distance", &m_camera.m_focusDistance, 0.01f, 0.01f, 1000.0f)) { m_sceneChanged = true; }
 
 		ImGui::End();
@@ -242,12 +229,25 @@ public:
 			ImGui::Text("Sphere: %i", i);
 			if (ImGui::DragFloat("Radius", &sphere.rad, 0.1f, 0.01f, 179.0f)) { m_sceneChanged = true; }
 			if (ImGui::DragFloat3("Position", &sphere.pos.x, 0.1f, -100.0f, 100.0f)) { m_sceneChanged = true; }
-			if (ImGui::SliderInt("Material ID", &dragInt, 0, m_scene.materialCount-1)) { m_sceneChanged = true; }
+			if (ImGui::SliderInt("Material ID", &dragInt, 0, (int)m_scene.materialCount-1)) { m_sceneChanged = true; }
 			sphere.materialIndex = (uint16_t)dragInt;
 
 			ImGui::Separator();
 			ImGui::PopID();
 		}
+		ImGui::End();
+
+		ImGui::Begin("Scene Settings");
+
+		if (ImGui::ColorEdit3("Sky Color", &(m_scene.skyColor.x))) { m_sceneChanged = true; }
+		if (ImGui::SliderFloat("Sky Brightness", &m_scene.skyBrightness, 0.0f, 10.0f, "%.3f", flags)) { m_sceneChanged = true; }
+		if (ImGui::SliderFloat("Sun Focus", &m_scene.sunFocus, 1.0f, 100000.0f, "%.3f", flagLog)) { m_sceneChanged = true; }
+		if (ImGui::SliderFloat("Sun Intensity", &m_scene.sunIntensity, 0.0f, 100.0f, "%.3f", flags)) { m_sceneChanged = true; }
+		if (ImGui::SliderFloat3("Sun Direction", &(m_scene.sunDirection.x), -1.0f, 1.0f)) { m_sceneChanged = true; }
+		if (ImGui::ColorEdit3("Sky Color Horizon", &(m_scene.skyColorHorizon.x))) { m_sceneChanged = true; }
+		if (ImGui::ColorEdit3("Sky Color Zenith", &(m_scene.skyColorZenith.x))) { m_sceneChanged = true; }
+		if (ImGui::ColorEdit3("Ground Color", &(m_scene.groundColor.x))) { m_sceneChanged = true; }
+
 		ImGui::End();
 
 		ImGui::Begin("Materials");
@@ -259,20 +259,28 @@ public:
 			Material& mat = m_scene.materials[i];
 
 			ImGui::Text("Material: %i", i);
+			ImGui::Text("Surface");
 			if (ImGui::ColorEdit3("Albedo", &(mat.albedo.x))) { m_sceneChanged = true; }
 			if (ImGui::SliderFloat("Metalness", &(mat.metalness), 0.0f, 1.0f, "%.3f")) { m_sceneChanged = true; }
 			if (ImGui::SliderFloat("Roughness", &(mat.roughness), 0.0f, 1.0f, "%.3f")) { m_sceneChanged = true; }
+			if (ImGui::SliderFloat("IOR", &mat.ior, 1.0f, 32.0f, "%.3f", flagLog)) { m_sceneChanged = true; }
+			ImGui::Text("Emission");
 			if (ImGui::ColorEdit3("Emission", &(mat.emission.x))) { m_sceneChanged = true; }
 			if (ImGui::SliderFloat("Emission Intensity", &(mat.emissionIntensity), 0.0f, 1000.0f, "%.3f", flagLog)) { m_sceneChanged = true; }
+			ImGui::Text("Transmission");
 			if (ImGui::ColorEdit3("Transmission Color", &(mat.transmissionColor.x))) { m_sceneChanged = true; }
 			if (ImGui::SliderFloat("Transmission", &mat.transmission, 0.0f, 1.0f, "%.3f")) { m_sceneChanged = true; }
 			if (ImGui::SliderFloat("Transmission Roughness", &mat.transmissionRoughness, 0.0f, 1.0f, "%.3f")) { m_sceneChanged = true; }
 			if (ImGui::SliderFloat("Transmission Density", &mat.transmissionDensity, 0.0f, 1.0f, "%.3f")) { m_sceneChanged = true; }
-			if (ImGui::SliderFloat("IOR", &mat.ior, 1.0f, 32.0f, "%.3f", flagLog)) { m_sceneChanged = true; }
+			ImGui::Text("");
+			ImGui::Separator();
 			ImGui::Separator();
 			ImGui::PopID();
 		}
 		ImGui::End();
+
+
+		//ImGui::SetWindowCollapsed();
 		/*
 		for (size_t i = 0u; i < m_scene.meshes.size(); i++)
 		{

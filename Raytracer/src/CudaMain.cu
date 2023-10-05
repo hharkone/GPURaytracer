@@ -76,38 +76,22 @@ void CudaRenderer::Clear()
 	cudaMemset(m_accumulationBuffer_GPU, 0, m_bufferSize);
 	cudaMemset(m_imageData_GPU, 0, m_width * m_height * sizeof(uint32_t));
 }
-/*
-// SCENE 9 spheres forming a Cornell box small enough to be in constant GPU memory 
-__constant__ Sphere spheres[] =
-{
-	  { 1e4f,{ -1e4f - 80.0f, 40.8f, 81.6f },     0u }, //Left
-	  { 1e4f,{ 1e4f + 150.0f, 40.8f, 81.6f },   1u }, //Right
-	  { 1e4f,{ 50.0f, 40.8f, -1e4f },            3u }, //Back
-	  { 1e4f,{ 50.0f, 40.8f, 1e4f + 200.0f },  2u }, //Frnt     	   
-	  { 1e4f,{ 50.0f, -1e4f, 81.6f },            2u }, //Botm
-	  { 1e4f,{ 50.0f, 1e4f + 81.6f, 81.6f },   2u }, //Top			   
-	  { 16.5f,{ 27.0f, 16.5f, 47.0f },          2u }, // small sphere 1
-	  { 16.5f,{ 73.0f, 16.5f, 78.0f },          4u }, // gold sphere 2
-	  { 16.5f,{ 73.0f, 16.5f, 118.0f },         5u }, // copper sphere 2
-	  { 100.0f,{ 30.0f, 181.6f - 1.9f, 80.0f }, 6u }, // Light
-	  { 100.0f,{ 150.0f, 181.6f - 1.9f, 80.0f }, 7u }  // Light
-	  //{ 2.1f,{ 40.0f, 40.5f, 47.0f }, Material{ { 0.8f, 0.8f, 0.8f }, 0.1f, { 150.0f, 160.0f, 180.0f }, 0.0f} }      // Light
-};
-*/
-/*
-__constant__ static float jitterMatrix[10] =
-{
-   -0.25,  0.75,
-	0.75,  0.33333,
-   -0.75, -0.25,
-	0.25, -0.75,
-	0.0f, 0.0f
-};
-*/
 __device__ static float fresnel_schlick_ratio(float cos_theta_incident, float power)
 {
 	float p = 1.0f - cos_theta_incident;
 	return pow(p, power);
+}
+
+__device__ float fresnelSchlick(float cosTheta, float ior)
+{
+	float F1 = (ior - 1.0f);
+	F1 *= 2.0f;
+	float F2 = (ior + 1.0f);
+	F2 *= 2.0f;
+
+	float F0 = F1 / F2;
+
+	return F0 + (1.0f - F0) * powf(1.0f - cosTheta, 5.0f);
 }
 
 // PCG (permuted congruential generator). Thanks to:
@@ -125,13 +109,31 @@ __device__ float randomValue(uint32_t& state)
 	return nextRandom(state) / 4294967295.0; // 2^32 - 1
 }
 
-__device__ float2 randomPointInCircle(uint32_t& state)
+__device__ float2 randomPointInCircle(uint32_t& state, float sigma)
 {
-	float angle = randomValue(state) * 2 * M_PI;
+	float angle = randomValue(state) * 2.0f * M_PI;
 	float2 pointOnCircle = make_float2(cos(angle), sin(angle));
-	return pointOnCircle * fsqrtf(randomValue(state));
+	return pointOnCircle * powf(fsqrtf(randomValue(state)), sigma);
 }
+__device__ float2 randomInUnitHex(uint32_t& state)
+{
+	float2 vectors[3] =
+	{
+		make_float2(-1.0f, 0.0f),
+		make_float2(0.5f, fsqrtf(3.0f) / 2.0f),
+		make_float2(0.5f, -fsqrtf(3.0f) / 2.0f)
+	};
 
+	uint16_t t = (uint16_t)randomValue(state) * 3.0f;
+
+	float2 v1 = vectors[t];
+	float2 v2 = vectors[(t + 1) % 3];
+
+	float x = randomValue(state) * 2.0f - 1.0f;
+	float y = randomValue(state) * 2.0f - 1.0f;
+
+	return make_float2(x * v1.x + y * v2.x, x * v2.y + y * v2.y);
+}
 __device__ float randomValueNormalDistribution(uint32_t& state)
 {
 	// Thanks to https://stackoverflow.com/a/6178290
@@ -182,8 +184,7 @@ __device__ void vector4_matrix4_mult(float* vec, float* mat, float* out)
 
 __device__ float3 getEnvironmentLight(const Ray& ray, const Scene* scene)
 {
-	float3 sunDir = make_float3(1.0f, 1.0f, 1.0f);
-	sunDir = normalize(sunDir);
+	float3 sunDir = normalize(scene->sunDirection);
 
 	float skyGradientT = powf(fmaxf(ray.direction.y, 0.0f), 0.35f);
 	float groundToSkyT = powf(fmaxf(ray.direction.y, 0.0f), 0.1f);
@@ -553,13 +554,15 @@ __device__ float3 radiance(Ray& r, uint32_t& s1, const Scene* scene, size_t boun
 		float3 flippedNormal = (hit.inside ? -hit.normal : hit.normal);
 
 		float ndotl = fmaxf(dot(-r.direction, flippedNormal), 0.0f);
-		float f = fresnel_schlick_ratio(ndotl, 8.0f);
+		float F = fresnelSchlick(ndotl, hitMat.ior);
+		float F2 = fresnelSchlick(ndotl, 1.2f);
+		float apparentRoughness = lerp(hitMat.roughness, 0.0f, F2);
 
-		bool isSpecularBounce = max(hitMat.metalness, max(f, 0.02f)) >= randomValue(s1);
-		bool isTransmissionBounce = lerp(0.0f, 1.0f-max(f, 0.02f), hitMat.transmission) > randomValue(s1);
+		bool isSpecularBounce = max(hitMat.metalness, F) >= randomValue(s1);
+		bool isTransmissionBounce = lerp(0.0f, 1.0f-F2, hitMat.transmission) > randomValue(s1);
 
 		float3 diffuseDir = normalize(flippedNormal + randomDirection(s1));
-		float3 specularDir = reflect(r.direction, normalize(flippedNormal + randomInUnitSphere(s1) * hitMat.roughness));
+		float3 specularDir = reflect(r.direction, normalize(flippedNormal + randomInUnitSphere(s1) * apparentRoughness));
 		float3 transmissionDir = refractionRay(r.direction, normalize(hit.normal + randomInUnitSphere(s1) * hitMat.transmissionRoughness), hitMat.ior);
 
 		float3 linearSurfColor = srgbToLinear(hitMat.albedo);
@@ -570,7 +573,7 @@ __device__ float3 radiance(Ray& r, uint32_t& s1, const Scene* scene, size_t boun
 		float3 absorptionColor = powf(linearTransmissionColor, transmissionDensity * (1.0 / (1.0f - hitMat.transmissionDensity)));
 
 		r.direction = normalize(lerp(lerp(diffuseDir, transmissionDir, isTransmissionBounce), specularDir, isSpecularBounce));
-		r.origin = hit.hitPoint + flippedNormal * (isTransmissionBounce ? -0.00001f : 0.0000001f); // offset ray origin slightly to prevent self intersection
+		r.origin = hit.hitPoint + flippedNormal * (isTransmissionBounce ? -0.00001f : 0.000001f); // offset ray origin slightly to prevent self intersection
 
 		mask = mask * lerp(lerp(linearSurfColor, lerp(make_float3(1.0f), linearSurfColor, hitMat.metalness), isSpecularBounce), absorptionColor, isTransmissionBounce);
 
@@ -582,7 +585,7 @@ __device__ float3 radiance(Ray& r, uint32_t& s1, const Scene* scene, size_t boun
 		mask *= 1.0f / p;
 
 		//Debug output
-		//accucolor = { };
+		//accucolor = { f0 };
 	}
 
 
@@ -629,16 +632,20 @@ __global__ void render_kernel(float3* buf, uint32_t width, uint32_t height, Came
 		// Create primary ray, add incoming radiance to pixelcolor
 		Ray ray = Ray(camera.pos, {0.0f, 0.0f, 0.0f});
 
-		float2 defocusJitter = randomPointInCircle(s1) * camera.aperture;
+
+		//DOF
+		//float2 defocusJitter = randomPointInCircle(s1) * camera.aperture; //Even distribution
+		//float3 edgeBiasedJitter = randomPointInCircle(s1);
+		float2 defocusJitter = randomPointInCircle(s1, ((float)samples) * 0.01f) * camera.aperture; //Edge biased
 		ray.origin = camera.pos + camRight * defocusJitter.x + camUp * defocusJitter.y;
 
-		float2 jitter = randomPointInCircle(s1) * 0.00f;
+		//MSAA
+		float2 jitter = randomPointInCircle(s1, 1.0f) * (1.00f / (float)width);
 		float3 jitteredViewPoint = viewPoint + camRight * jitter.x + camUp * jitter.y;
 
-		//ray.direction = normalize(jitteredViewPoint) * focusDistance;
 		ray.direction = normalize(jitteredViewPoint - ray.origin);
 
-		lightContribution += radiance(ray, s1, scene, bounces, vbo, samples);// *(1.0 / samples);
+		lightContribution += radiance(ray, s1, scene, bounces, vbo, samples);
 	}
 
 	// Write rgb value of pixel to image buffer on the GPU
@@ -747,6 +754,45 @@ void CudaRenderer::Compute(void)
 
 Error:
 	printf("");
+}
+
+void CudaRenderer::OnResize(uint32_t width, uint32_t height)
+{
+	if (width == m_width && height == m_height)
+	{
+		return;
+	}
+
+	m_bufferSize = width * height * sizeof(float3);
+
+	m_width = width;
+	m_height = height;
+
+	m_imageData = nullptr;
+
+	cudaError_t cudaStatus = cudaErrorStartupFailure;
+
+	cudaStatus = cudaDeviceSynchronize();
+
+	cudaStatus = cudaFree(m_accumulationBuffer_GPU);
+	cudaStatus = cudaFree(m_imageData_GPU);
+
+	m_outputBuffer = new float[width * height * 3];
+	m_imageData = new uint32_t[width * height];
+	memset(m_imageData, 0, (size_t)width * (size_t)height * sizeof(uint32_t));
+
+	cudaStatus = cudaMalloc(&m_accumulationBuffer_GPU, m_bufferSize);
+	cudaStatus = cudaMemset(m_accumulationBuffer_GPU, 0, m_bufferSize);
+
+	cudaStatus = cudaMalloc(&m_imageData_GPU, (size_t)width * (size_t)height * sizeof(uint32_t));
+	cudaStatus = cudaMemset(m_imageData_GPU, 0, (size_t)width * (size_t)height * sizeof(uint32_t));
+
+	if (cudaStatus != cudaSuccess)
+	{
+		fprintf(stderr, "Cuda Renderer OnResize() failed: %s\n", cudaGetErrorString(cudaStatus));
+	}
+
+	Clear();
 }
 
 void CudaRenderer::SetCamera(float3 pos, float3 dir, float aperture, float focusDist)

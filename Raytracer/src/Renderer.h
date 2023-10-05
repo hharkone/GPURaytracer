@@ -20,7 +20,7 @@ public:
     struct Settings
     {
         bool accumulate = true;
-        int bounces = 5;
+        int bounces = 15;
         int samples = 0;
     };
 

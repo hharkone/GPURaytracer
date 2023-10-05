@@ -10,20 +10,12 @@ class CudaRenderer
 {
 public:
 	CudaRenderer(uint32_t width, uint32_t height, const Scene** scene, uint32_t* sampleIndex, int* samples, int* bounces)
-		: m_bufferSize(width * height * sizeof(float3)), m_sampleIndex(sampleIndex), m_samples(samples),
-		  m_bounces(bounces), m_width(width), m_height(height), m_scene(scene)
+		: m_sampleIndex(sampleIndex), m_samples(samples),
+		  m_bounces(bounces), m_scene(scene)
 	{
-		cudaError_t cudaStatus;
+		cudaError_t cudaStatus = cudaErrorStartupFailure;
 
-		m_outputBuffer = new float[width * height * 3];
-		m_imageData = new uint32_t[width * height];
-		memset(m_imageData, 0, (size_t)width * (size_t)height * sizeof(uint32_t));
-
-		cudaMalloc(&m_accumulationBuffer_GPU, m_bufferSize);
-		cudaMemset(m_accumulationBuffer_GPU, 0, m_bufferSize);
-
-		cudaMalloc(&m_imageData_GPU, (size_t)width * (size_t)height * sizeof(uint32_t));
-		cudaMemset(m_imageData_GPU, 0, (size_t)width * (size_t)height * sizeof(uint32_t));
+		OnResize(width, height);
 
 		m_cameraPos = { 0.0f, 0.0f, 0.0f };
 		m_invViewMat	  = new float[16];
@@ -33,7 +25,8 @@ public:
 
 		m_hostMesh = new GPU_Mesh();
 		//m_hostMesh->LoadOBJFile("cube.obj", 1u);
-		m_hostMesh->LoadOBJFile("dragon.obj", 1u);
+		m_hostMesh->LoadOBJFile("lucy.obj", 1u);
+		//m_hostMesh->LoadOBJFile("dragon.obj", 2u);
 		//m_hostMesh->LoadOBJFile("suzanne.obj", 1u);
 		//m_hostMesh->LoadOBJFile("rk.obj", 2u);
 		//m_hostMesh->LoadOBJFile("light.obj", 7u);
@@ -95,6 +88,7 @@ public:
 		cudaFree(m_imageData_GPU);
 		cudaFree(m_deviceMesh);
 		cudaFree(m_deviceScene);
+		m_imageData = nullptr;
 	}
 
 	void SetCamera(float3 pos, float3 dir, float aperture, float focusDist);
@@ -104,6 +98,7 @@ public:
 	void SetLocalToWorldMat(float4 x, float4 y, float4 z, float4 w);
 	void Compute(void);
 	void Clear(void);
+	void OnResize(uint32_t width, uint32_t height);
 	void SetBounces(int bounces) { m_bounces = &bounces; }
 	float* getFloatOutputData(void) { return m_outputBuffer; }
 	uint32_t* getImageData(void) { return m_imageData; }
@@ -118,7 +113,7 @@ private:
 	Scene* m_deviceScene;
 	GPU_Mesh* m_hostMesh;
 	GPU_Mesh* m_deviceMesh;
-	const size_t m_bufferSize;
+	size_t m_bufferSize;
 	uint32_t* m_sampleIndex;
 	int* m_samples;
 	int* m_bounces;
