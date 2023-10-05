@@ -16,6 +16,11 @@ Camera::Camera(float verticalFOV, float nearClip, float farClip)
 	m_Position = glm::vec3(-0.62f, 0.6f, 1.86f);
 }
 
+void Camera::SetIsContextFocused(bool focus)
+{
+	m_focus = focus;
+}
+
 bool Camera::OnUpdate(float ts)
 {
 	glm::vec2 mousePos = Input::GetMousePosition();
@@ -28,6 +33,9 @@ bool Camera::OnUpdate(float ts)
 		Input::SetCursorMode(CursorMode::Normal);
 		return false;
 	}
+
+	if(!m_focus)
+		return false;
 
 	Input::SetCursorMode(CursorMode::Locked);
 

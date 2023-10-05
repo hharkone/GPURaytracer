@@ -28,6 +28,7 @@ public:
 	void RecalculateProjection();
 	void RecalculateView();
 	void RecalculateLocalToWorld();
+	void SetIsContextFocused(bool focus);
 
 	float m_aperture = 0.0f;
 	float m_focusDistance = 5.0f;
@@ -43,6 +44,7 @@ private:
 	float m_NearClip = 0.1f;
 	float m_FarClip = 100.0f;
 	float m_speed = 2.0f;
+	bool m_focus = false;
 
 	glm::vec3 m_Position{0.0f, 0.0f, 0.0f};
 	glm::vec3 m_ForwardDirection{0.0f, 0.0f, 0.0f};

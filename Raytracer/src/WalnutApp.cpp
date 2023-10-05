@@ -247,6 +247,19 @@ public:
 		if (ImGui::ColorEdit3("Sky Color Horizon", &(m_scene.skyColorHorizon.x))) { m_sceneChanged = true; }
 		if (ImGui::ColorEdit3("Sky Color Zenith", &(m_scene.skyColorZenith.x))) { m_sceneChanged = true; }
 		if (ImGui::ColorEdit3("Ground Color", &(m_scene.groundColor.x))) { m_sceneChanged = true; }
+		ImGui::Text("");
+		ImGui::Separator();
+		ImGui::Separator();
+
+		ImGui::Text("Tonemapper");
+		ImGui::DragFloat("A", &m_scene.A, 0.001f, 0.0f, 10.0f);
+		ImGui::DragFloat("B", &m_scene.B, 0.001f, 0.0f, 10.0f);
+		ImGui::DragFloat("C", &m_scene.C, 0.001f, 0.0f, 10.0f);
+		ImGui::DragFloat("D", &m_scene.D, 0.001f, 0.0f, 10.0f);
+		ImGui::DragFloat("E", &m_scene.E, 0.001f, 0.0f, 10.0f);
+		ImGui::DragFloat("F", &m_scene.F, 0.001f, 0.0f, 10.0f);
+		ImGui::DragFloat("W", &m_scene.W, 0.01f, 0.0f, 10.0f);
+		ImGui::DragFloat("Exposure", &m_scene.Exposure, 0.01f, 0.0f, 20.0f);
 
 		ImGui::End();
 
@@ -294,6 +307,16 @@ public:
 			//ImGui::Image(image->GetDescriptorSet(),
 			//	{ (float)image->GetWidth(), (float)image->GetHeight() },
 			//	ImVec2(0, 1), ImVec2(1, 0));
+		}
+
+		bool cameraControls = (/*ImGui::IsWindowHovered() &&*/ io.MouseDown[1]);
+		if (cameraControls)
+		{
+			m_camera.SetIsContextFocused(true);
+		}
+		else
+		{
+			m_camera.SetIsContextFocused(false);
 		}
 
 		ImGui::End();

@@ -35,6 +35,16 @@ struct Scene
     float sunFocus = 50.0f;
     float sunIntensity = 10.0f;
 
+    //Tonemapper
+    float A = 0.4f;
+    float B = 0.24f;
+    float C = 0.05f;
+    float D = 0.08f;
+    float E = 0.03f;
+    float F = 0.30f;
+    float W = 2.0f;
+    float Exposure = 1.0f;
+
     Material materials[8] =
     {
         Material{ { 0.7f, 0.7f,  0.7f  }, 0.05f, { 0.0f, 0.0f, 0.0f }, 0.0f, 1.5f, 0.0f, 0.0f, 0.1f, { 1.0f, 1.0f, 1.0f }, 0.0f }, //White
@@ -57,5 +67,4 @@ struct Scene
 
     size_t materialCount = 8u;
     size_t sphereCount = 3u;
-
 };

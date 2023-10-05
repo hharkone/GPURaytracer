@@ -25,7 +25,7 @@ public:
 
 		m_hostMesh = new GPU_Mesh();
 		//m_hostMesh->LoadOBJFile("cube.obj", 1u);
-		m_hostMesh->LoadOBJFile("lucy.obj", 1u);
+		m_hostMesh->LoadOBJFile("armadillo.obj", 1u);
 		//m_hostMesh->LoadOBJFile("dragon.obj", 2u);
 		//m_hostMesh->LoadOBJFile("suzanne.obj", 1u);
 		//m_hostMesh->LoadOBJFile("rk.obj", 2u);
@@ -85,6 +85,7 @@ public:
 		cudaDeviceSynchronize();
 
 		cudaFree(m_accumulationBuffer_GPU);
+		cudaFree(m_floatOutputBuffer_GPU);
 		cudaFree(m_imageData_GPU);
 		cudaFree(m_deviceMesh);
 		cudaFree(m_deviceScene);
@@ -100,7 +101,7 @@ public:
 	void Clear(void);
 	void OnResize(uint32_t width, uint32_t height);
 	void SetBounces(int bounces) { m_bounces = &bounces; }
-	float* getFloatOutputData(void) { return m_outputBuffer; }
+	float* getFloatOutputData(void) { return m_floatOutputBuffer; }
 	uint32_t* getImageData(void) { return m_imageData; }
 
 	uint32_t m_width;
@@ -123,8 +124,13 @@ private:
 	float* m_invProjMat = nullptr;
 	float* m_viewMat = nullptr;
 	float* m_localToWorldMat = nullptr;
-	uint32_t* m_imageData = nullptr;
-	float* m_outputBuffer = nullptr;
-	float3* m_accumulationBuffer_GPU = nullptr;
-	uint32_t* m_imageData_GPU = nullptr;
+
+	//Image Buffers
+	float3* m_accumulationBuffer_GPU = nullptr;  //Raw samples buffer
+
+	float3* m_floatOutputBuffer_GPU = nullptr;   //Final float output on the device
+	float*  m_floatOutputBuffer = nullptr;		 //Final float output
+
+	uint32_t* m_imageData_GPU = nullptr;		 //Final 8-bit LDR output on the device
+	uint32_t* m_imageData = nullptr;			 //Final 8-bit LDR output
 };
