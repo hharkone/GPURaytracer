@@ -627,22 +627,24 @@ __global__ void render_kernel(float3* buf, uint32_t width, uint32_t height, Came
 	float3 camRight = make_float3(camera.localToWorldMatrix[0], camera.localToWorldMatrix[1], camera.localToWorldMatrix[2]);
 	float3 camUp = make_float3(camera.localToWorldMatrix[4], camera.localToWorldMatrix[5], camera.localToWorldMatrix[6]);
 
+	float2 pixelSize = make_float2(1.00f / (float)width, 1.00f / (float)height);
+	float2 aspect = make_float2(1.0f, (float)width / (float)height);
 	// Samples per pixel
 	for (size_t s = 0; s < 1u; s++)
 	{
 		// Create primary ray, add incoming radiance to pixelcolor
 		Ray ray = Ray(camera.pos, {0.0f, 0.0f, 0.0f});
 
-
+		
 		//DOF
 		//float2 defocusJitter = randomPointInCircle(s1) * camera.aperture; //Even distribution
 		//float3 edgeBiasedJitter = randomPointInCircle(s1);
 		float2 defocusJitter = randomPointInCircle(s1, ((float)samples) * 0.01f) * camera.aperture; //Edge biased
-		ray.origin = camera.pos + camRight * defocusJitter.x + camUp * defocusJitter.y;
+		ray.origin = camera.pos + camRight * defocusJitter.x * aspect.x + camUp * defocusJitter.y * aspect.y;
 
 		//MSAA
-		float2 jitter = randomPointInCircle(s1, 1.0f) * (1.00f / (float)width);
-		float3 jitteredViewPoint = viewPoint + camRight * jitter.x + camUp * jitter.y;
+		float2 jitter = randomPointInCircle(s1, 1.0f) * 2.0f;
+		float3 jitteredViewPoint = viewPoint + camRight * jitter.x * pixelSize.x + camUp * jitter.y * pixelSize.y;
 
 		ray.direction = normalize(jitteredViewPoint - ray.origin);
 
