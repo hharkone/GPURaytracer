@@ -174,7 +174,7 @@ public:
 
 	virtual void OnUIRender() override
 	{
-		//ImGui::ShowDemoWindow();
+		ImGui::ShowDemoWindow();
 		ImGuiIO& io = ImGui::GetIO();
 		io.FontGlobalScale = 0.8f;
 		ImGuiStyle& style = ImGui::GetStyle();
@@ -227,8 +227,8 @@ public:
 			int dragInt = (int)sphere.materialIndex;
 
 			ImGui::Text("Sphere: %i", i);
-			if (ImGui::DragFloat("Radius", &sphere.rad, 0.1f, 0.01f, 179.0f)) { m_sceneChanged = true; }
-			if (ImGui::DragFloat3("Position", &sphere.pos.x, 0.1f, -100.0f, 100.0f)) { m_sceneChanged = true; }
+			if (ImGui::DragFloat("Radius", &sphere.rad, 0.01f)) { m_sceneChanged = true; }
+			if (ImGui::DragFloat3("Position", &sphere.pos.x, 0.01f)) { m_sceneChanged = true; }
 			if (ImGui::SliderInt("Material ID", &dragInt, 0, (int)m_scene.materialCount-1)) { m_sceneChanged = true; }
 			sphere.materialIndex = (uint16_t)dragInt;
 
@@ -238,15 +238,30 @@ public:
 		ImGui::End();
 
 		ImGui::Begin("Scene Settings");
+		static int item_current = 1;
+		if (ImGui::Combo("Environment Type", &item_current, "Solid\0Procedural Sky\0\0"))
+		{
+			m_scene.envType = EnvironmentType(item_current);
+			m_sceneChanged = true;
+		}
+		ImGui::Text("");
+		if (item_current == 0)
+		{
+			if (ImGui::ColorEdit3("Sky Color", &(m_scene.skyColor.x))) { m_sceneChanged = true; }
+			if (ImGui::SliderFloat("Sky Brightness", &m_scene.skyBrightness, 0.0f, 10.0f, "%.3f", flags)) { m_sceneChanged = true; }
+		}
+		else
+		{
+			if (ImGui::ColorEdit3("Sky Color", &(m_scene.skyColor.x))) { m_sceneChanged = true; }
+			if (ImGui::SliderFloat("Sky Brightness", &m_scene.skyBrightness, 0.0f, 10.0f, "%.3f", flags)) { m_sceneChanged = true; }
+			if (ImGui::SliderFloat("Sun Focus", &m_scene.sunFocus, 1.0f, 100000.0f, "%.3f", flagLog)) { m_sceneChanged = true; }
+			if (ImGui::SliderFloat("Sun Intensity", &m_scene.sunIntensity, 0.0f, 100.0f, "%.3f", flags)) { m_sceneChanged = true; }
+			if (ImGui::SliderFloat3("Sun Direction", &(m_scene.sunDirection.x), -1.0f, 1.0f)) { m_sceneChanged = true; }
+			if (ImGui::ColorEdit3("Sky Color Horizon", &(m_scene.skyColorHorizon.x))) { m_sceneChanged = true; }
+			if (ImGui::ColorEdit3("Sky Color Zenith", &(m_scene.skyColorZenith.x))) { m_sceneChanged = true; }
+			if (ImGui::ColorEdit3("Ground Color", &(m_scene.groundColor.x))) { m_sceneChanged = true; }
+		}
 
-		if (ImGui::ColorEdit3("Sky Color", &(m_scene.skyColor.x))) { m_sceneChanged = true; }
-		if (ImGui::SliderFloat("Sky Brightness", &m_scene.skyBrightness, 0.0f, 10.0f, "%.3f", flags)) { m_sceneChanged = true; }
-		if (ImGui::SliderFloat("Sun Focus", &m_scene.sunFocus, 1.0f, 100000.0f, "%.3f", flagLog)) { m_sceneChanged = true; }
-		if (ImGui::SliderFloat("Sun Intensity", &m_scene.sunIntensity, 0.0f, 100.0f, "%.3f", flags)) { m_sceneChanged = true; }
-		if (ImGui::SliderFloat3("Sun Direction", &(m_scene.sunDirection.x), -1.0f, 1.0f)) { m_sceneChanged = true; }
-		if (ImGui::ColorEdit3("Sky Color Horizon", &(m_scene.skyColorHorizon.x))) { m_sceneChanged = true; }
-		if (ImGui::ColorEdit3("Sky Color Zenith", &(m_scene.skyColorZenith.x))) { m_sceneChanged = true; }
-		if (ImGui::ColorEdit3("Ground Color", &(m_scene.groundColor.x))) { m_sceneChanged = true; }
 		ImGui::Text("");
 		ImGui::Separator();
 		ImGui::Separator();

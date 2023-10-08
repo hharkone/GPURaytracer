@@ -185,18 +185,25 @@ __device__ void vector4_matrix4_mult(float* vec, float* mat, float* out)
 
 __device__ float3 getEnvironmentLight(const Ray& ray, const Scene* scene)
 {
-	float3 sunDir = normalize(scene->sunDirection);
+	if (scene->envType == EnvironmentType::EnvType_ProceduralSky)
+	{
+		float3 sunDir = normalize(scene->sunDirection);
 
-	float skyGradientT = powf(fmaxf(ray.direction.y, 0.0f), 0.35f);
-	float groundToSkyT = powf(fmaxf(ray.direction.y, 0.0f), 0.1f);
+		float skyGradientT = powf(fmaxf(ray.direction.y, 0.0f), 0.5f);
+		float groundToSkyT = powf(fmaxf(ray.direction.y, 0.0f), 0.15f);
 
-	float3 skyGradient = lerp(srgbToLinear(scene->skyColorHorizon), srgbToLinear(scene->skyColorZenith), skyGradientT);
-	float sun = powf(fmaxf(0.0f, dot(ray.direction, sunDir)), scene->sunFocus) * scene->sunIntensity;
+		float3 skyGradient = lerp(srgbToLinear(scene->skyColorHorizon), srgbToLinear(scene->skyColorZenith), skyGradientT);
+		float sun = powf(fmaxf(0.0f, dot(ray.direction, sunDir)), scene->sunFocus) * scene->sunIntensity;
 
-	// Combine ground, sky, and sun
-	float3 composite = lerp(srgbToLinear(scene->groundColor), skyGradient, groundToSkyT) * scene->skyBrightness + sun;
+		// Combine ground, sky, and sun
+		float3 composite = lerp(srgbToLinear(scene->groundColor), skyGradient, groundToSkyT) * scene->skyBrightness + sun;
 
-	return composite * scene->skyColor;
+		return composite * scene->skyColor;
+	}
+	else
+	{
+		return scene->skyColor * scene->skyBrightness;
+	}
 }
 
 __device__ HitInfo intersect_sphere(const Ray& r, const Sphere& s)
@@ -214,15 +221,23 @@ __device__ HitInfo intersect_sphere(const Ray& r, const Sphere& s)
 	if (discriminant >= 0.0f)
 	{
 		// Distance to nearest intersection point (from quadratic formula)
-		float dst = (-b - fsqrtf(discriminant)) / (2.0f * a);
+		float t0 = (-b - fsqrtf(discriminant)) / (2.0f * a);
+		float t1 = (-b + fsqrtf(discriminant)) / (2.0f * a);
+
+		float dist;
+		if (t0 < 0.0f)
+			dist = t1;
+		else
+			dist = t0;
 
 		// Ignore intersections that occur behind the ray
-		if (dst >= 0.0f)
+		if (dist > 0.0f)
 		{
 			hit.didHit = true;
-			hit.dst = dst;
-			hit.hitPoint = r.origin + r.direction * dst;
+			hit.dst = dist;
+			hit.hitPoint = r.origin + r.direction * hit.dst;
 			hit.normal = normalize(hit.hitPoint - s.pos);
+			hit.inside = (t0 < 0.0f);
 			hit.materialIndex = s.materialIndex;
 		}
 	}
@@ -538,7 +553,6 @@ __device__ float3 radiance(Ray& r, uint32_t& s1, const Scene* scene, size_t boun
 
 		if (!hit.didHit)
 		{
-			//accucolor += mask * make_float3(0.0494, 0.091, 0.164f); // If miss, return sky
 			accucolor += mask * getEnvironmentLight(r, scene);
 			break;
 		}
@@ -546,6 +560,7 @@ __device__ float3 radiance(Ray& r, uint32_t& s1, const Scene* scene, size_t boun
 		Material hitMat = scene->materials[hit.materialIndex];
 
 		accucolor += mask * srgbToLinear(hitMat.emission) * hitMat.emissionIntensity;
+		
 
 		// Create 2 random numbers
 		float r1 = 2 * M_PI * randomValue(s1); // Pick random number on unit circle (radius = 1, circumference = 2*Pi) for azimuth
@@ -562,21 +577,47 @@ __device__ float3 radiance(Ray& r, uint32_t& s1, const Scene* scene, size_t boun
 		bool isSpecularBounce = max(hitMat.metalness, F) >= randomValue(s1);
 		bool isTransmissionBounce = lerp(0.0f, 1.0f-F2, hitMat.transmission) > randomValue(s1);
 
+		Material lastTransmissionMat;
+
+		if (isTransmissionBounce && !hit.inside)
+		{
+			lastTransmissionMat = hitMat;
+		}
+		else
+		{
+			lastTransmissionMat.transmission = hitMat.transmission;
+			lastTransmissionMat.transmissionColor = hitMat.transmissionColor;
+			lastTransmissionMat.transmissionDensity = hitMat.transmissionDensity;
+			lastTransmissionMat.transmissionRoughness = hitMat.transmissionRoughness;
+			lastTransmissionMat.ior = hitMat.ior;
+		}
+
 		float3 diffuseDir = normalize(flippedNormal + randomDirection(s1));
 		float3 specularDir = reflect(r.direction, normalize(flippedNormal + randomInUnitSphere(s1) * apparentRoughness));
-		float3 transmissionDir = refractionRay(r.direction, normalize(hit.normal + randomInUnitSphere(s1) * hitMat.transmissionRoughness), hitMat.ior);
+		float3 transmissionDir = refractionRay(r.direction, normalize(hit.normal + randomInUnitSphere(s1) * lastTransmissionMat.transmissionRoughness), lastTransmissionMat.ior);
 
 		float3 linearSurfColor = srgbToLinear(hitMat.albedo);
-		float3 linearTransmissionColor = lerp(make_float3(1.0f, 1.0f, 1.0f), srgbToLinear(hitMat.transmissionColor), hit.inside);
+		float3 linearTransmissionColor = srgbToLinear(lastTransmissionMat.transmissionColor);
 
-		float transmissionDistance = length(hit.hitPoint - r.origin) * (1.0/(1.0f-hitMat.transmissionDensity));
-		float transmissionDensity = 1.0f - expf(-transmissionDistance * 1.442965f);
-		float3 absorptionColor = powf(linearTransmissionColor, transmissionDensity * (1.0 / (1.0f - hitMat.transmissionDensity)));
+		float transmissionDistance = length(hit.hitPoint - r.origin) * lastTransmissionMat.transmissionDensity * 10.0f;
+		float transmissionDensity = 1.0-expf(-transmissionDistance);
+		//float3 absorptionColor = powf(linearTransmissionColor, transmissionDensity * (1.0 / (1.0f - lastTransmissionMat.transmissionDensity)));
+		float3 absorptionColor = powf(linearTransmissionColor, transmissionDensity * (1.0-expf(-lastTransmissionMat.transmissionDensity)) * 10.0f);//  *(1.0f - max(lastTransmissionMat.transmissionDensity * 2.0f - 1.0f, 0.0f));
 
 		r.direction = normalize(lerp(lerp(diffuseDir, transmissionDir, isTransmissionBounce), specularDir, isSpecularBounce));
-		r.origin = hit.hitPoint + flippedNormal * (isTransmissionBounce ? -0.00001f : 0.000001f); // offset ray origin slightly to prevent self intersection
+		r.origin = hit.hitPoint + flippedNormal * (isTransmissionBounce ? -0.0001f : 0.0001f); // offset ray origin slightly to prevent self intersection
+
+		//float3 transmissionPrevious = make_float3(1.0f, 1.0f, 1.0f);
+		//if (lastTransmissionMat.transmission > 0.0f)
+		//{
+		//	transmissionPrevious = absorptionColor;
+		//}
+
 
 		mask = mask * lerp(lerp(linearSurfColor, lerp(make_float3(1.0f), linearSurfColor, hitMat.metalness), isSpecularBounce), absorptionColor, isTransmissionBounce);
+
+		if(hit.inside)
+			accucolor = accucolor * absorptionColor;
 
 		float p = fmaxf(mask.x, fmaxf(mask.y, mask.z));
 		if (randomValue(s1) >= p)
@@ -586,7 +627,7 @@ __device__ float3 radiance(Ray& r, uint32_t& s1, const Scene* scene, size_t boun
 		mask *= 1.0f / p;
 
 		//Debug output
-		//accucolor = { f0 };
+		//accucolor = { absorptionColor };
 	}
 
 
@@ -635,7 +676,6 @@ __global__ void render_kernel(float3* buf, uint32_t width, uint32_t height, Came
 		// Create primary ray, add incoming radiance to pixelcolor
 		Ray ray = Ray(camera.pos, {0.0f, 0.0f, 0.0f});
 
-		
 		//DOF
 		//float2 defocusJitter = randomPointInCircle(s1) * camera.aperture; //Even distribution
 		//float3 edgeBiasedJitter = randomPointInCircle(s1);

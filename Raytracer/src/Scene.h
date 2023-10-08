@@ -12,7 +12,7 @@ struct Material
     float transmission = 0.0f;
     float transmissionRoughness = 0.0f;
     float transmissionDensity = 0.0f;
-    float3 transmissionColor{ 0.0f, 0.0f, 0.0f };
+    float3 transmissionColor{ 1.0f, 1.0f, 1.0f };
     float  metalness = 0.0f;
 };
 
@@ -23,8 +23,17 @@ struct Sphere
     uint16_t materialIndex; // Material Index
 };
 
+enum class EnvironmentType
+{
+    EnvType_Solid = 0,
+    EnvType_ProceduralSky = 1
+};
+
 struct Scene
 {
+    EnvironmentType envType = EnvironmentType::EnvType_ProceduralSky;
+
+    //Procedural Sky
     float3 skyColor = make_float3(1.0f, 1.0f, 1.0f);
     float skyBrightness = 1.2f;
     float3 skyColorHorizon = make_float3(0.55f, 0.66f, 0.9f);
@@ -35,11 +44,13 @@ struct Scene
     float sunFocus = 50.0f;
     float sunIntensity = 10.0f;
 
+
+
     //Tonemapper
     float A = 0.4f;
     float B = 0.24f;
-    float C = 0.05f;
-    float D = 0.08f;
+    float C = 0.13f;
+    float D = 0.1f;
     float E = 0.03f;
     float F = 0.30f;
     float W = 2.0f;
