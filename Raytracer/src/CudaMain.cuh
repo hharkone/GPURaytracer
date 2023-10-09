@@ -26,8 +26,8 @@ public:
 
 		m_hostMesh = new GPU_Mesh();
 		//m_hostMesh->LoadOBJFile("cube.obj", 1u);
-		m_hostMesh->LoadOBJFile("lucy.obj", 1u);
-		//m_hostMesh->LoadOBJFile("dragon.obj", 2u);
+		//m_hostMesh->LoadOBJFile("lucy.obj", 1u);
+		m_hostMesh->LoadOBJFile("dragon.obj", 2u);
 		//m_hostMesh->LoadOBJFile("suzanne.obj", 1u);
 		//m_hostMesh->LoadOBJFile("rk.obj", 2u);
 		//m_hostMesh->LoadOBJFile("light.obj", 7u);

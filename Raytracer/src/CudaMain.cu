@@ -608,7 +608,7 @@ __device__ float3 radiance(Ray& r, uint32_t& s1, const Scene* scene, size_t boun
 		//MAIN OUTPUT
 		accucolor += mask * srgbToLinear(hitMat.emission) * hitMat.emissionIntensity;
 
-		if (inVolume)
+		//if (inVolume)
 			accucolor = accucolor * absorption;
 
 		if (isTransmissionBounce && (dot(flippedNormal, transmissionDir) < 0.0f))
@@ -617,9 +617,9 @@ __device__ float3 radiance(Ray& r, uint32_t& s1, const Scene* scene, size_t boun
 			inVolume = !inVolume;
 		}
 		//MAIN OUTPUT
-		mask = mask * lerp(linearSurfColor, lerp(make_float3(1.0f), linearSurfColor, hitMat.metalness), isSpecularBounce) * absorption;
+		mask = mask * lerp(lerp(linearSurfColor, lerp(make_float3(1.0f), linearSurfColor, hitMat.metalness), isSpecularBounce), absorption, isTransmissionBounce);
 
-		accucolor = accucolor * absorption;
+		//accucolor = accucolor * absorption;
 		//debugCol = absorption;
 
 		float p = fmaxf(mask.x, fmaxf(mask.y, mask.z));
