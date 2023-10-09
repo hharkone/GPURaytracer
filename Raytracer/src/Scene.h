@@ -58,7 +58,7 @@ struct Scene
 
     Material materials[8] =
     {
-        Material{ { 0.7f, 0.7f,  0.7f  }, 0.05f, { 0.0f, 0.0f, 0.0f }, 0.0f, 1.5f, 0.0f, 0.0f, 0.1f, { 1.0f, 1.0f, 1.0f }, 0.0f }, //White
+        Material{ { 0.9f, 0.9f,  0.9f  }, 0.00f, { 0.0f, 0.0f, 0.0f }, 0.0f, 1.5f, 1.0f, 0.0f, 0.2f, { 0.95f, 0.75f, 0.4f }, 0.0f }, //White
         Material{ { 0.7f, 0.1f,  0.1f  }, 0.05f, { 0.0f, 0.0f, 0.0f }, 0.0f, 1.5f, 0.0f, 0.0f, 0.1f, { 1.0f, 1.0f, 1.0f }, 0.0f }, //Red	
         Material{ { 0.5f, 0.7f,  0.8f  }, 0.1f,  { 0.0f, 0.0f, 0.0f }, 0.0f, 1.5f, 0.0f, 0.0f, 0.1f, { 1.0f, 1.0f, 1.0f }, 0.0f }, //Blue
         Material{ { 1.0f, 1.0f,  1.0f  }, 0.0f,  { 0.0f, 0.0f, 0.0f }, 0.0f, 1.5f, 0.0f, 0.0f, 0.1f, { 1.0f, 1.0f, 1.0f }, 1.0f }, //Mirror

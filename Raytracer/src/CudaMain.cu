@@ -545,6 +545,11 @@ __device__ float3 radiance(Ray& r, uint32_t& s1, const Scene* scene, size_t boun
 {
 	float3 accucolor = make_float3(0.0f, 0.0f, 0.0f); // Accumulates ray colour with each iteration through bounce loop
 	float3 mask = make_float3(1.0f, 1.0f, 1.0f);
+	float3 absorption = make_float3(1.0f, 1.0f, 1.0f);
+	float3 debugCol = make_float3(1.0f, 1.0f, 1.0f);
+
+	bool inVolume = false;
+	Material volumeMat;
 
 	for (size_t b = 0; b < bounces; b++)
 	{
@@ -553,14 +558,19 @@ __device__ float3 radiance(Ray& r, uint32_t& s1, const Scene* scene, size_t boun
 
 		if (!hit.didHit)
 		{
+			//absorption = { 0.0f,0.0f,0.0f };
 			accucolor += mask * getEnvironmentLight(r, scene);
 			break;
 		}
 
+
 		Material hitMat = scene->materials[hit.materialIndex];
 
-		accucolor += mask * srgbToLinear(hitMat.emission) * hitMat.emissionIntensity;
-		
+
+		if (!inVolume)
+		{
+			volumeMat = hitMat;
+		}
 
 		// Create 2 random numbers
 		float r1 = 2 * M_PI * randomValue(s1); // Pick random number on unit circle (radius = 1, circumference = 2*Pi) for azimuth
@@ -577,47 +587,40 @@ __device__ float3 radiance(Ray& r, uint32_t& s1, const Scene* scene, size_t boun
 		bool isSpecularBounce = max(hitMat.metalness, F) >= randomValue(s1);
 		bool isTransmissionBounce = lerp(0.0f, 1.0f-F2, hitMat.transmission) > randomValue(s1);
 
-		Material lastTransmissionMat;
-
-		if (isTransmissionBounce && !hit.inside)
-		{
-			lastTransmissionMat = hitMat;
-		}
-		else
-		{
-			lastTransmissionMat.transmission = hitMat.transmission;
-			lastTransmissionMat.transmissionColor = hitMat.transmissionColor;
-			lastTransmissionMat.transmissionDensity = hitMat.transmissionDensity;
-			lastTransmissionMat.transmissionRoughness = hitMat.transmissionRoughness;
-			lastTransmissionMat.ior = hitMat.ior;
-		}
-
 		float3 diffuseDir = normalize(flippedNormal + randomDirection(s1));
 		float3 specularDir = reflect(r.direction, normalize(flippedNormal + randomInUnitSphere(s1) * apparentRoughness));
-		float3 transmissionDir = refractionRay(r.direction, normalize(hit.normal + randomInUnitSphere(s1) * lastTransmissionMat.transmissionRoughness), lastTransmissionMat.ior);
+		float3 transmissionDir = refractionRay(r.direction, normalize(hit.normal + randomInUnitSphere(s1) * hitMat.transmissionRoughness), hitMat.ior);
 
 		float3 linearSurfColor = srgbToLinear(hitMat.albedo);
-		float3 linearTransmissionColor = srgbToLinear(lastTransmissionMat.transmissionColor);
+		float3 linearTransmissionColor = srgbToLinear(volumeMat.transmissionColor);
 
-		float transmissionDistance = length(hit.hitPoint - r.origin) * lastTransmissionMat.transmissionDensity * 10.0f;
+		float transmissionDistance = length(hit.hitPoint - r.origin) * volumeMat.transmissionDensity * 10.0f;
 		float transmissionDensity = 1.0-expf(-transmissionDistance);
 		//float3 absorptionColor = powf(linearTransmissionColor, transmissionDensity * (1.0 / (1.0f - lastTransmissionMat.transmissionDensity)));
-		float3 absorptionColor = powf(linearTransmissionColor, transmissionDensity * (1.0-expf(-lastTransmissionMat.transmissionDensity)) * 10.0f);//  *(1.0f - max(lastTransmissionMat.transmissionDensity * 2.0f - 1.0f, 0.0f));
+		float3 absorptionColor = powf(linearTransmissionColor, transmissionDensity * (1.0-expf(-volumeMat.transmissionDensity)) * 1.0f);//  *(1.0f - max(lastTransmissionMat.transmissionDensity * 2.0f - 1.0f, 0.0f));
+
+		absorption = absorption * lerp(make_float3(1.0f, 1.0f, 1.0f), absorptionColor, inVolume);
 
 		r.direction = normalize(lerp(lerp(diffuseDir, transmissionDir, isTransmissionBounce), specularDir, isSpecularBounce));
 		r.origin = hit.hitPoint + flippedNormal * (isTransmissionBounce ? -0.0001f : 0.0001f); // offset ray origin slightly to prevent self intersection
 
-		//float3 transmissionPrevious = make_float3(1.0f, 1.0f, 1.0f);
-		//if (lastTransmissionMat.transmission > 0.0f)
-		//{
-		//	transmissionPrevious = absorptionColor;
-		//}
 
+		//MAIN OUTPUT
+		accucolor += mask * srgbToLinear(hitMat.emission) * hitMat.emissionIntensity;
 
-		mask = mask * lerp(lerp(linearSurfColor, lerp(make_float3(1.0f), linearSurfColor, hitMat.metalness), isSpecularBounce), absorptionColor, isTransmissionBounce);
+		if (inVolume)
+			accucolor = accucolor * absorption;
 
-		if(hit.inside)
-			accucolor = accucolor * absorptionColor;
+		if (isTransmissionBounce && (dot(flippedNormal, transmissionDir) < 0.0f))
+		{
+			volumeMat = hitMat;
+			inVolume = !inVolume;
+		}
+		//MAIN OUTPUT
+		mask = mask * lerp(linearSurfColor, lerp(make_float3(1.0f), linearSurfColor, hitMat.metalness), isSpecularBounce) * absorption;
+
+		accucolor = accucolor * absorption;
+		//debugCol = absorption;
 
 		float p = fmaxf(mask.x, fmaxf(mask.y, mask.z));
 		if (randomValue(s1) >= p)
@@ -630,8 +633,11 @@ __device__ float3 radiance(Ray& r, uint32_t& s1, const Scene* scene, size_t boun
 		//accucolor = { absorptionColor };
 	}
 
-
+	//MAIN OUTPUT
 	return accucolor;
+	// 
+	//return { float(inVolume),float(inVolume),float(inVolume) };
+	//return absorption;
 }
 
 __global__ void render_kernel(float3* buf, uint32_t width, uint32_t height, Camera_GPU camera, const Scene* scene, int samples,
