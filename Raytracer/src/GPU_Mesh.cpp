@@ -98,6 +98,9 @@ void GPU_Mesh::LoadOBJFile(const std::string& path, uint16_t materialIndex)
 
     }
 
+    if (importTriangleCount == 0u)
+        return;
+
     uint32_t meshTriCount = 0u;
 
     for (uint32_t i = 0u; i < numMeshes; i++)

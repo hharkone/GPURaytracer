@@ -27,14 +27,14 @@ public:
 		m_hostMesh = new GPU_Mesh();
 		//m_hostMesh->LoadOBJFile("cube.obj", 1u);
 		//m_hostMesh->LoadOBJFile("lucy.obj", 1u);
-		m_hostMesh->LoadOBJFile("dragon.obj", 2u);
+		m_hostMesh->LoadOBJFile("meshes/buddha.obj", 1u);
 		//m_hostMesh->LoadOBJFile("suzanne.obj", 1u);
 		//m_hostMesh->LoadOBJFile("rk.obj", 2u);
 		//m_hostMesh->LoadOBJFile("light.obj", 7u);
 		m_hostMesh->BuildBVH();
 
-		ImageLoader imgLoader;
-		float* imgBuff = imgLoader.LoadImageFile("Images/bridge1.raw", 8000, 4000);
+		//ImageLoader imgLoader;
+		//float* imgBuff = imgLoader.LoadImageFile("Images/bridge1.raw", 8000, 4000);
 
 		cudaMalloc(&m_deviceMesh, sizeof(GPU_Mesh));
 		cudaMemcpy(m_deviceMesh, m_hostMesh, sizeof(GPU_Mesh), cudaMemcpyHostToDevice);

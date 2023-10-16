@@ -25,10 +25,10 @@ bool Camera::OnUpdate(float ts)
 {
 	glm::vec2 mousePos = Input::GetMousePosition();
 	glm::vec2 delta = (mousePos - m_LastMousePosition) * 0.002f;
-	float forwardDelta = Input::GetMouseScrollDelta();
+	//float forwardDelta = Input::GetMouseScrollDelta();
 	m_LastMousePosition = mousePos;
 
-	if (!Input::IsMouseButtonDown(MouseButton::Right) && !Input::IsMouseButtonDown(MouseButton::Middle) && !forwardDelta)
+	if (!Input::IsMouseButtonDown(MouseButton::Right) && !Input::IsMouseButtonDown(MouseButton::Middle))// && !forwardDelta)
 	{
 		Input::SetCursorMode(CursorMode::Normal);
 		return false;
@@ -107,12 +107,14 @@ bool Camera::OnUpdate(float ts)
 
 		moved = true;
 	}
+	/*
 	if(forwardDelta != 0.0f)
 	{
 		m_Position += glm::vec3(m_ForwardDirection * forwardDelta * GetSpeed() * 0.5f);
 
 		moved = true;
 	}
+	*/
 	if (moved)
 	{
 		RecalculateView();
