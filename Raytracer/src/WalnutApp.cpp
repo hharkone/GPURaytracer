@@ -1,6 +1,7 @@
 #include <glm/gtc/type_ptr.hpp>
 #include <deque>
 
+
 #include "Walnut/Application.h"
 #include "Walnut/EntryPoint.h"
 #include "Walnut/Image.h"
@@ -9,159 +10,17 @@
 #include "Camera.h"
 #include "cuda_runtime.h"
 
+
 using namespace Walnut;
 
 class ExampleLayer : public Walnut::Layer
 {
 public:
 
-	ExampleLayer()
-		: m_camera(50.0f, 0.1f, 1000000.0f)
+	ExampleLayer() : m_camera(50.0f, 0.1f, 1000000.0f)
 	{
 		m_rendetTimeVec.resize(20);
 		cudaGetDeviceProperties(&prop, 0);
-		/*
-		{
-			Sphere sphere;
-			sphere.position = { -9.0f, 1.0f, 0.0f };
-			sphere.radius = 1.0f;
-			sphere.materialIndex = 4;
-
-			m_scene.spheres.push_back(sphere);
-		}
-		{
-			Sphere sphere;
-			sphere.position = { -6.0f, 1.0f, 0.0f };
-			sphere.radius = 1.0f;
-			sphere.materialIndex = 5;
-
-			m_scene.spheres.push_back(sphere);
-		}
-		{
-			Sphere sphere;
-			sphere.position = { -3.0f, 1.0f, 0.0f };
-			sphere.radius = 1.0f;
-			sphere.materialIndex = 6;
-
-			m_scene.spheres.push_back(sphere);
-		}
-		{
-			Sphere sphere;
-			sphere.position = { -0.0f, 1.0f, 0.0f };
-			sphere.radius = 1.0f;
-			sphere.materialIndex = 7;
-
-			m_scene.spheres.push_back(sphere);
-		}
-		{
-			Sphere sphere;
-			sphere.position = { 3.0f, 1.0f, 0.0f };
-			sphere.radius = 1.0f;
-			sphere.materialIndex = 8;
-
-			m_scene.spheres.push_back(sphere);
-		}
-		{
-			Material mat;
-			mat.albedo = { 0.7f, 0.7f, 0.7f };
-			mat.roughness = 0.2f;
-			mat.name = "White";
-
-			m_scene.materials.push_back(mat);
-		}
-		{
-			Material mat;
-			mat.albedo = { 0.8f, 0.3f, 0.3f };
-			mat.roughness = 0.2f;
-			mat.name = "Red";
-
-			m_scene.materials.push_back(mat);
-		}
-		{
-			Material mat;
-			mat.albedo = { 0.4f, 0.8f, 0.4f };
-			mat.roughness = 0.2f;
-			mat.name = "Green";
-
-			m_scene.materials.push_back(mat);
-		}
-		{
-			Material mat;
-			mat.albedo = { 0.0f, 0.0f, 0.0f };
-			mat.roughness = 0.2f;
-			mat.emissionColor = { 1.0f, 1.0f, 1.0f };
-			mat.emissionPower = 10.0f;
-			mat.name = "Emissive";
-
-			m_scene.materials.push_back(mat);
-		}
-		{
-			Material mat;
-			mat.albedo = { 0.1f, 0.1f, 0.1f };
-			mat.roughness = 0.9f;
-			mat.name = "Rough1";
-
-			m_scene.materials.push_back(mat);
-		}
-		{
-			Material mat;
-			mat.albedo = { 0.1f, 0.1f, 0.1f };
-			mat.roughness = 0.7f;
-			mat.name = "Rough2";
-
-			m_scene.materials.push_back(mat);
-		}
-		{
-			Material mat;
-			mat.albedo = { 0.1f, 0.1f, 0.1f };
-			mat.roughness = 0.5f;
-			mat.name = "Rough3";
-
-			m_scene.materials.push_back(mat);
-		}
-		{
-			Material mat;
-			mat.albedo = { 0.1f, 0.1f, 0.1f };
-			mat.roughness = 0.3f;
-			mat.name = "Rough4";
-
-			m_scene.materials.push_back(mat);
-		}
-		{
-			Material mat;
-			mat.albedo = { 0.1f, 0.1f, 0.1f };
-			mat.roughness = 0.0f;
-			mat.name = "Rough5";
-
-			m_scene.materials.push_back(mat);
-		}
-		{
-			Mesh meshclass = Mesh();
-			Mesh mesh = meshclass.LoadOBJFile("T:\\GIT\\GPURaytracer\\Raytracer\\cube.obj");
-			mesh.materialIndex = 1;
-			mesh.Transform = glm::vec3(0.0f, 2.0f, 0.0f);
-			//m_scene.meshes.push_back(mesh);
-		}
-		{
-			Mesh meshclass = Mesh();
-			Mesh mesh = meshclass.LoadOBJFile("T:\\GIT\\GPURaytracer\\Raytracer\\plane.obj");
-			mesh.materialIndex = 2;
-			m_scene.meshes.push_back(mesh);
-		}
-		{
-			Mesh meshclass = Mesh();
-			Mesh mesh = meshclass.LoadOBJFile("T:\\GIT\\GPURaytracer\\Raytracer\\light.obj");
-			mesh.materialIndex = 3;
-			m_scene.meshes.push_back(mesh);
-		}
-
-		{
-			Mesh meshclass = Mesh();
-			Mesh mesh = meshclass.LoadOBJFile("T:\\GIT\\GPURaytracer\\Raytracer\\suzanne.obj");
-			mesh.materialIndex = 1;
-			m_scene.meshes.push_back(mesh);
-		}
-*/
 	}
 
 	virtual void OnUpdate(float ts) override
@@ -197,6 +56,7 @@ public:
 		ImGui::Text("Sample Index: %i", m_renderer.GetFrameIndex());
 
 		ImGui::Checkbox("Accumulate", &m_renderer.GetSettings().accumulate);
+		ImGui::Checkbox("Use OPTIX Denoise", &m_renderer.GetSettings().denoise);
 		if (ImGui::SliderInt("Max Bounces", &m_renderer.GetSettings().bounces, 0, 30)) { m_sceneChanged = true; }
 		if (ImGui::SliderInt("BVH Debug", &m_renderer.GetSettings().samples, 0, 1000)) { m_sceneChanged = true; }
 
@@ -370,7 +230,7 @@ private:
 	float m_renderTimeMs = 0.0f;
 	std::deque<float> m_rendetTimeVec;
 	uint32_t m_viewportWidth = 0, m_viewportHeight = 0;
-	uint32_t m_raysPerSec;
+	uint32_t m_raysPerSec = 0;
 	Scene m_scene;
 	cudaDeviceProp prop;
 	bool m_sceneChanged = false;

@@ -58,7 +58,7 @@ void GPU_Mesh::LoadOBJFile(const std::string& path, uint16_t materialIndex)
         else if (test == "vt")
         {
             if (sscanf_s(line.c_str(), "vt %f %f\n", &x, &y) == 2)
-                uv.push_back(make_float2(x, y));
+                uv.push_back(make_float2(materialIndex, materialIndex));
         }
         else if (test == "f ")
         {

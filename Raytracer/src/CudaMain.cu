@@ -21,20 +21,23 @@ __device__ inline float3 srgbToLinear(float3 c)
 	return powf(c, 2.2222f);
 }
 
-__device__ inline uint32_t ConvertToRGBA(const float3& color)
+__device__ inline uint32_t ConvertToRGBA(const float4& color)
 {
 	float3 outColor;
 	outColor.x = clamp(color.x, 0.0f, 1.0f);
 	outColor.y = clamp(color.y, 0.0f, 1.0f);
 	outColor.z = clamp(color.z, 0.0f, 1.0f);
 
+	float alpha = clamp(color.w, 0.0f, 1.0f);
+
 	outColor = powf(outColor, 0.4646464);
 
 	uint8_t r = (uint8_t)(outColor.x * 255.0f);
 	uint8_t g = (uint8_t)(outColor.y * 255.0f);
 	uint8_t b = (uint8_t)(outColor.z * 255.0f);
+	uint8_t a = (uint8_t)(alpha * 255.0f);
 
-	uint32_t returnValue = (255 << 24) | (b << 16) | (g << 8) | r;
+	uint32_t returnValue = (a << 24) | (b << 16) | (g << 8) | r;
 
 	return returnValue;
 }
@@ -77,6 +80,7 @@ void CudaRenderer::Clear()
 	cudaMemset(m_floatOutputBuffer_GPU, 0, m_bufferSize);
 	cudaMemset(m_imageData_GPU, 0, m_width * m_height * sizeof(uint32_t));
 }
+
 __device__ static float fresnel_schlick_ratio(float cos_theta_incident, float power)
 {
 	float p = 1.0f - cos_theta_incident;
@@ -92,7 +96,7 @@ __device__ float fresnelSchlick(float cosTheta, float ior)
 
 	float F0 = F1 / F2;
 
-	return F0 + (1.0f - F0) * powf(1.0f - cosTheta, 5.0f);
+	return (F0 + (1.0f - F0) * powf(1.0f - cosTheta, 5.0f)) * (1.0-fminf(powf(ior, 20.0f), 1.0f)); //Hack to remove fresnel at ior ~1.0
 }
 
 // PCG (permuted congruential generator). Thanks to:
@@ -116,6 +120,7 @@ __device__ float2 randomPointInCircle(uint32_t& state, float sigma)
 	float2 pointOnCircle = make_float2(cos(angle), sin(angle));
 	return pointOnCircle * powf(fsqrtf(randomValue(state)), sigma);
 }
+
 __device__ float2 randomInUnitHex(uint32_t& state)
 {
 	float2 vectors[3] =
@@ -135,6 +140,7 @@ __device__ float2 randomInUnitHex(uint32_t& state)
 
 	return make_float2(x * v1.x + y * v2.x, x * v2.y + y * v2.y);
 }
+
 __device__ float randomValueNormalDistribution(uint32_t& state)
 {
 	// Thanks to https://stackoverflow.com/a/6178290
@@ -262,15 +268,23 @@ __device__ HitInfo rayTriangleIntersect(const Ray& ray, const GPU_Mesh::Triangle
 	float v = -dot(edgeAB, dao) * invDet;
 	float w = 1.0f - u - v;
 
+	float3 normal = normalize(tri->n0 * w + tri->n1 * u + tri->n2 * v);
+
+	if (dot(normal, normal) >= 1.001f)
+	{
+		normal = normalize(tri->n0 + tri->n1 + tri->n2);
+	}
+
 	// Initialize hit info
 	HitInfo hit;
 	//hit.didHit = determinant >= 1E-6 && dst >= 0.0f && u >= 0.0f && v >= 0.0f && w >= 0.0f;
 	hit.didHit = dst >= 0.0f && u >= 0.0f && v >= 0.0f && w >= 0.0f;
 	hit.hitPoint = (ray.origin) + ray.direction * dst;
-	hit.normal = normalize(tri->n0 * w + tri->n1 * u + tri->n2 * v);
+	hit.normal = normal;
 	//hit.normal = normalize(normalVector);
 	hit.dst = dst;
 	hit.inside = (dot(normalVector, ray.direction) > 0.0f ? true : false);
+	hit.materialIndex = (size_t)tri->uv0.x;
 
 	return hit;
 }
@@ -353,36 +367,7 @@ __device__ float IntersectAABB(const Ray& ray, const HitInfo& hit, const float3 
 	tmin = max(tmin, min(tz1, tz2)), tmax = min(tmax, max(tz1, tz2));
 	if( tmax >= tmin && tmin < hit.dst && tmax > 0) return tmin; else return FLT_MAX;
 }
-/*
-__device__ HitInfo intersect_triangles(const Ray& r, const GPU_Mesh* vbo)
-{
-	HitInfo hit;
-	HitInfo closestHit;
 
-	for (size_t mID = 0; mID < vbo->numMeshes; mID++)
-	{
-		if (rayBoxIntersection(r, vbo->meshInfoBuffer[mID].bboxMin, vbo->meshInfoBuffer[mID].bboxMax))
-		{
-			continue;
-		}
-		for (size_t tID = 0; tID < vbo->meshInfoBuffer[mID].triangleCount; tID++) // Test all scene objects for intersection
-		{
-			hit = rayTriangleIntersect(r, vbo->triangleBuffer[vbo->meshInfoBuffer[mID].firstTriangleIndex + tID]);
-
-			if (hit.didHit && hit.dst < closestHit.dst) // If newly computed intersection distance d is smaller than current closest intersection distance
-			{
-				closestHit = hit;
-				closestHit.materialIndex = vbo->meshInfoBuffer[mID].materialIndex;
-			}
-		}
-}
-
-	// Returns true if an intersection with the scene occurred, false when no hit
-	//closestHit.materialIndex = bboxHitCount;
-	
-	return closestHit;
-}
-*/
 __device__ void IntersectBVH(Ray& ray, HitInfo& hit, const GPU_Mesh* vbo, int debug)
 {
 
@@ -546,15 +531,24 @@ __device__ float3 radiance(Ray& r, uint32_t& s1, const Scene* scene, size_t boun
 	float3 accucolor = make_float3(0.0f, 0.0f, 0.0f); // Accumulates ray colour with each iteration through bounce loop
 	float3 mask = make_float3(1.0f, 1.0f, 1.0f);
 	float3 absorption = make_float3(1.0f, 1.0f, 1.0f);
-	float3 debugCol = make_float3(1.0f, 1.0f, 1.0f);
 
 	bool inVolume = false;
 	Material volumeMat;
+	float volumeIor = 1.0f;
+	float thickness = 0.0f;
+	uint16_t surfaceCount = 0;
 
 	for (size_t b = 0; b < bounces; b++)
 	{
 		// Test ray for intersection with scene
 		HitInfo hit = intersect_scene(r, scene, vbo, debug);
+
+		if (inVolume)
+		{
+			thickness = thickness + length(hit.hitPoint - r.origin);
+			accucolor = accucolor * absorption;
+			//mask = mask * absorption;
+		}
 
 		if (!hit.didHit)
 		{
@@ -563,14 +557,15 @@ __device__ float3 radiance(Ray& r, uint32_t& s1, const Scene* scene, size_t boun
 			break;
 		}
 
-
 		Material hitMat = scene->materials[hit.materialIndex];
 
 
 		if (!inVolume)
 		{
+			volumeIor = 1.0f;
 			volumeMat = hitMat;
 		}
+		//actualIor = (inVolume ? volumeMat.ior / hitMat.ior : hitMat.ior);
 
 		// Create 2 random numbers
 		float r1 = 2 * M_PI * randomValue(s1); // Pick random number on unit circle (radius = 1, circumference = 2*Pi) for azimuth
@@ -580,47 +575,63 @@ __device__ float3 radiance(Ray& r, uint32_t& s1, const Scene* scene, size_t boun
 		float3 flippedNormal = (hit.inside ? -hit.normal : hit.normal);
 
 		float ndotl = fmaxf(dot(-r.direction, flippedNormal), 0.0f);
-		float F = fresnelSchlick(ndotl, hitMat.ior);
-		float F2 = fresnelSchlick(ndotl, 1.2f);
-		float apparentRoughness = lerp(hitMat.roughness, 0.0f, F2);
+		float F = fresnelSchlick(ndotl, hitMat.ior / volumeIor);
+		float apparentRoughness = lerp(hitMat.roughness, 0.0f, F);
 
 		bool isSpecularBounce = max(hitMat.metalness, F) >= randomValue(s1);
-		bool isTransmissionBounce = lerp(0.0f, 1.0f-F2, hitMat.transmission) > randomValue(s1);
+		bool isTransmissionBounce = lerp(0.0f, 1.0f, hitMat.transmission) > randomValue(s1);
 
 		float3 diffuseDir = normalize(flippedNormal + randomDirection(s1));
 		float3 specularDir = reflect(r.direction, normalize(flippedNormal + randomInUnitSphere(s1) * apparentRoughness));
-		float3 transmissionDir = refractionRay(r.direction, normalize(hit.normal + randomInUnitSphere(s1) * hitMat.transmissionRoughness), hitMat.ior);
+		
+		float3 transmissionDir = refractionRay(r.direction, normalize(hit.normal + randomInUnitSphere(s1) * hitMat.transmissionRoughness), hitMat.ior / volumeIor);
 
 		float3 linearSurfColor = srgbToLinear(hitMat.albedo);
 		float3 linearTransmissionColor = srgbToLinear(volumeMat.transmissionColor);
 
-		float transmissionDistance = length(hit.hitPoint - r.origin) * volumeMat.transmissionDensity * 10.0f;
+		float transmissionDistance = thickness * volumeMat.transmissionDensity * 10.0f;
 		float transmissionDensity = 1.0-expf(-transmissionDistance);
-		//float3 absorptionColor = powf(linearTransmissionColor, transmissionDensity * (1.0 / (1.0f - lastTransmissionMat.transmissionDensity)));
-		float3 absorptionColor = powf(linearTransmissionColor, transmissionDensity * (1.0-expf(-volumeMat.transmissionDensity)) * 1.0f);//  *(1.0f - max(lastTransmissionMat.transmissionDensity * 2.0f - 1.0f, 0.0f));
 
-		absorption = absorption * lerp(make_float3(1.0f, 1.0f, 1.0f), absorptionColor, inVolume);
+		float3 absorptionColor = powf(linearTransmissionColor, transmissionDensity * (1.0-expf(-volumeMat.transmissionDensity)) * 1.0f);
+		//float3 absorptionColor = (linearTransmissionColor * transmissionDensity);
 
-		r.direction = normalize(lerp(lerp(diffuseDir, transmissionDir, isTransmissionBounce), specularDir, isSpecularBounce));
-		r.origin = hit.hitPoint + flippedNormal * (isTransmissionBounce ? -0.0001f : 0.0001f); // offset ray origin slightly to prevent self intersection
-
-
-		//MAIN OUTPUT
+		//absorption = absorption * lerp(make_float3(1.0f, 1.0f, 1.0f), absorptionColor, inVolume);
+		
+		//EMISSION
 		accucolor += mask * srgbToLinear(hitMat.emission) * hitMat.emissionIntensity;
 
-		//if (inVolume)
-			accucolor = accucolor * absorption;
-
-		if (isTransmissionBounce && (dot(flippedNormal, transmissionDir) < 0.0f))
-		{
-			volumeMat = hitMat;
-			inVolume = !inVolume;
-		}
 		//MAIN OUTPUT
-		mask = mask * lerp(lerp(linearSurfColor, lerp(make_float3(1.0f), linearSurfColor, hitMat.metalness), isSpecularBounce), absorption, isTransmissionBounce);
+		mask = mask * lerp(
+						lerp(linearSurfColor, absorptionColor, isTransmissionBounce),
+						lerp(make_float3(1.0f), linearSurfColor, hitMat.metalness),
+						isSpecularBounce);
 
-		//accucolor = accucolor * absorption;
-		//debugCol = absorption;
+		r.origin = hit.hitPoint + flippedNormal * 0.0001f; // offset ray origin slightly to prevent self intersection
+
+		//Entering a surface
+		if (isTransmissionBounce && (dot(hit.normal, transmissionDir) < 0.0f))
+		{
+			volumeIor = volumeMat.ior;
+			volumeMat = hitMat;
+
+			r.origin = hit.hitPoint + hit.normal * -0.0001f; // offset ray origin slightly to prevent self intersection
+			surfaceCount = surfaceCount + 1;
+		}
+		//Exiting a surface
+		else if (isTransmissionBounce && (dot(hit.normal, transmissionDir) > 0.0f))
+		{
+			volumeIor = 1.0f;
+			volumeMat = hitMat;
+			r.origin = hit.hitPoint + hit.normal * 0.0001f; // offset ray origin slightly to prevent self intersection
+			surfaceCount = surfaceCount - 1;
+		}
+
+		inVolume = (surfaceCount >= 1);
+
+
+
+
+		r.direction = normalize(lerp(lerp(diffuseDir, transmissionDir, isTransmissionBounce), specularDir, isSpecularBounce));
 
 		float p = fmaxf(mask.x, fmaxf(mask.y, mask.z));
 		if (randomValue(s1) >= p)
@@ -629,18 +640,18 @@ __device__ float3 radiance(Ray& r, uint32_t& s1, const Scene* scene, size_t boun
 		}
 		mask *= 1.0f / p;
 
-		//Debug output
 		//accucolor = { absorptionColor };
 	}
 
 	//MAIN OUTPUT
 	return accucolor;
+
 	// 
 	//return { float(inVolume),float(inVolume),float(inVolume) };
-	//return absorption;
+	//return { float(surfaceCount)*0.25f, float(surfaceCount) * 0.25f, float(surfaceCount) * 0.25f };
 }
 
-__global__ void render_kernel(float3* buf, uint32_t width, uint32_t height, Camera_GPU camera, const Scene* scene, int samples,
+__global__ void render_kernel(float4* buf, uint32_t width, uint32_t height, Camera_GPU camera, const Scene* scene, int samples,
 							  size_t bounces, uint32_t sampleIndex, const GPU_Mesh* vbo)
 {
 	// Assign a CUDA thread to every pixel (x,y) blockIdx, blockDim and threadIdx are CUDA specific
@@ -698,10 +709,10 @@ __global__ void render_kernel(float3* buf, uint32_t width, uint32_t height, Came
 	}
 
 	// Write rgb value of pixel to image buffer on the GPU
-	buf[i] += lightContribution;
+	buf[i] += make_float4(lightContribution, 1.0f);
 }
 
-__global__ void tonemapper_kernel(float3* outputBuffer, float3* inputBuffer, uint32_t width, uint32_t height, uint32_t sampleIndex, const Scene* scene)
+__global__ void tonemapper_kernel(float4* outputBuffer, float4* inputBuffer, uint32_t width, uint32_t height, uint32_t sampleIndex, const Scene* scene)
 {
 	uint32_t x = blockDim.x * blockIdx.x + threadIdx.x;
 	uint32_t y = blockDim.y * blockIdx.y + threadIdx.y;
@@ -722,15 +733,15 @@ __global__ void tonemapper_kernel(float3* outputBuffer, float3* inputBuffer, uin
 	float W = scene->W;
 	float Exp = scene->Exposure;
 
-	float3 c = (inputBuffer[i] / sampleIndex);
+	float3 c = (make_float3(inputBuffer[i].x, inputBuffer[i].y, inputBuffer[i].z) / sampleIndex) * Exp;
 
 	float wScale	= (((W * (A * W + C * B) + D * E) / (W * (A * W + B) + D * F)) - E / F);
 
-	outputBuffer[i] = (((c * (A * c + C * B) + D * E) / (c * (A * c + B) + D * F)) - E / F) * (1.0f / wScale) * Exp;
+	outputBuffer[i] = make_float4((((c * (A * c + C * B) + D * E) / (c * (A * c + B) + D * F)) - E / F) * (1.0f / wScale), inputBuffer[i].w);
 
 }
 
-__global__ void floatToImageData_kernel(uint32_t* outputBuffer, float3* inputBuffer, uint32_t width, uint32_t height, uint32_t sampleIndex, const Scene* scene)
+__global__ void floatToImageData_kernel(uint32_t* outputBuffer, float4* inputBuffer, uint32_t width, uint32_t height, uint32_t sampleIndex, const Scene* scene)
 {
 	uint32_t x = blockDim.x * blockIdx.x + threadIdx.x;
 	uint32_t y = blockDim.y * blockIdx.y + threadIdx.y;
@@ -764,14 +775,16 @@ void CudaRenderer::Compute(void)
 		goto Error;
 	}
 
-	cudaMalloc(&m_deviceScene, sizeof(Scene));
-	cudaMemcpy(m_deviceScene, *m_scene, sizeof(Scene), cudaMemcpyHostToDevice);
-
-	cudaStatus = cudaGetLastError();
-	if (cudaStatus != cudaSuccess)
+	if (m_deviceScene != nullptr)
 	{
-		fprintf(stderr, "cudaMemcpy m_deviceScene failed: %s\n", cudaGetErrorString(cudaStatus));
-		goto Error;
+		cudaMemcpy(m_deviceScene, *m_scene, sizeof(Scene), cudaMemcpyHostToDevice);
+
+		cudaStatus = cudaGetLastError();
+		if (cudaStatus != cudaSuccess)
+		{
+			fprintf(stderr, "cudaMemcpy m_deviceScene failed: %s\n", cudaGetErrorString(cudaStatus));
+			goto Error;
+		}
 	}
 
 	Camera_GPU camera_buffer_obj;
@@ -831,6 +844,8 @@ void CudaRenderer::Compute(void)
 	}
 
 	cudaStatus = cudaMemcpy(m_imageData, m_imageData_GPU, m_width * m_height * sizeof(uint32_t), cudaMemcpyDeviceToHost);
+	cudaStatus = cudaMemcpy(m_floatOutputBuffer, m_floatOutputBuffer_GPU, m_width * m_height * sizeof(float4), cudaMemcpyDeviceToHost);
+
 	if (cudaStatus != cudaSuccess)
 	{
 		fprintf(stderr, "cudaMemcpy failed!");
@@ -848,7 +863,7 @@ void CudaRenderer::OnResize(uint32_t width, uint32_t height)
 		return;
 	}
 
-	m_bufferSize = width * height * sizeof(float3);
+	m_bufferSize = width * height * sizeof(float4);
 
 	m_width = width;
 	m_height = height;
@@ -866,6 +881,7 @@ void CudaRenderer::OnResize(uint32_t width, uint32_t height)
 	m_floatOutputBuffer = new float[m_bufferSize];
 	m_imageData = new uint32_t[width * height];
 	memset(m_imageData, 0, (size_t)width * (size_t)height * sizeof(uint32_t));
+	memset(m_floatOutputBuffer, 0, m_bufferSize);
 
 	cudaStatus = cudaMalloc(&m_accumulationBuffer_GPU, m_bufferSize);
 	cudaStatus = cudaMalloc(&m_floatOutputBuffer_GPU, m_bufferSize);

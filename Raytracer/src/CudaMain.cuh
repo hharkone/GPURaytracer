@@ -6,6 +6,7 @@
 #include "device_atomic_functions.h"
 #include "GPU_Mesh.h"
 #include "ImageLoader.h"
+#include "CudaBuffer.h"
 
 class CudaRenderer
 {
@@ -26,15 +27,23 @@ public:
 
 		m_hostMesh = new GPU_Mesh();
 		//m_hostMesh->LoadOBJFile("cube.obj", 1u);
-		//m_hostMesh->LoadOBJFile("lucy.obj", 1u);
-		m_hostMesh->LoadOBJFile("meshes/buddha.obj", 1u);
-		//m_hostMesh->LoadOBJFile("suzanne.obj", 1u);
+		m_hostMesh->LoadOBJFile("meshes/lucy.obj", 1u);
+		//m_hostMesh->LoadOBJFile("meshes/buddha.obj", 1u);
+		//m_hostMesh->LoadOBJFile("meshes/suzanne.obj", 1u);
 		//m_hostMesh->LoadOBJFile("rk.obj", 2u);
 		//m_hostMesh->LoadOBJFile("light.obj", 7u);
 		m_hostMesh->BuildBVH();
 
 		//ImageLoader imgLoader;
 		//float* imgBuff = imgLoader.LoadImageFile("Images/bridge1.raw", 8000, 4000);
+
+		cudaMalloc(&m_deviceScene, sizeof(Scene));
+
+		cudaStatus = cudaGetLastError();
+		if (cudaStatus != cudaSuccess)
+		{
+			fprintf(stderr, "cudaMemcpy m_deviceScene failed: %s\n", cudaGetErrorString(cudaStatus));
+		}
 
 		cudaMalloc(&m_deviceMesh, sizeof(GPU_Mesh));
 		cudaMemcpy(m_deviceMesh, m_hostMesh, sizeof(GPU_Mesh), cudaMemcpyHostToDevice);
@@ -106,7 +115,9 @@ public:
 	void OnResize(uint32_t width, uint32_t height);
 	void SetBounces(int bounces) { m_bounces = &bounces; }
 	float* getFloatOutputData(void) { return m_floatOutputBuffer; }
+	float* getFloatOutputDataDevice(void) { return (float*)m_floatOutputBuffer_GPU; }
 	uint32_t* getImageData(void) { return m_imageData; }
+	uint32_t* getImageDataDevice(void) { return m_imageData_GPU; }
 
 	uint32_t m_width;
 	uint32_t m_height;
@@ -130,9 +141,9 @@ private:
 	float* m_localToWorldMat = nullptr;
 
 	//Image Buffers
-	float3* m_accumulationBuffer_GPU = nullptr;  //Raw samples buffer
+	float4* m_accumulationBuffer_GPU = nullptr;  //Raw samples buffer
 
-	float3* m_floatOutputBuffer_GPU = nullptr;   //Final float output on the device
+	float4* m_floatOutputBuffer_GPU = nullptr;   //Final float output on the device
 	float*  m_floatOutputBuffer = nullptr;		 //Final float output
 
 	uint32_t* m_imageData_GPU = nullptr;		 //Final 8-bit LDR output on the device

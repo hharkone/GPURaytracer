@@ -58,10 +58,10 @@ struct Scene
 
     Material materials[8] =
     {
-        Material{ { 0.9f, 0.9f,  0.9f  }, 0.00f, { 0.0f, 0.0f, 0.0f }, 0.0f, 1.5f, 1.0f, 0.0f, 0.2f, { 0.95f, 0.75f, 0.4f }, 0.0f }, //White
+        Material{ { 0.9f, 0.9f,  0.9f  }, 0.00f, { 0.0f, 0.0f, 0.0f }, 0.0f, 1.5f, 1.0f, 0.0f, 0.2f, { 0.95f, 0.75f, 0.4f }, 0.0f }, //Glass
         Material{ { 0.7f, 0.1f,  0.1f  }, 0.05f, { 0.0f, 0.0f, 0.0f }, 0.0f, 1.5f, 0.0f, 0.0f, 0.1f, { 1.0f, 1.0f, 1.0f }, 0.0f }, //Red	
         Material{ { 0.5f, 0.7f,  0.8f  }, 0.1f,  { 0.0f, 0.0f, 0.0f }, 0.0f, 1.5f, 0.0f, 0.0f, 0.1f, { 1.0f, 1.0f, 1.0f }, 0.0f }, //Blue
-        Material{ { 1.0f, 1.0f,  1.0f  }, 0.0f,  { 0.0f, 0.0f, 0.0f }, 0.0f, 1.5f, 0.0f, 0.0f, 0.1f, { 1.0f, 1.0f, 1.0f }, 1.0f }, //Mirror
+        Material{ { 0.8f, 0.8f,  0.8f  }, 0.5f,  { 0.0f, 0.0f, 0.0f }, 0.0f, 1.5f, 0.0f, 0.0f, 0.1f, { 1.0f, 1.0f, 1.0f }, 0.0f }, //White
         Material{ { 1.0f, 0.9f,  0.6f  }, 0.1f,  { 0.0f, 0.0f, 0.0f }, 0.0f, 1.5f, 0.0f, 0.0f, 0.1f, { 1.0f, 1.0f, 1.0f }, 1.0f }, //Gold
         Material{ { 0.98f,0.815f,0.75f }, 0.1f,  { 0.0f, 0.0f, 0.0f }, 0.0f, 1.5f, 0.0f, 0.0f, 0.1f, { 1.0f, 1.0f, 1.0f }, 1.0f }, //Copper
         Material{ { 0.0f, 0.0f,  0.0f  }, 0.1f,  { 1.0f, 0.8f, 0.6f }, 5.0f, 1.5f, 0.0f, 0.0f, 0.1f, { 1.0f, 1.0f, 1.0f }, 0.0f }, //Light1
@@ -72,7 +72,7 @@ struct Scene
     {
         //{ float radius, { float3 position }, { Material }}
           Sphere{ 1.0f,  { -6.0f, 1.0f, 0.0f   }, 4u},
-          Sphere{ 19.0f, {  0.0f, -19.0f, 0.0f }, 1u},
+          Sphere{ 19.0f, {  0.0f, -20.0f, 0.0f }, 1u},
           Sphere{ 1.0f,  { -8.5f, 1.0f, 0.0f   }, 2u}
     };
 
