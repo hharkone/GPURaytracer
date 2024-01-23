@@ -97,9 +97,10 @@ public:
 	{
 		cudaDeviceSynchronize();
 
-		cudaFree(m_accumulationBuffer_GPU);
-		cudaFree(m_floatOutputBuffer_GPU);
-		cudaFree(m_imageData_GPU);
+		m_accumulationBuffer_GPU.free();
+		m_floatOutputBuffer_GPU.free();
+		m_imageData_GPU.free();
+
 		cudaFree(m_deviceMesh);
 		cudaFree(m_deviceScene);
 		m_imageData = nullptr;
@@ -115,9 +116,9 @@ public:
 	void OnResize(uint32_t width, uint32_t height);
 	void SetBounces(int bounces) { m_bounces = &bounces; }
 	float* getFloatOutputData(void) { return m_floatOutputBuffer; }
-	float* getFloatOutputDataDevice(void) { return (float*)m_floatOutputBuffer_GPU; }
+	CUDABuffer* getFloatOutputDataDevice(void) { return &m_floatOutputBuffer_GPU; }
 	uint32_t* getImageData(void) { return m_imageData; }
-	uint32_t* getImageDataDevice(void) { return m_imageData_GPU; }
+	uint32_t* getImageDataDevice(void) { return (uint32_t*)m_imageData_GPU.d_pointer(); }
 
 	uint32_t m_width;
 	uint32_t m_height;
@@ -140,12 +141,12 @@ private:
 	float* m_viewMat = nullptr;
 	float* m_localToWorldMat = nullptr;
 
-	//Image Buffers
-	float4* m_accumulationBuffer_GPU = nullptr;  //Raw samples buffer
+	//Float image Buffers
+	CUDABuffer m_accumulationBuffer_GPU;    //Raw samples buffer
+	CUDABuffer m_floatOutputBuffer_GPU;     //Final float output on the device
+	float*  m_floatOutputBuffer = nullptr;	//Final float output
 
-	float4* m_floatOutputBuffer_GPU = nullptr;   //Final float output on the device
-	float*  m_floatOutputBuffer = nullptr;		 //Final float output
-
-	uint32_t* m_imageData_GPU = nullptr;		 //Final 8-bit LDR output on the device
-	uint32_t* m_imageData = nullptr;			 //Final 8-bit LDR output
+	//LDR image buffers
+	CUDABuffer m_imageData_GPU;				//Final 8-bit LDR output on the device
+	uint32_t* m_imageData = nullptr;		//Final 8-bit LDR output
 };

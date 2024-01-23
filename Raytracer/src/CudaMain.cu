@@ -76,9 +76,10 @@ void CudaRenderer::Clear()
 	cudaDeviceSynchronize();
 	memset(m_floatOutputBuffer, 0, m_bufferSize);
 	memset(m_imageData, 0, m_width * m_height * sizeof(uint32_t));
-	cudaMemset(m_accumulationBuffer_GPU, 0, m_bufferSize);
-	cudaMemset(m_floatOutputBuffer_GPU, 0, m_bufferSize);
-	cudaMemset(m_imageData_GPU, 0, m_width * m_height * sizeof(uint32_t));
+
+	m_accumulationBuffer_GPU.clear();
+	m_floatOutputBuffer_GPU.clear();
+	m_imageData_GPU.clear();
 }
 
 __device__ static float fresnel_schlick_ratio(float cos_theta_incident, float power)
@@ -737,8 +738,14 @@ __global__ void tonemapper_kernel(float4* outputBuffer, float4* inputBuffer, uin
 
 	float wScale	= (((W * (A * W + C * B) + D * E) / (W * (A * W + B) + D * F)) - E / F);
 
-	outputBuffer[i] = make_float4((((c * (A * c + C * B) + D * E) / (c * (A * c + B) + D * F)) - E / F) * (1.0f / wScale), inputBuffer[i].w);
+	float3 outColor = (((c * (A * c + C * B) + D * E) / (c * (A * c + B) + D * F)) - E / F) * (1.0f / wScale);
 
+	outColor.x = clamp(outColor.x, 0.0f, 1.0f);
+	outColor.y = clamp(outColor.y, 0.0f, 1.0f);
+	outColor.z = clamp(outColor.z, 0.0f, 1.0f);
+	float alpha = clamp(inputBuffer[i].w, 0.0f, 1.0f);
+
+	outputBuffer[i] = make_float4(powf(outColor, 0.4646464), alpha);
 }
 
 __global__ void floatToImageData_kernel(uint32_t* outputBuffer, float4* inputBuffer, uint32_t width, uint32_t height, uint32_t sampleIndex, const Scene* scene)
@@ -796,7 +803,7 @@ void CudaRenderer::Compute(void)
 	camera_buffer_obj.aperture = m_aperture;
 	camera_buffer_obj.focusDist = m_focusDist;
 
-	render_kernel <<<blocks, threads>>> (m_accumulationBuffer_GPU, m_width, m_height, camera_buffer_obj, m_deviceScene, *m_samples, *m_bounces, *m_sampleIndex, m_deviceMesh);
+	render_kernel <<<blocks, threads>>> ((float4*)m_accumulationBuffer_GPU.d_pointer(), m_width, m_height, camera_buffer_obj, m_deviceScene, *m_samples, *m_bounces, *m_sampleIndex, m_deviceMesh);
 
 	// Check for any errors launching the kernel
 	cudaStatus = cudaGetLastError();
@@ -815,7 +822,7 @@ void CudaRenderer::Compute(void)
 		goto Error;
 	}
 
-	tonemapper_kernel <<<blocks, threads >>> (m_floatOutputBuffer_GPU, m_accumulationBuffer_GPU, m_width, m_height, *m_sampleIndex, m_deviceScene);
+	tonemapper_kernel <<<blocks, threads >>> ((float4*)m_floatOutputBuffer_GPU.d_pointer(), (float4*)m_accumulationBuffer_GPU.d_pointer(), m_width, m_height, *m_sampleIndex, m_deviceScene);
 
 	cudaDeviceSynchronize();
 
@@ -826,7 +833,7 @@ void CudaRenderer::Compute(void)
 		goto Error;
 	}
 
-	floatToImageData_kernel <<<blocks, threads >>> (m_imageData_GPU, m_floatOutputBuffer_GPU, m_width, m_height, *m_sampleIndex, *m_scene);
+	floatToImageData_kernel <<<blocks, threads >>> ((uint32_t*)m_imageData_GPU.d_pointer(), (float4*)m_floatOutputBuffer_GPU.d_pointer(), m_width, m_height, *m_sampleIndex, *m_scene);
 
 	// Check for any errors launching the kernel
 	cudaStatus = cudaGetLastError();
@@ -843,8 +850,11 @@ void CudaRenderer::Compute(void)
 		goto Error;
 	}
 
-	cudaStatus = cudaMemcpy(m_imageData, m_imageData_GPU, m_width * m_height * sizeof(uint32_t), cudaMemcpyDeviceToHost);
-	cudaStatus = cudaMemcpy(m_floatOutputBuffer, m_floatOutputBuffer_GPU, m_width * m_height * sizeof(float4), cudaMemcpyDeviceToHost);
+	//cudaStatus = cudaMemcpy(m_imageData, m_imageData_GPU, m_width * m_height * sizeof(uint32_t), cudaMemcpyDeviceToHost);
+	m_floatOutputBuffer_GPU.download(m_floatOutputBuffer, m_width * m_height * 4);
+	m_imageData_GPU.download(m_imageData, m_width * m_height);
+
+	//cudaStatus = cudaMemcpy(m_floatOutputBuffer, m_floatOutputBuffer_GPU.d_pointer(), m_width * m_height * sizeof(float4), cudaMemcpyDeviceToHost);
 
 	if (cudaStatus != cudaSuccess)
 	{
@@ -874,18 +884,14 @@ void CudaRenderer::OnResize(uint32_t width, uint32_t height)
 
 	cudaStatus = cudaDeviceSynchronize();
 
-	cudaStatus = cudaFree(m_accumulationBuffer_GPU);
-	cudaStatus = cudaFree(m_floatOutputBuffer_GPU);
-	cudaStatus = cudaFree(m_imageData_GPU);
+	m_accumulationBuffer_GPU.resize(m_bufferSize);
+	m_floatOutputBuffer_GPU.resize(m_bufferSize);
+	m_imageData_GPU.resize((size_t)width * (size_t)height * sizeof(uint32_t));
 
 	m_floatOutputBuffer = new float[m_bufferSize];
 	m_imageData = new uint32_t[width * height];
 	memset(m_imageData, 0, (size_t)width * (size_t)height * sizeof(uint32_t));
 	memset(m_floatOutputBuffer, 0, m_bufferSize);
-
-	cudaStatus = cudaMalloc(&m_accumulationBuffer_GPU, m_bufferSize);
-	cudaStatus = cudaMalloc(&m_floatOutputBuffer_GPU, m_bufferSize);
-	cudaStatus = cudaMalloc(&m_imageData_GPU, (size_t)width * (size_t)height * sizeof(uint32_t));
 
 	if (cudaStatus != cudaSuccess)
 	{

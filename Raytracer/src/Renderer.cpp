@@ -122,7 +122,7 @@ bool Renderer::InitOptix(uint32_t width, uint32_t height)
 	// Create and set our OptiX layers
 	memset(&m_optixLayer, 0, sizeof(OptixDenoiserLayer));
 
-	m_optixLayer.input.data = (CUdeviceptr)m_cudaRenderer->getFloatOutputDataDevice();
+	m_optixLayer.input.data = (CUdeviceptr)(m_cudaRenderer->getFloatOutputDataDevice()->d_pointer());
 	m_optixLayer.input.width = m_cudaRenderer->m_width;
 	m_optixLayer.input.height = m_cudaRenderer->m_height;
 	m_optixLayer.input.format = OPTIX_PIXEL_FORMAT_FLOAT4;
@@ -142,7 +142,7 @@ bool Renderer::InitOptix(uint32_t width, uint32_t height)
 
 bool Renderer::Denoise()
 {
-	m_optixLayer.input.data = (CUdeviceptr)m_cudaRenderer->getFloatOutputDataDevice();
+	m_optixLayer.input.data = (CUdeviceptr)(m_cudaRenderer->getFloatOutputDataDevice()->d_pointer());
 	//cudaMemcpy(&m_optixLayer.input.data, m_cudaRenderer->getFloatOutputDataDevice(), sizeof(CUdeviceptr), cudaMemcpyDeviceToDevice);
 	OptixDenoiserGuideLayer guide_layer = {};
 
