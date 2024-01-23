@@ -56,7 +56,7 @@ public:
 		ImGui::Text("Sample Index: %i", m_renderer.GetFrameIndex());
 
 		ImGui::Checkbox("Accumulate", &m_renderer.GetSettings().accumulate);
-		ImGui::Checkbox("Use OPTIX Denoise", &m_renderer.GetSettings().denoise);
+		ImGui::Checkbox("Use OPTIX Denoiser", &m_renderer.GetSettings().denoise);
 		if (ImGui::SliderInt("Max Bounces", &m_renderer.GetSettings().bounces, 0, 30)) { m_sceneChanged = true; }
 		if (ImGui::SliderInt("BVH Debug", &m_renderer.GetSettings().samples, 0, 1000)) { m_sceneChanged = true; }
 
@@ -221,6 +221,10 @@ public:
 		if (m_renderTimeMs > 0.0f)
 		{
 			m_raysPerSec = uint32_t((m_viewportWidth * m_viewportHeight) * (1000.0 / m_renderTimeMs) / 1000000);
+			if (!m_renderer.GetSettings().accumulate)
+			{
+				m_raysPerSec = 0;
+			}
 		}
 	}
 
