@@ -82,22 +82,17 @@ void CudaRenderer::Clear()
 	m_imageData_GPU.clear();
 }
 
-__device__ static float fresnel_schlick_ratio(float cos_theta_incident, float power)
+__device__ float fresnel(float cos_theta_incident, float cos_critical, float refractive_ratio)
 {
-	float p = 1.0f - cos_theta_incident;
-	return pow(p, power);
-}
+	if (cos_theta_incident <= cos_critical)
+		return 1.f;
 
-__device__ float fresnelSchlick(float cosTheta, float ior)
-{
-	float F1 = (ior - 1.0f);
-	F1 *= 2.0f;
-	float F2 = (ior + 1.0f);
-	F2 *= 2.0f;
+	float sin_theta_incident2 = 1.f - cos_theta_incident * cos_theta_incident;
+	float t = fsqrtf(1.f - sin_theta_incident2 / (refractive_ratio * refractive_ratio));
+	float sqrtRs = (cos_theta_incident - refractive_ratio * t) / (cos_theta_incident + refractive_ratio * t);
+	float sqrtRp = (t - refractive_ratio * cos_theta_incident) / (t + refractive_ratio * cos_theta_incident);
 
-	float F0 = F1 / F2;
-
-	return (F0 + (1.0f - F0) * powf(1.0f - cosTheta, 5.0f)) * (1.0-fminf(powf(ior, 20.0f), 1.0f)); //Hack to remove fresnel at ior ~1.0
+	return lerp(sqrtRs * sqrtRs, sqrtRp * sqrtRp, .5f);
 }
 
 // PCG (permuted congruential generator). Thanks to:
@@ -560,7 +555,6 @@ __device__ float3 radiance(Ray& r, uint32_t& s1, const Scene* scene, size_t boun
 
 		Material hitMat = scene->materials[hit.materialIndex];
 
-
 		if (!inVolume)
 		{
 			volumeIor = 1.0f;
@@ -576,7 +570,8 @@ __device__ float3 radiance(Ray& r, uint32_t& s1, const Scene* scene, size_t boun
 		float3 flippedNormal = (hit.inside ? -hit.normal : hit.normal);
 
 		float ndotl = fmaxf(dot(-r.direction, flippedNormal), 0.0f);
-		float F = fresnelSchlick(ndotl, hitMat.ior / volumeIor);
+		float F = fresnel(ndotl, 0.0f, hitMat.ior / volumeIor);
+
 		float apparentRoughness = lerp(hitMat.roughness, 0.0f, F);
 
 		bool isSpecularBounce = max(hitMat.metalness, F) >= randomValue(s1);
@@ -593,7 +588,7 @@ __device__ float3 radiance(Ray& r, uint32_t& s1, const Scene* scene, size_t boun
 		float transmissionDistance = thickness * volumeMat.transmissionDensity * 10.0f;
 		float transmissionDensity = 1.0-expf(-transmissionDistance);
 
-		float3 absorptionColor = powf(linearTransmissionColor, transmissionDensity * (1.0-expf(-volumeMat.transmissionDensity)) * 1.0f);
+		float3 absorptionColor = powf(linearTransmissionColor, transmissionDensity * (1.0-expf(-volumeMat.transmissionDensity)) * 10.0f);
 		//float3 absorptionColor = (linearTransmissionColor * transmissionDensity);
 
 		//absorption = absorption * lerp(make_float3(1.0f, 1.0f, 1.0f), absorptionColor, inVolume);
@@ -629,9 +624,6 @@ __device__ float3 radiance(Ray& r, uint32_t& s1, const Scene* scene, size_t boun
 
 		inVolume = (surfaceCount >= 1);
 
-
-
-
 		r.direction = normalize(lerp(lerp(diffuseDir, transmissionDir, isTransmissionBounce), specularDir, isSpecularBounce));
 
 		float p = fmaxf(mask.x, fmaxf(mask.y, mask.z));
@@ -641,7 +633,7 @@ __device__ float3 radiance(Ray& r, uint32_t& s1, const Scene* scene, size_t boun
 		}
 		mask *= 1.0f / p;
 
-		//accucolor = { absorptionColor };
+		//accucolor = { F,F,F };
 	}
 
 	//MAIN OUTPUT

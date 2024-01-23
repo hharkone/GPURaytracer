@@ -33,7 +33,7 @@ public:
 
 	virtual void OnUIRender() override
 	{
-		ImGui::ShowDemoWindow();
+		//ImGui::ShowDemoWindow();
 		ImGuiIO& io = ImGui::GetIO();
 		io.FontGlobalScale = 0.8f;
 		ImGuiStyle& style = ImGui::GetStyle();
