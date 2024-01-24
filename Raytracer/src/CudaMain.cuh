@@ -27,7 +27,8 @@ public:
 
 		m_hostMesh = new GPU_Mesh();
 		//m_hostMesh->LoadOBJFile("cube.obj", 1u);
-		m_hostMesh->LoadOBJFile("meshes/lucy.obj", 1u);
+		//m_hostMesh->LoadOBJFile("meshes/lucy.obj", 1u);
+		m_hostMesh->LoadOBJFile("meshes/dragon.obj", 0u);
 		//m_hostMesh->LoadOBJFile("meshes/buddha.obj", 1u);
 		//m_hostMesh->LoadOBJFile("meshes/suzanne.obj", 1u);
 		//m_hostMesh->LoadOBJFile("rk.obj", 2u);
@@ -99,6 +100,8 @@ public:
 
 		m_accumulationBuffer_GPU.free();
 		m_floatOutputBuffer_GPU.free();
+		m_floatAlbedoBuffer_GPU.free();
+		m_floatNormalBuffer_GPU.free();
 		m_imageData_GPU.free();
 
 		cudaFree(m_deviceMesh);
@@ -117,6 +120,8 @@ public:
 	void SetBounces(int bounces) { m_bounces = &bounces; }
 	float* getFloatOutputData(void) { return m_floatOutputBuffer; }
 	CUDABuffer* getFloatOutputDataDevice(void) { return &m_floatOutputBuffer_GPU; }
+	CUDABuffer* getFloatAlbedoOutputDataDevice(void) { return &m_floatAlbedoBuffer_GPU; }
+	CUDABuffer* getFloatNormalOutputDataDevice(void) { return &m_floatNormalBuffer_GPU; }
 	uint32_t* getImageData(void) { return m_imageData; }
 	uint32_t* getImageDataDevice(void) { return (uint32_t*)m_imageData_GPU.d_pointer(); }
 
@@ -144,6 +149,8 @@ private:
 	//Float image Buffers
 	CUDABuffer m_accumulationBuffer_GPU;    //Raw samples buffer
 	CUDABuffer m_floatOutputBuffer_GPU;     //Final float output on the device
+	CUDABuffer m_floatAlbedoBuffer_GPU;     //Final float albedo output on the device
+	CUDABuffer m_floatNormalBuffer_GPU;     //Final float normal output on the device
 	float*  m_floatOutputBuffer = nullptr;	//Final float output
 
 	//LDR image buffers

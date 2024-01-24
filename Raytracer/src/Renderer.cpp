@@ -122,20 +122,36 @@ bool Renderer::InitOptix(uint32_t width, uint32_t height)
 	// Create and set our OptiX layers
 	memset(&m_optixLayer, 0, sizeof(OptixDenoiserLayer));
 
+	//Input-Output data
 	m_optixLayer.input.data = (CUdeviceptr)(m_cudaRenderer->getFloatOutputDataDevice()->d_pointer());
-	m_optixLayer.input.width = m_cudaRenderer->m_width;
-	m_optixLayer.input.height = m_cudaRenderer->m_height;
+	m_optixLayer.input.width = width;
+	m_optixLayer.input.height = height;
 	m_optixLayer.input.format = OPTIX_PIXEL_FORMAT_FLOAT4;
 	m_optixLayer.input.pixelStrideInBytes = sizeof(float4);
-	m_optixLayer.input.rowStrideInBytes = m_cudaRenderer->m_width * sizeof(float4);
+	m_optixLayer.input.rowStrideInBytes = width * sizeof(float4);
 	m_optixLayer.type = OPTIX_DENOISER_AOV_TYPE_BEAUTY;
 
 	m_optixLayer.output.data = (CUdeviceptr)m_imageDataFloatDenoisedDevice;
-	m_optixLayer.output.width = m_cudaRenderer->m_width;
-	m_optixLayer.output.height = m_cudaRenderer->m_height;
+	m_optixLayer.output.width = width;
+	m_optixLayer.output.height = height;
 	m_optixLayer.output.format = OPTIX_PIXEL_FORMAT_FLOAT4;
 	m_optixLayer.output.pixelStrideInBytes = sizeof(float4);
-	m_optixLayer.output.rowStrideInBytes = m_cudaRenderer->m_width * sizeof(float4);
+	m_optixLayer.output.rowStrideInBytes = width * sizeof(float4);
+
+	//Guide layers
+	m_guide_layer.albedo.data = (CUdeviceptr)(m_cudaRenderer->getFloatAlbedoOutputDataDevice()->d_pointer());
+	m_guide_layer.albedo.width = width;
+	m_guide_layer.albedo.height = height;
+	m_guide_layer.albedo.format = OPTIX_PIXEL_FORMAT_FLOAT3;
+	m_guide_layer.albedo.pixelStrideInBytes = sizeof(float3);
+	m_guide_layer.albedo.rowStrideInBytes = width * sizeof(float3);
+
+	m_guide_layer.normal.data = (CUdeviceptr)(m_cudaRenderer->getFloatNormalOutputDataDevice()->d_pointer());
+	m_guide_layer.normal.width = width;
+	m_guide_layer.normal.height = height;
+	m_guide_layer.normal.format = OPTIX_PIXEL_FORMAT_FLOAT3;
+	m_guide_layer.normal.pixelStrideInBytes = sizeof(float3);
+	m_guide_layer.normal.rowStrideInBytes = width * sizeof(float3);
 
 	return true;
 }
@@ -144,12 +160,11 @@ bool Renderer::Denoise()
 {
 	m_optixLayer.input.data = (CUdeviceptr)(m_cudaRenderer->getFloatOutputDataDevice()->d_pointer());
 	//cudaMemcpy(&m_optixLayer.input.data, m_cudaRenderer->getFloatOutputDataDevice(), sizeof(CUdeviceptr), cudaMemcpyDeviceToDevice);
-	OptixDenoiserGuideLayer guide_layer = {};
 
 	// Execute the denoiser
 	if (OPTIX_CHECK(optixDenoiserInvoke(m_optixDenoiser, m_cudaStream, &m_optixParams,
 		(CUdeviceptr)m_denoiser_state_buffer, m_denoiser_sizes.stateSizeInBytes,
-		&guide_layer, &m_optixLayer, 1u, 0u, 0u,
+		&m_guide_layer, &m_optixLayer, 1u, 0u, 0u,
 		(CUdeviceptr)m_denoiser_scratch_buffer, m_denoiser_sizes.withoutOverlapScratchSizeInBytes))) return false;
 
 	cudaStreamSynchronize(m_cudaStream);

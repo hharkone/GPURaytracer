@@ -60,4 +60,5 @@ private:
     void* m_denoiser_state_buffer = nullptr;
     void* m_denoiser_scratch_buffer = nullptr;
     OptixDenoiserSizes m_denoiser_sizes = {};
+    OptixDenoiserGuideLayer m_guide_layer = {};
 };

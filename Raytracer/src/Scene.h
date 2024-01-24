@@ -44,8 +44,6 @@ struct Scene
     float sunFocus = 34.0f;
     float sunIntensity = 22.0f;
 
-
-
     //Tonemapper
     float A = 0.4f;
     float B = 0.24f;

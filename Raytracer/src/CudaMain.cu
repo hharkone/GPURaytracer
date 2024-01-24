@@ -522,7 +522,7 @@ __device__ float3 refractionRay(const float3 d, const float3 n, float ior)
 	}
 }
 
-__device__ float3 radiance(Ray& r, uint32_t& s1, const Scene* scene, size_t bounces, const GPU_Mesh* vbo, int debug) // Returns ray color
+__device__ float3 radiance(Ray& r, uint32_t& s1, const Scene* scene, size_t bounces, const GPU_Mesh* vbo, int debug, float3* albedoBuf, float3* normalBuf, uint32_t i, Camera_GPU* camera) // Returns ray color
 {
 	float3 accucolor = make_float3(0.0f, 0.0f, 0.0f); // Accumulates ray colour with each iteration through bounce loop
 	float3 mask = make_float3(1.0f, 1.0f, 1.0f);
@@ -550,6 +550,11 @@ __device__ float3 radiance(Ray& r, uint32_t& s1, const Scene* scene, size_t boun
 		{
 			//absorption = { 0.0f,0.0f,0.0f };
 			accucolor += mask * getEnvironmentLight(r, scene);
+			if (b <= 0)
+			{
+				albedoBuf[i] = getEnvironmentLight(r, scene);
+				normalBuf[i] = { 0.0f, 0.0f, 0.0f };
+			}
 			break;
 		}
 
@@ -601,6 +606,17 @@ __device__ float3 radiance(Ray& r, uint32_t& s1, const Scene* scene, size_t boun
 						lerp(linearSurfColor, absorptionColor, isTransmissionBounce),
 						lerp(make_float3(1.0f), linearSurfColor, hitMat.metalness),
 						isSpecularBounce);
+		if (b == 0)
+		{
+			albedoBuf[i] = linearSurfColor + srgbToLinear(hitMat.emission) * hitMat.emissionIntensity;
+			float target[4];
+			float4 normalVec = make_float4(flippedNormal, 0.0f);
+			vector4_matrix4_mult(&normalVec.x, &camera->viewMat[0], target);
+
+			normalBuf[i].x = target[0];
+			normalBuf[i].y = target[1];
+			normalBuf[i].z = target[2];
+		}
 
 		r.origin = hit.hitPoint + flippedNormal * 0.0001f; // offset ray origin slightly to prevent self intersection
 
@@ -633,7 +649,7 @@ __device__ float3 radiance(Ray& r, uint32_t& s1, const Scene* scene, size_t boun
 		}
 		mask *= 1.0f / p;
 
-		//accucolor = { F,F,F };
+		//accucolor = { albedoBuf[i] };
 	}
 
 	//MAIN OUTPUT
@@ -644,7 +660,7 @@ __device__ float3 radiance(Ray& r, uint32_t& s1, const Scene* scene, size_t boun
 	//return { float(surfaceCount)*0.25f, float(surfaceCount) * 0.25f, float(surfaceCount) * 0.25f };
 }
 
-__global__ void render_kernel(float4* buf, uint32_t width, uint32_t height, Camera_GPU camera, const Scene* scene, int samples,
+__global__ void render_kernel(float4* buf, float3* albedoBuf, float3* normalBuf, uint32_t width, uint32_t height, Camera_GPU camera, const Scene* scene, int samples,
 							  size_t bounces, uint32_t sampleIndex, const GPU_Mesh* vbo)
 {
 	// Assign a CUDA thread to every pixel (x,y) blockIdx, blockDim and threadIdx are CUDA specific
@@ -680,6 +696,7 @@ __global__ void render_kernel(float4* buf, uint32_t width, uint32_t height, Came
 
 	float2 pixelSize = make_float2(1.00f / (float)width, 1.00f / (float)height);
 	float2 aspect = make_float2(1.0f, (float)width / (float)height);
+
 	// Samples per pixel
 	for (size_t s = 0; s < 1u; s++)
 	{
@@ -698,7 +715,7 @@ __global__ void render_kernel(float4* buf, uint32_t width, uint32_t height, Came
 
 		ray.direction = normalize(jitteredViewPoint - ray.origin);
 
-		lightContribution += radiance(ray, s1, scene, bounces, vbo, samples);
+		lightContribution += radiance(ray, s1, scene, bounces, vbo, samples, albedoBuf, normalBuf, i, &camera);
 	}
 
 	// Write rgb value of pixel to image buffer on the GPU
@@ -795,7 +812,17 @@ void CudaRenderer::Compute(void)
 	camera_buffer_obj.aperture = m_aperture;
 	camera_buffer_obj.focusDist = m_focusDist;
 
-	render_kernel <<<blocks, threads>>> ((float4*)m_accumulationBuffer_GPU.d_pointer(), m_width, m_height, camera_buffer_obj, m_deviceScene, *m_samples, *m_bounces, *m_sampleIndex, m_deviceMesh);
+	render_kernel <<<blocks, threads>>> ((float4*)m_accumulationBuffer_GPU.d_pointer(),
+										 (float3*)m_floatAlbedoBuffer_GPU.d_pointer(),
+										 (float3*)m_floatNormalBuffer_GPU.d_pointer(),
+										  m_width,
+										  m_height,
+										  camera_buffer_obj,
+										  m_deviceScene,
+										  *m_samples,
+										  *m_bounces,
+										  *m_sampleIndex,
+										  m_deviceMesh);
 
 	// Check for any errors launching the kernel
 	cudaStatus = cudaGetLastError();
@@ -844,6 +871,7 @@ void CudaRenderer::Compute(void)
 
 	//cudaStatus = cudaMemcpy(m_imageData, m_imageData_GPU, m_width * m_height * sizeof(uint32_t), cudaMemcpyDeviceToHost);
 	m_floatOutputBuffer_GPU.download(m_floatOutputBuffer, m_width * m_height * 4);
+	//m_floatAlbedoBuffer_GPU.download(m_floatOutputBuffer, m_width * m_height * 4);
 	m_imageData_GPU.download(m_imageData, m_width * m_height);
 
 	//cudaStatus = cudaMemcpy(m_floatOutputBuffer, m_floatOutputBuffer_GPU.d_pointer(), m_width * m_height * sizeof(float4), cudaMemcpyDeviceToHost);
@@ -878,6 +906,9 @@ void CudaRenderer::OnResize(uint32_t width, uint32_t height)
 
 	m_accumulationBuffer_GPU.resize(m_bufferSize);
 	m_floatOutputBuffer_GPU.resize(m_bufferSize);
+	m_floatAlbedoBuffer_GPU.resize(width * height * sizeof(float3));
+	m_floatNormalBuffer_GPU.resize(width * height * sizeof(float3));
+
 	m_imageData_GPU.resize((size_t)width * (size_t)height * sizeof(uint32_t));
 
 	m_floatOutputBuffer = new float[m_bufferSize];
