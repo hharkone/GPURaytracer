@@ -26,16 +26,17 @@ struct Sphere
 enum class EnvironmentType
 {
     EnvType_Solid = 0,
-    EnvType_ProceduralSky = 1
+    EnvType_ProceduralSky = 1,
+    EnvType_HDRI = 2
 };
 
 struct Scene
 {
-    EnvironmentType envType = EnvironmentType::EnvType_ProceduralSky;
+    EnvironmentType envType = EnvironmentType::EnvType_HDRI;
 
     //Procedural Sky
     float3 skyColor = make_float3(1.0f, 1.0f, 1.0f);
-    float skyBrightness = 0.0f;
+    float skyBrightness = 1.0f;
     float3 skyColorHorizon = make_float3(0.55f, 0.66f, 0.9f);
     float3 skyColorZenith  = make_float3(0.28f, 0.28f, 0.75f);
     float3 groundColor     = make_float3(0.47f, 0.519f, 0.682f);
@@ -43,6 +44,7 @@ struct Scene
     float3 sunDirection = make_float3(1.0f, 0.42f, 0.58f);
     float sunFocus = 34.0f;
     float sunIntensity = 22.0f;
+    float skyRotation = 0.0f;
 
     //Tonemapper
     float A = 0.4f;

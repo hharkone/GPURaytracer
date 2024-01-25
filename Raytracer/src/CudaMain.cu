@@ -185,26 +185,64 @@ __device__ void vector4_matrix4_mult(float* vec, float* mat, float* out)
 	}
 }
 
-__device__ float3 getEnvironmentLight(const Ray& ray, const Scene* scene)
+__device__ float2 toSpherical(float3 dir, const float rot)
 {
-	if (scene->envType == EnvironmentType::EnvType_ProceduralSky)
+	dir = normalize(dir);
+	float u = (atan2f(dir.z, dir.x) / (M_PI * 2.0f)) + 0.5;
+	float v = acos(-dir.y) / M_PI;
+
+	u += rot* 0.002777777777f;
+	float uselessshit;
+
+	return make_float2(modf(u, &uselessshit), 1.0f-v);
+}
+
+__device__ float3 getEnvironmentLight(const Ray& ray, const Scene* scene, float* skyTex)
+{
+	switch(scene->envType)
 	{
-		float3 sunDir = normalize(scene->sunDirection);
+		case EnvironmentType::EnvType_ProceduralSky:
+		{
+			float3 sunDir = normalize(scene->sunDirection);
 
-		float skyGradientT = powf(fmaxf(ray.direction.y, 0.0f), 0.5f);
-		float groundToSkyT = powf(fmaxf(ray.direction.y, 0.0f), 0.15f);
+			float skyGradientT = powf(fmaxf(ray.direction.y, 0.0f), 0.5f);
+			float groundToSkyT = powf(fmaxf(ray.direction.y, 0.0f), 0.15f);
 
-		float3 skyGradient = lerp(srgbToLinear(scene->skyColorHorizon), srgbToLinear(scene->skyColorZenith), skyGradientT);
-		float sun = powf(fmaxf(0.0f, dot(ray.direction, sunDir)), scene->sunFocus) * scene->sunIntensity;
+			float3 skyGradient = lerp(srgbToLinear(scene->skyColorHorizon), srgbToLinear(scene->skyColorZenith), skyGradientT);
+			float sun = powf(fmaxf(0.0f, dot(ray.direction, sunDir)), scene->sunFocus) * scene->sunIntensity;
 
-		// Combine ground, sky, and sun
-		float3 composite = lerp(srgbToLinear(scene->groundColor), skyGradient, groundToSkyT) * scene->skyBrightness + sun;
+			// Combine ground, sky, and sun
+			float3 composite = lerp(srgbToLinear(scene->groundColor), skyGradient, groundToSkyT) * scene->skyBrightness + sun;
 
-		return composite * scene->skyColor;
-	}
-	else
-	{
-		return scene->skyColor * scene->skyBrightness;
+			return composite * scene->skyColor;
+		}
+		case EnvironmentType::EnvType_Solid:
+		{
+			return scene->skyColor * scene->skyBrightness;
+		}
+		case EnvironmentType::EnvType_HDRI:
+		{
+			size_t texWidth = 8192u;
+			size_t texHeight = 4096u;
+
+			float2 uv = toSpherical(ray.direction, scene->skyRotation);
+			size_t row = (size_t)(uv.y * (float)texHeight) * 3;
+			size_t col = (size_t)(uv.x * (float)texWidth) * 3;
+
+			//pixel = (float*)(skyTex + row * 8000u) + 4 * col;
+
+			//size_t pixelIndex = (col * texHeight * 3) + row;
+			size_t pixelIndex = (row * texWidth) + col;
+
+			//pixel = ((float*)skyTex + pixelIndex);
+			float r = *(skyTex + pixelIndex + 0);
+			float g = *(skyTex + pixelIndex + 1);
+			float b = *(skyTex + pixelIndex + 2);
+
+			float3 c = make_float3(r,g,b);
+
+			return c * scene->skyColor * scene->skyBrightness;
+		}
 	}
 }
 
@@ -522,7 +560,7 @@ __device__ float3 refractionRay(const float3 d, const float3 n, float ior)
 	}
 }
 
-__device__ float3 radiance(Ray& r, uint32_t& s1, const Scene* scene, size_t bounces, const GPU_Mesh* vbo, int debug, float3* albedoBuf, float3* normalBuf, uint32_t i, Camera_GPU* camera) // Returns ray color
+__device__ float3 radiance(Ray& r, uint32_t& s1, const Scene* scene, size_t bounces, const GPU_Mesh* vbo, int debug, float3* albedoBuf, float3* normalBuf, uint32_t i, Camera_GPU* camera, float* skyTex) // Returns ray color
 {
 	float3 accucolor = make_float3(0.0f, 0.0f, 0.0f); // Accumulates ray colour with each iteration through bounce loop
 	float3 mask = make_float3(1.0f, 1.0f, 1.0f);
@@ -549,11 +587,11 @@ __device__ float3 radiance(Ray& r, uint32_t& s1, const Scene* scene, size_t boun
 		if (!hit.didHit)
 		{
 			//absorption = { 0.0f,0.0f,0.0f };
-			accucolor += mask * getEnvironmentLight(r, scene);
+			accucolor += mask * getEnvironmentLight(r, scene, skyTex);
 			if (b <= 0)
 			{
-				albedoBuf[i] = getEnvironmentLight(r, scene);
-				normalBuf[i] = { 0.0f, 0.0f, 0.0f };
+				albedoBuf[i] = getEnvironmentLight(r, scene, skyTex);
+				normalBuf[i] = { 0.0f, 0.0f, 1.0f };
 			}
 			break;
 		}
@@ -661,7 +699,7 @@ __device__ float3 radiance(Ray& r, uint32_t& s1, const Scene* scene, size_t boun
 }
 
 __global__ void render_kernel(float4* buf, float3* albedoBuf, float3* normalBuf, uint32_t width, uint32_t height, Camera_GPU camera, const Scene* scene, int samples,
-							  size_t bounces, uint32_t sampleIndex, const GPU_Mesh* vbo)
+							  size_t bounces, uint32_t sampleIndex, const GPU_Mesh* vbo, float* skyTex)
 {
 	// Assign a CUDA thread to every pixel (x,y) blockIdx, blockDim and threadIdx are CUDA specific
 	// Keywords replaces nested outer loops in CPU code looping over image rows and image columns
@@ -670,12 +708,15 @@ __global__ void render_kernel(float4* buf, float3* albedoBuf, float3* normalBuf,
 
 	if ((x >= width) || (y >= height)) return;
 
+
 	// Index of current pixel (calculated using thread index)
 	uint32_t i = (height - y - 1) * width + x;
 	
 	// Seeds for random number generator
 	uint32_t s1 = x * y * sampleIndex + i;
 
+
+	//float4 outputImageTempFloat4 = tex2D<float4>(skyTex, 0.0f, 0.0f);
 
 	float2 coord = { (float)x / (float)width, (float)y / (float)height };
 	coord = (coord * 2.0f) - make_float2(1.0f, 1.0f); // -1 -> 1
@@ -715,7 +756,7 @@ __global__ void render_kernel(float4* buf, float3* albedoBuf, float3* normalBuf,
 
 		ray.direction = normalize(jitteredViewPoint - ray.origin);
 
-		lightContribution += radiance(ray, s1, scene, bounces, vbo, samples, albedoBuf, normalBuf, i, &camera);
+		lightContribution += radiance(ray, s1, scene, bounces, vbo, samples, albedoBuf, normalBuf, i, &camera, skyTex);
 	}
 
 	// Write rgb value of pixel to image buffer on the GPU
@@ -822,7 +863,8 @@ void CudaRenderer::Compute(void)
 										  *m_samples,
 										  *m_bounces,
 										  *m_sampleIndex,
-										  m_deviceMesh);
+										  m_deviceMesh,
+										  m_skyTexture);
 
 	// Check for any errors launching the kernel
 	cudaStatus = cudaGetLastError();

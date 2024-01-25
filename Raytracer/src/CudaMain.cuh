@@ -26,17 +26,14 @@ public:
 		m_localToWorldMat = new float[16];
 
 		m_hostMesh = new GPU_Mesh();
-		//m_hostMesh->LoadOBJFile("cube.obj", 1u);
-		//m_hostMesh->LoadOBJFile("meshes/lucy.obj", 1u);
-		m_hostMesh->LoadOBJFile("meshes/dragon.obj", 0u);
-		//m_hostMesh->LoadOBJFile("meshes/buddha.obj", 1u);
-		//m_hostMesh->LoadOBJFile("meshes/suzanne.obj", 1u);
-		//m_hostMesh->LoadOBJFile("rk.obj", 2u);
-		//m_hostMesh->LoadOBJFile("light.obj", 7u);
+		m_hostMesh->LoadOBJFile("meshes/dragon2.obj", 0u);
 		m_hostMesh->BuildBVH();
 
-		//ImageLoader imgLoader;
-		//float* imgBuff = imgLoader.LoadImageFile("Images/bridge1.raw", 8000, 4000);
+		ImageLoader imgLoader;
+		//m_skyTexture = (float*)imgLoader.LoadImageFile("Images/river_rocks_8k.raw", 8192, 4096);
+		m_skyTexture = (float*)imgLoader.LoadImageFile("Images/xanderklinge_8k.raw", 8192, 4096);
+
+		//m_envTextureBuffer_GPU.alloc_and_upload(imgBuff, 8000 * 4000);
 
 		cudaMalloc(&m_deviceScene, sizeof(Scene));
 
@@ -151,7 +148,11 @@ private:
 	CUDABuffer m_floatOutputBuffer_GPU;     //Final float output on the device
 	CUDABuffer m_floatAlbedoBuffer_GPU;     //Final float albedo output on the device
 	CUDABuffer m_floatNormalBuffer_GPU;     //Final float normal output on the device
-	float*  m_floatOutputBuffer = nullptr;	//Final float output
+	CUDABuffer m_envTextureBuffer_GPU;     //Final float normal output on the device
+
+	float* m_skyTexture;
+
+	float* m_floatOutputBuffer = nullptr;	//Final float output
 
 	//LDR image buffers
 	CUDABuffer m_imageData_GPU;				//Final 8-bit LDR output on the device

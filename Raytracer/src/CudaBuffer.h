@@ -50,25 +50,25 @@ struct CUDABuffer
 
     void clear()
     {
-        if(d_ptr != nullptr);
+        if(d_ptr != nullptr)
         {
             cudaMemset(d_ptr, 0, sizeInBytes);
         }
     }
 
     template<typename T>
-    void alloc_and_upload(const std::vector<T>& vt)
+    void alloc_and_upload(const T* vt, size_t count)
     {
-        alloc(vt.size() * sizeof(T));
-        upload((const T*)vt.data(), vt.size());
+        alloc(count * sizeof(*vt));
+        upload(vt, count);
     }
     
     template<typename T>
     void upload(const T* t, size_t count)
     {
         assert(d_ptr != nullptr);
-        assert(sizeInBytes == count * sizeof(T));
-        CUDA_CHECK(cudaMemcpy(d_ptr, (void*)t, count * sizeof(T), cudaMemcpyHostToDevice));
+        assert(sizeInBytes == count * sizeof(*t));
+        CUDA_CHECK(cudaMemcpy(d_ptr, (void*)t, count * sizeof(*t), cudaMemcpyHostToDevice));
     }
 
     template<typename T>
