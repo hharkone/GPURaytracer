@@ -75,11 +75,9 @@ void CudaRenderer::Clear()
 {
 	cudaDeviceSynchronize();
 	memset(m_floatOutputBuffer, 0, m_bufferSize);
-	memset(m_imageData, 0, m_width * m_height * sizeof(uint32_t));
 
 	m_accumulationBuffer_GPU.clear();
 	m_floatOutputBuffer_GPU.clear();
-	m_imageData_GPU.clear();
 }
 
 __device__ float fresnel(float cos_theta_incident, float cos_critical, float refractive_ratio)
@@ -894,6 +892,8 @@ void CudaRenderer::Compute(void)
 		goto Error;
 	}
 
+	//LDR
+	/*
 	floatToImageData_kernel <<<blocks, threads >>> ((uint32_t*)m_imageData_GPU.d_pointer(), (float4*)m_floatOutputBuffer_GPU.d_pointer(), m_width, m_height, *m_sampleIndex, *m_scene);
 
 	// Check for any errors launching the kernel
@@ -903,6 +903,7 @@ void CudaRenderer::Compute(void)
 		fprintf(stderr, "floatToImageData_kernel launch failed: %s\n", cudaGetErrorString(cudaStatus));
 		goto Error;
 	}
+	
 
 	cudaStatus = cudaDeviceSynchronize();
 	if (cudaStatus != cudaSuccess)
@@ -910,13 +911,10 @@ void CudaRenderer::Compute(void)
 		fprintf(stderr, "cudaDeviceSynchronize returned error code %s after launching floatToImageData_kernel!\n", cudaGetErrorString(cudaStatus));
 		goto Error;
 	}
+	*/
 
-	//cudaStatus = cudaMemcpy(m_imageData, m_imageData_GPU, m_width * m_height * sizeof(uint32_t), cudaMemcpyDeviceToHost);
 	m_floatOutputBuffer_GPU.download(m_floatOutputBuffer, m_width * m_height * 4);
-	//m_floatAlbedoBuffer_GPU.download(m_floatOutputBuffer, m_width * m_height * 4);
-	m_imageData_GPU.download(m_imageData, m_width * m_height);
-
-	//cudaStatus = cudaMemcpy(m_floatOutputBuffer, m_floatOutputBuffer_GPU.d_pointer(), m_width * m_height * sizeof(float4), cudaMemcpyDeviceToHost);
+	//m_imageData_GPU.download(m_imageData, m_width * m_height);
 
 	if (cudaStatus != cudaSuccess)
 	{
@@ -936,11 +934,8 @@ void CudaRenderer::OnResize(uint32_t width, uint32_t height)
 	}
 
 	m_bufferSize = width * height * sizeof(float4);
-
 	m_width = width;
 	m_height = height;
-
-	m_imageData = nullptr;
 
 	cudaError_t cudaStatus = cudaErrorStartupFailure;
 
@@ -951,11 +946,7 @@ void CudaRenderer::OnResize(uint32_t width, uint32_t height)
 	m_floatAlbedoBuffer_GPU.resize(width * height * sizeof(float3));
 	m_floatNormalBuffer_GPU.resize(width * height * sizeof(float3));
 
-	m_imageData_GPU.resize((size_t)width * (size_t)height * sizeof(uint32_t));
-
 	m_floatOutputBuffer = new float[m_bufferSize];
-	m_imageData = new uint32_t[width * height];
-	memset(m_imageData, 0, (size_t)width * (size_t)height * sizeof(uint32_t));
 	memset(m_floatOutputBuffer, 0, m_bufferSize);
 
 	if (cudaStatus != cudaSuccess)

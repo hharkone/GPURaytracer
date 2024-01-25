@@ -26,7 +26,7 @@ public:
 		m_localToWorldMat = new float[16];
 
 		m_hostMesh = new GPU_Mesh();
-		m_hostMesh->LoadOBJFile("meshes/dragon2.obj", 0u);
+		m_hostMesh->LoadOBJFile("meshes/cube.obj", 0u);
 		m_hostMesh->BuildBVH();
 
 		ImageLoader imgLoader;
@@ -99,11 +99,9 @@ public:
 		m_floatOutputBuffer_GPU.free();
 		m_floatAlbedoBuffer_GPU.free();
 		m_floatNormalBuffer_GPU.free();
-		m_imageData_GPU.free();
 
 		cudaFree(m_deviceMesh);
 		cudaFree(m_deviceScene);
-		m_imageData = nullptr;
 	}
 
 	void SetCamera(float3 pos, float3 dir, float aperture, float focusDist);
@@ -119,8 +117,6 @@ public:
 	CUDABuffer* getFloatOutputDataDevice(void) { return &m_floatOutputBuffer_GPU; }
 	CUDABuffer* getFloatAlbedoOutputDataDevice(void) { return &m_floatAlbedoBuffer_GPU; }
 	CUDABuffer* getFloatNormalOutputDataDevice(void) { return &m_floatNormalBuffer_GPU; }
-	uint32_t* getImageData(void) { return m_imageData; }
-	uint32_t* getImageDataDevice(void) { return (uint32_t*)m_imageData_GPU.d_pointer(); }
 
 	uint32_t m_width;
 	uint32_t m_height;
@@ -153,8 +149,4 @@ private:
 	float* m_skyTexture;
 
 	float* m_floatOutputBuffer = nullptr;	//Final float output
-
-	//LDR image buffers
-	CUDABuffer m_imageData_GPU;				//Final 8-bit LDR output on the device
-	uint32_t* m_imageData = nullptr;		//Final 8-bit LDR output
 };
