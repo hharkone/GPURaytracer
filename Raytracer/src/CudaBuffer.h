@@ -1,7 +1,6 @@
 #pragma once
 
 #include <cuda_runtime.h>
-#include <optix.h>
 #include <assert.h>
 #include <vector>
 #include <sstream>

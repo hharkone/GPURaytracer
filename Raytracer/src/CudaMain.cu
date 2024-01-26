@@ -74,9 +74,9 @@ struct Camera_GPU
 void CudaRenderer::Clear()
 {
 	cudaDeviceSynchronize();
-	memset(m_floatOutputBuffer, 0, m_bufferSize);
+	memset(m_finalOutputBuffer, 0, m_bufferSize);
 
-	m_accumulationBuffer_GPU.clear();
+	//m_accumulationBuffer_GPU.clear();
 	m_floatOutputBuffer_GPU.clear();
 }
 
@@ -588,8 +588,8 @@ __device__ float3 radiance(Ray& r, uint32_t& s1, const Scene* scene, size_t boun
 			accucolor += mask * getEnvironmentLight(r, scene, skyTex);
 			if (b <= 0)
 			{
-				albedoBuf[i] = getEnvironmentLight(r, scene, skyTex);
-				normalBuf[i] = { 0.0f, 0.0f, 1.0f };
+				albedoBuf[i] = make_float3(0.0f);
+				normalBuf[i] = { 0.0f, 0.0f, 0.0f };
 			}
 			break;
 		}
@@ -758,42 +758,15 @@ __global__ void render_kernel(float4* buf, float3* albedoBuf, float3* normalBuf,
 	}
 
 	// Write rgb value of pixel to image buffer on the GPU
-	buf[i] += make_float4(lightContribution, 1.0f);
-}
+	float scale = (1.0f / ((float)(sampleIndex)));
+	float factor = 1.0f-scale;
 
-__global__ void tonemapper_kernel(float4* outputBuffer, float4* inputBuffer, uint32_t width, uint32_t height, uint32_t sampleIndex, const Scene* scene)
-{
-	uint32_t x = blockDim.x * blockIdx.x + threadIdx.x;
-	uint32_t y = blockDim.y * blockIdx.y + threadIdx.y;
+	buf[i] *= factor;
+	buf[i] += make_float4(lightContribution, 1.0f) * scale;
 
-
-	if ((x >= width) || (y >= height))
-		return;
-
-	// Index of current pixel (calculated using thread index)
-	uint32_t i = (height - y - 1) * width + x;
-
-	float A = scene->A;
-	float B = scene->B;
-	float C = scene->C;
-	float D = scene->D;
-	float E = scene->E;
-	float F = scene->F;
-	float W = scene->W;
-	float Exp = scene->Exposure;
-
-	float3 c = (make_float3(inputBuffer[i].x, inputBuffer[i].y, inputBuffer[i].z) / sampleIndex) * Exp;
-
-	float wScale	= (((W * (A * W + C * B) + D * E) / (W * (A * W + B) + D * F)) - E / F);
-
-	float3 outColor = (((c * (A * c + C * B) + D * E) / (c * (A * c + B) + D * F)) - E / F) * (1.0f / wScale);
-
-	outColor.x = clamp(outColor.x, 0.0f, 1.0f);
-	outColor.y = clamp(outColor.y, 0.0f, 1.0f);
-	outColor.z = clamp(outColor.z, 0.0f, 1.0f);
-	float alpha = clamp(inputBuffer[i].w, 0.0f, 1.0f);
-
-	outputBuffer[i] = make_float4(powf(outColor, 0.4646464), alpha);
+	//buf[i] += make_float4(lightContribution * scale, 1.0f);
+	//buf[i].w = 1.0f;
+	//buf[i] = make_float4(lightContribution, 1.0f);
 }
 
 __global__ void floatToImageData_kernel(uint32_t* outputBuffer, float4* inputBuffer, uint32_t width, uint32_t height, uint32_t sampleIndex, const Scene* scene)
@@ -832,9 +805,8 @@ void CudaRenderer::Compute(void)
 
 	if (m_deviceScene != nullptr)
 	{
-		cudaMemcpy(m_deviceScene, *m_scene, sizeof(Scene), cudaMemcpyHostToDevice);
+		cudaStatus = cudaMemcpy(m_deviceScene, *m_scene, sizeof(Scene), cudaMemcpyHostToDevice);
 
-		cudaStatus = cudaGetLastError();
 		if (cudaStatus != cudaSuccess)
 		{
 			fprintf(stderr, "cudaMemcpy m_deviceScene failed: %s\n", cudaGetErrorString(cudaStatus));
@@ -851,7 +823,7 @@ void CudaRenderer::Compute(void)
 	camera_buffer_obj.aperture = m_aperture;
 	camera_buffer_obj.focusDist = m_focusDist;
 
-	render_kernel <<<blocks, threads>>> ((float4*)m_accumulationBuffer_GPU.d_pointer(),
+	render_kernel <<<blocks, threads>>> ((float4*)m_floatOutputBuffer_GPU.d_pointer(),
 										 (float3*)m_floatAlbedoBuffer_GPU.d_pointer(),
 										 (float3*)m_floatNormalBuffer_GPU.d_pointer(),
 										  m_width,
@@ -881,47 +853,8 @@ void CudaRenderer::Compute(void)
 		goto Error;
 	}
 
-	tonemapper_kernel <<<blocks, threads >>> ((float4*)m_floatOutputBuffer_GPU.d_pointer(), (float4*)m_accumulationBuffer_GPU.d_pointer(), m_width, m_height, *m_sampleIndex, m_deviceScene);
-
-	cudaDeviceSynchronize();
-
-	cudaStatus = cudaGetLastError();
-	if (cudaStatus != cudaSuccess)
-	{
-		fprintf(stderr, "cudaDeviceSynchronize returned error code %s after launching tonemapper_kernel!\n", cudaGetErrorString(cudaStatus));
-		goto Error;
-	}
-
-	//LDR
-	/*
-	floatToImageData_kernel <<<blocks, threads >>> ((uint32_t*)m_imageData_GPU.d_pointer(), (float4*)m_floatOutputBuffer_GPU.d_pointer(), m_width, m_height, *m_sampleIndex, *m_scene);
-
-	// Check for any errors launching the kernel
-	cudaStatus = cudaGetLastError();
-	if (cudaStatus != cudaSuccess)
-	{
-		fprintf(stderr, "floatToImageData_kernel launch failed: %s\n", cudaGetErrorString(cudaStatus));
-		goto Error;
-	}
+	m_floatOutputBuffer_GPU.download(m_finalOutputBuffer, m_width * m_height * 4);
 	
-
-	cudaStatus = cudaDeviceSynchronize();
-	if (cudaStatus != cudaSuccess)
-	{
-		fprintf(stderr, "cudaDeviceSynchronize returned error code %s after launching floatToImageData_kernel!\n", cudaGetErrorString(cudaStatus));
-		goto Error;
-	}
-	*/
-
-	m_floatOutputBuffer_GPU.download(m_floatOutputBuffer, m_width * m_height * 4);
-	//m_imageData_GPU.download(m_imageData, m_width * m_height);
-
-	if (cudaStatus != cudaSuccess)
-	{
-		fprintf(stderr, "cudaMemcpy failed!");
-		goto Error;
-	}
-
 Error:
 	printf("");
 }
@@ -941,13 +874,13 @@ void CudaRenderer::OnResize(uint32_t width, uint32_t height)
 
 	cudaStatus = cudaDeviceSynchronize();
 
-	m_accumulationBuffer_GPU.resize(m_bufferSize);
+	//m_accumulationBuffer_GPU.resize(m_bufferSize);
 	m_floatOutputBuffer_GPU.resize(m_bufferSize);
 	m_floatAlbedoBuffer_GPU.resize(width * height * sizeof(float3));
 	m_floatNormalBuffer_GPU.resize(width * height * sizeof(float3));
 
-	m_floatOutputBuffer = new float[m_bufferSize];
-	memset(m_floatOutputBuffer, 0, m_bufferSize);
+	m_finalOutputBuffer = new float[m_bufferSize];
+	memset(m_finalOutputBuffer, 0, m_bufferSize);
 
 	if (cudaStatus != cudaSuccess)
 	{

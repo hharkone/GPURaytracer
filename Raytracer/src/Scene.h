@@ -1,6 +1,6 @@
 #pragma once
 
-#include "cuda_runtime.h"
+#include <cuda_runtime.h>
 
 struct Material
 {
@@ -23,6 +23,19 @@ struct Sphere
     uint16_t materialIndex; // Material Index
 };
 
+struct TonemapSettings
+{
+    //Tonemapper
+    float A = 0.4f;
+    float B = 0.24f;
+    float C = 0.13f;
+    float D = 0.1f;
+    float E = 0.03f;
+    float F = 0.30f;
+    float W = 2.0f;
+    float Exposure = 1.0f;
+};
+
 enum class EnvironmentType
 {
     EnvType_Solid = 0,
@@ -32,6 +45,7 @@ enum class EnvironmentType
 
 struct Scene
 {
+    TonemapSettings tonemap;
     EnvironmentType envType = EnvironmentType::EnvType_HDRI;
 
     //Procedural Sky
@@ -45,16 +59,6 @@ struct Scene
     float sunFocus = 34.0f;
     float sunIntensity = 22.0f;
     float skyRotation = 0.0f;
-
-    //Tonemapper
-    float A = 0.4f;
-    float B = 0.24f;
-    float C = 0.13f;
-    float D = 0.1f;
-    float E = 0.03f;
-    float F = 0.30f;
-    float W = 2.0f;
-    float Exposure = 1.0f;
 
     Material materials[8] =
     {

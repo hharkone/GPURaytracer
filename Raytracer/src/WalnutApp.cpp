@@ -133,14 +133,14 @@ public:
 		ImGui::Separator();
 
 		ImGui::Text("Tonemapper");
-		ImGui::DragFloat("A", &m_scene.A, 0.001f, 0.0f, 10.0f);
-		ImGui::DragFloat("B", &m_scene.B, 0.001f, 0.0f, 10.0f);
-		ImGui::DragFloat("C", &m_scene.C, 0.001f, 0.0f, 10.0f);
-		ImGui::DragFloat("D", &m_scene.D, 0.001f, 0.0f, 10.0f);
-		ImGui::DragFloat("E", &m_scene.E, 0.001f, 0.0f, 10.0f);
-		ImGui::DragFloat("F", &m_scene.F, 0.001f, 0.0f, 10.0f);
-		ImGui::DragFloat("W", &m_scene.W, 0.01f, 0.0f, 10.0f);
-		ImGui::DragFloat("Exposure", &m_scene.Exposure, 0.01f, 0.0f, 20.0f);
+		ImGui::DragFloat("A", &m_scene.tonemap.A, 0.001f, 0.0f, 10.0f);
+		ImGui::DragFloat("B", &m_scene.tonemap.B, 0.001f, 0.0f, 10.0f);
+		ImGui::DragFloat("C", &m_scene.tonemap.C, 0.001f, 0.0f, 10.0f);
+		ImGui::DragFloat("D", &m_scene.tonemap.D, 0.001f, 0.0f, 10.0f);
+		ImGui::DragFloat("E", &m_scene.tonemap.E, 0.001f, 0.0f, 10.0f);
+		ImGui::DragFloat("F", &m_scene.tonemap.F, 0.001f, 0.0f, 10.0f);
+		ImGui::DragFloat("W", &m_scene.tonemap.W, 0.01f, 0.0f, 10.0f);
+		ImGui::DragFloat("Exposure", &m_scene.tonemap.Exposure, 0.01f, 0.0f, 20.0f);
 
 		ImGui::End();
 

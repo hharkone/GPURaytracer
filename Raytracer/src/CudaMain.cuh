@@ -26,12 +26,14 @@ public:
 		m_localToWorldMat = new float[16];
 
 		m_hostMesh = new GPU_Mesh();
-		m_hostMesh->LoadOBJFile("meshes/cube.obj", 0u);
+		m_hostMesh->LoadOBJFile("meshes/dragon2.obj", 0u);
 		m_hostMesh->BuildBVH();
 
 		ImageLoader imgLoader;
 		//m_skyTexture = (float*)imgLoader.LoadImageFile("Images/river_rocks_8k.raw", 8192, 4096);
-		m_skyTexture = (float*)imgLoader.LoadImageFile("Images/xanderklinge_8k.raw", 8192, 4096);
+		//m_skyTexture = (float*)imgLoader.LoadImageFile("Images/paul_lobe_haus_8k.raw", 8192, 4096);
+		m_skyTexture = (float*)imgLoader.LoadImageFile("Images/clarens_midday_8k.raw", 8192, 4096);
+		//m_skyTexture = (float*)imgLoader.LoadImageFile("Images/xanderklinge_8k.raw", 8192, 4096);
 
 		//m_envTextureBuffer_GPU.alloc_and_upload(imgBuff, 8000 * 4000);
 
@@ -95,7 +97,7 @@ public:
 	{
 		cudaDeviceSynchronize();
 
-		m_accumulationBuffer_GPU.free();
+		//m_accumulationBuffer_GPU.free();
 		m_floatOutputBuffer_GPU.free();
 		m_floatAlbedoBuffer_GPU.free();
 		m_floatNormalBuffer_GPU.free();
@@ -113,7 +115,7 @@ public:
 	void Clear(void);
 	void OnResize(uint32_t width, uint32_t height);
 	void SetBounces(int bounces) { m_bounces = &bounces; }
-	float* getFloatOutputData(void) { return m_floatOutputBuffer; }
+	float* getFloatOutputData(void) { return m_finalOutputBuffer; }
 	CUDABuffer* getFloatOutputDataDevice(void) { return &m_floatOutputBuffer_GPU; }
 	CUDABuffer* getFloatAlbedoOutputDataDevice(void) { return &m_floatAlbedoBuffer_GPU; }
 	CUDABuffer* getFloatNormalOutputDataDevice(void) { return &m_floatNormalBuffer_GPU; }
@@ -140,7 +142,7 @@ private:
 	float* m_localToWorldMat = nullptr;
 
 	//Float image Buffers
-	CUDABuffer m_accumulationBuffer_GPU;    //Raw samples buffer
+	//CUDABuffer m_accumulationBuffer_GPU;    //Raw samples buffer
 	CUDABuffer m_floatOutputBuffer_GPU;     //Final float output on the device
 	CUDABuffer m_floatAlbedoBuffer_GPU;     //Final float albedo output on the device
 	CUDABuffer m_floatNormalBuffer_GPU;     //Final float normal output on the device
@@ -148,5 +150,5 @@ private:
 
 	float* m_skyTexture;
 
-	float* m_floatOutputBuffer = nullptr;	//Final float output
+	float* m_finalOutputBuffer = nullptr;	//Final float output
 };
