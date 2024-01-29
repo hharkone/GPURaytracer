@@ -561,8 +561,9 @@ __device__ float3 refractionRay(const float3 d, const float3 n, float ior)
 __device__ float3 radiance(Ray& r, uint32_t& s1, const Scene* scene, size_t bounces, const GPU_Mesh* vbo, int debug, float3* albedoBuf, float3* normalBuf, uint32_t i, Camera_GPU* camera, float* skyTex) // Returns ray color
 {
 	float3 accucolor = make_float3(0.0f, 0.0f, 0.0f); // Accumulates ray colour with each iteration through bounce loop
+	float3 accuAlbedo = make_float3(0.0f, 0.0f, 0.0f); // Accumulates ray colour with each iteration through bounce loop
+	float3 accuNormal = make_float3(0.0f, 0.0f, 0.0f); // Accumulates ray colour with each iteration through bounce loop
 	float3 mask = make_float3(1.0f, 1.0f, 1.0f);
-	float3 absorption = make_float3(1.0f, 1.0f, 1.0f);
 
 	bool inVolume = false;
 	Material volumeMat;
@@ -578,8 +579,6 @@ __device__ float3 radiance(Ray& r, uint32_t& s1, const Scene* scene, size_t boun
 		if (inVolume)
 		{
 			thickness = thickness + length(hit.hitPoint - r.origin);
-			accucolor = accucolor * absorption;
-			//mask = mask * absorption;
 		}
 
 		if (!hit.didHit)
@@ -588,8 +587,8 @@ __device__ float3 radiance(Ray& r, uint32_t& s1, const Scene* scene, size_t boun
 			accucolor += mask * getEnvironmentLight(r, scene, skyTex);
 			if (b <= 0)
 			{
-				albedoBuf[i] = make_float3(0.0f);
-				normalBuf[i] = { 0.0f, 0.0f, 0.0f };
+				accuAlbedo += getEnvironmentLight(r, scene, skyTex);
+				accuNormal += { 0.0f, 0.0f, 1.0f };
 			}
 			break;
 		}
@@ -611,17 +610,17 @@ __device__ float3 radiance(Ray& r, uint32_t& s1, const Scene* scene, size_t boun
 		float3 flippedNormal = (hit.inside ? -hit.normal : hit.normal);
 
 		float ndotl = fmaxf(dot(-r.direction, flippedNormal), 0.0f);
-		float F = fresnel(ndotl, 0.0f, hitMat.ior / volumeIor);
+		float F = fresnel(ndotl, 0.0f, hitMat.ior);
 
 		float apparentRoughness = lerp(hitMat.roughness, 0.0f, F);
 
 		bool isSpecularBounce = max(hitMat.metalness, F) >= randomValue(s1);
-		bool isTransmissionBounce = lerp(0.0f, 1.0f, hitMat.transmission) > randomValue(s1);
+		bool isTransmissionBounce =  hitMat.transmission >= randomValue(s1);
 
 		float3 diffuseDir = normalize(flippedNormal + randomDirection(s1));
 		float3 specularDir = reflect(r.direction, normalize(flippedNormal + randomInUnitSphere(s1) * apparentRoughness));
 		
-		float3 transmissionDir = refractionRay(r.direction, normalize(hit.normal + randomInUnitSphere(s1) * hitMat.transmissionRoughness), hitMat.ior / volumeIor);
+		float3 transmissionDir = refractionRay(r.direction, normalize(hit.normal + randomInUnitSphere(s1) * hitMat.transmissionRoughness), hitMat.ior);
 
 		float3 linearSurfColor = srgbToLinear(hitMat.albedo);
 		float3 linearTransmissionColor = srgbToLinear(volumeMat.transmissionColor);
@@ -630,10 +629,7 @@ __device__ float3 radiance(Ray& r, uint32_t& s1, const Scene* scene, size_t boun
 		float transmissionDensity = 1.0-expf(-transmissionDistance);
 
 		float3 absorptionColor = powf(linearTransmissionColor, transmissionDensity * (1.0-expf(-volumeMat.transmissionDensity)) * 10.0f);
-		//float3 absorptionColor = (linearTransmissionColor * transmissionDensity);
 
-		//absorption = absorption * lerp(make_float3(1.0f, 1.0f, 1.0f), absorptionColor, inVolume);
-		
 		//EMISSION
 		accucolor += mask * srgbToLinear(hitMat.emission) * hitMat.emissionIntensity;
 
@@ -644,14 +640,12 @@ __device__ float3 radiance(Ray& r, uint32_t& s1, const Scene* scene, size_t boun
 						isSpecularBounce);
 		if (b == 0)
 		{
-			albedoBuf[i] = linearSurfColor + srgbToLinear(hitMat.emission) * hitMat.emissionIntensity;
+			accuAlbedo += linearSurfColor + srgbToLinear(hitMat.emission) * hitMat.emissionIntensity;
 			float target[4];
 			float4 normalVec = make_float4(flippedNormal, 0.0f);
 			vector4_matrix4_mult(&normalVec.x, &camera->viewMat[0], target);
 
-			normalBuf[i].x = target[0];
-			normalBuf[i].y = target[1];
-			normalBuf[i].z = target[2];
+			accuNormal += clamp(make_float3(target[0], target[1], target[2]) * 0.5 + 0.5, make_float3(0.0f), make_float3(1.0f));
 		}
 
 		r.origin = hit.hitPoint + flippedNormal * 0.0001f; // offset ray origin slightly to prevent self intersection
@@ -659,18 +653,18 @@ __device__ float3 radiance(Ray& r, uint32_t& s1, const Scene* scene, size_t boun
 		//Entering a surface
 		if (isTransmissionBounce && (dot(hit.normal, transmissionDir) < 0.0f))
 		{
-			volumeIor = volumeMat.ior;
 			volumeMat = hitMat;
+			volumeIor = volumeMat.ior;
 
-			r.origin = hit.hitPoint + hit.normal * -0.0001f; // offset ray origin slightly to prevent self intersection
+			r.origin = hit.hitPoint + flippedNormal * -0.0001f; // offset ray origin slightly to prevent self intersection
 			surfaceCount = surfaceCount + 1;
 		}
 		//Exiting a surface
-		else if (isTransmissionBounce && (dot(hit.normal, transmissionDir) > 0.0f))
+		else if (isTransmissionBounce && (dot(hit.normal, transmissionDir) >= 0.0f))
 		{
 			volumeIor = 1.0f;
 			volumeMat = hitMat;
-			r.origin = hit.hitPoint + hit.normal * 0.0001f; // offset ray origin slightly to prevent self intersection
+			r.origin = hit.hitPoint + flippedNormal * -0.0001f; // offset ray origin slightly to prevent self intersection
 			surfaceCount = surfaceCount - 1;
 		}
 
@@ -689,6 +683,8 @@ __device__ float3 radiance(Ray& r, uint32_t& s1, const Scene* scene, size_t boun
 	}
 
 	//MAIN OUTPUT
+	albedoBuf[i] = accuAlbedo;
+	normalBuf[i] = normalize(accuNormal);
 	return accucolor;
 
 	// 
@@ -719,10 +715,12 @@ __global__ void render_kernel(float4* buf, float3* albedoBuf, float3* normalBuf,
 	float2 coord = { (float)x / (float)width, (float)y / (float)height };
 	coord = (coord * 2.0f) - make_float2(1.0f, 1.0f); // -1 -> 1
 
-	float3 lightContribution;
+	float3 finalBeauty, finalNormal, finalAlbedo;
 
 	// Reset r to zero for every pixel
-	lightContribution = make_float3(0.0f);
+	finalBeauty = make_float3(0.0f);
+	finalAlbedo = make_float3(0.0f);
+	finalNormal = make_float3(0.0f);
 
 	// Calculate focus point
 	float viewPointLocal[4] = { coord.x, coord.y, 1.0f, 1.0f };
@@ -754,7 +752,9 @@ __global__ void render_kernel(float4* buf, float3* albedoBuf, float3* normalBuf,
 
 		ray.direction = normalize(jitteredViewPoint - ray.origin);
 
-		lightContribution += radiance(ray, s1, scene, bounces, vbo, samples, albedoBuf, normalBuf, i, &camera, skyTex);
+		finalBeauty += radiance(ray, s1, scene, bounces, vbo, samples, albedoBuf, normalBuf, i, &camera, skyTex);
+		finalAlbedo += albedoBuf[i];
+		finalNormal += normalBuf[i];
 	}
 
 	// Write rgb value of pixel to image buffer on the GPU
@@ -762,11 +762,13 @@ __global__ void render_kernel(float4* buf, float3* albedoBuf, float3* normalBuf,
 	float factor = 1.0f-scale;
 
 	buf[i] *= factor;
-	buf[i] += make_float4(lightContribution, 1.0f) * scale;
+	buf[i] += make_float4(finalBeauty, 1.0f) * scale;
 
-	//buf[i] += make_float4(lightContribution * scale, 1.0f);
-	//buf[i].w = 1.0f;
-	//buf[i] = make_float4(lightContribution, 1.0f);
+	albedoBuf[i] *= factor;
+	albedoBuf[i] += finalAlbedo * scale;
+
+	normalBuf[i] *= factor;
+	normalBuf[i] += finalNormal * scale;
 }
 
 __global__ void floatToImageData_kernel(uint32_t* outputBuffer, float4* inputBuffer, uint32_t width, uint32_t height, uint32_t sampleIndex, const Scene* scene)

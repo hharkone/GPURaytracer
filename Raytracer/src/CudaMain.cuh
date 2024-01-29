@@ -26,13 +26,15 @@ public:
 		m_localToWorldMat = new float[16];
 
 		m_hostMesh = new GPU_Mesh();
-		m_hostMesh->LoadOBJFile("meshes/dragon2.obj", 0u);
+		//m_hostMesh->LoadOBJFile("meshes/diamond_brilliant.obj", 0u);
+		m_hostMesh->LoadOBJFile("meshes/smart_car.obj", 0u);
 		m_hostMesh->BuildBVH();
 
 		ImageLoader imgLoader;
 		//m_skyTexture = (float*)imgLoader.LoadImageFile("Images/river_rocks_8k.raw", 8192, 4096);
 		//m_skyTexture = (float*)imgLoader.LoadImageFile("Images/paul_lobe_haus_8k.raw", 8192, 4096);
-		m_skyTexture = (float*)imgLoader.LoadImageFile("Images/clarens_midday_8k.raw", 8192, 4096);
+		//m_skyTexture = (float*)imgLoader.LoadImageFile("Images/clarens_midday_8k.raw", 8192, 4096);
+		m_skyTexture = (float*)imgLoader.LoadImageFile("Images/studio_19.raw", 8192, 4096);
 		//m_skyTexture = (float*)imgLoader.LoadImageFile("Images/xanderklinge_8k.raw", 8192, 4096);
 
 		//m_envTextureBuffer_GPU.alloc_and_upload(imgBuff, 8000 * 4000);

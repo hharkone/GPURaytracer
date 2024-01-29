@@ -75,9 +75,9 @@ struct Scene
     Sphere spheresSimple[3] =
     {
         //{ float radius, { float3 position }, { Material }}
-          Sphere{ 1.0f,  { 1.58f, 1.9f, -1.77f }, 7u},
+          //Sphere{ 1.0f,  { 1.58f, 1.9f, -1.77f }, 7u},
           Sphere{ 19.0f, {  0.0f, -19.0f, 0.0f }, 1u},
-          Sphere{ 1.3f,  { -3.9f, 1.8f, -0.56f }, 6u}
+          //Sphere{ 1.3f,  { -3.9f, 1.8f, -0.56f }, 6u}
     };
 
     size_t materialCount = 8u;
