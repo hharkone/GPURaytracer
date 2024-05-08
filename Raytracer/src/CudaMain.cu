@@ -76,8 +76,9 @@ void CudaRenderer::Clear()
 	cudaDeviceSynchronize();
 	memset(m_finalOutputBuffer, 0, m_bufferSize);
 
-	//m_accumulationBuffer_GPU.clear();
-	m_floatOutputBuffer_GPU.clear();
+	m_floatOutputBuffer_GPU.clear();	//Final float beauty output on the device
+	m_floatAlbedoBuffer_GPU.clear();	//Final float albedo output on the device
+	m_floatNormalBuffer_GPU.clear();	//Final float normal output on the device
 }
 
 __device__ float fresnel(float cos_theta_incident, float cos_critical, float refractive_ratio)
@@ -558,7 +559,7 @@ __device__ float3 refractionRay(const float3 d, const float3 n, float ior)
 	}
 }
 
-__device__ float3 radiance(Ray& r, uint32_t& s1, const Scene* scene, size_t bounces, const GPU_Mesh* vbo, int debug, float3* albedoBuf, float3* normalBuf, uint32_t i, Camera_GPU* camera, float* skyTex) // Returns ray color
+__device__ float3 radiance(Ray& r, uint32_t& s1, const Scene* scene, size_t bounces, const GPU_Mesh* vbo, int debug, float3& albedoOut, float3& normalOut, uint32_t i, Camera_GPU* camera, float* skyTex) // Returns ray color
 {
 	float3 accucolor = make_float3(0.0f, 0.0f, 0.0f); // Accumulates ray colour with each iteration through bounce loop
 	float3 accuAlbedo = make_float3(0.0f, 0.0f, 0.0f); // Accumulates ray colour with each iteration through bounce loop
@@ -567,7 +568,6 @@ __device__ float3 radiance(Ray& r, uint32_t& s1, const Scene* scene, size_t boun
 
 	bool inVolume = false;
 	Material volumeMat;
-	float volumeIor = 1.0f;
 	float thickness = 0.0f;
 	uint16_t surfaceCount = 0;
 
@@ -597,7 +597,6 @@ __device__ float3 radiance(Ray& r, uint32_t& s1, const Scene* scene, size_t boun
 
 		if (!inVolume)
 		{
-			volumeIor = 1.0f;
 			volumeMat = hitMat;
 		}
 		//actualIor = (inVolume ? volumeMat.ior / hitMat.ior : hitMat.ior);
@@ -615,7 +614,7 @@ __device__ float3 radiance(Ray& r, uint32_t& s1, const Scene* scene, size_t boun
 		float apparentRoughness = lerp(hitMat.roughness, 0.0f, F);
 
 		bool isSpecularBounce = max(hitMat.metalness, F) >= randomValue(s1);
-		bool isTransmissionBounce =  hitMat.transmission >= randomValue(s1);
+		bool isTransmissionBounce = (hitMat.transmission * (float)!isSpecularBounce) >= randomValue(s1);
 
 		float3 diffuseDir = normalize(flippedNormal + randomDirection(s1));
 		float3 specularDir = reflect(r.direction, normalize(flippedNormal + randomInUnitSphere(s1) * apparentRoughness));
@@ -640,13 +639,15 @@ __device__ float3 radiance(Ray& r, uint32_t& s1, const Scene* scene, size_t boun
 						isSpecularBounce);
 		if (b == 0)
 		{
-			accuAlbedo += linearSurfColor + srgbToLinear(hitMat.emission) * hitMat.emissionIntensity;
 			float target[4];
 			float4 normalVec = make_float4(flippedNormal, 0.0f);
 			vector4_matrix4_mult(&normalVec.x, &camera->viewMat[0], target);
 
-			accuNormal += clamp(make_float3(target[0], target[1], target[2]) * 0.5 + 0.5, make_float3(0.0f), make_float3(1.0f));
+			accuNormal += clamp(make_float3(target[0], target[1], target[2]) * 0.5f + 0.5f, make_float3(-1.0f), make_float3(1.0f));
+			accuAlbedo = lerp(linearSurfColor, linearTransmissionColor, hitMat.transmission) + srgbToLinear(hitMat.emission) * hitMat.emissionIntensity;
 		}
+
+		
 
 		r.origin = hit.hitPoint + flippedNormal * 0.0001f; // offset ray origin slightly to prevent self intersection
 
@@ -654,7 +655,6 @@ __device__ float3 radiance(Ray& r, uint32_t& s1, const Scene* scene, size_t boun
 		if (isTransmissionBounce && (dot(hit.normal, transmissionDir) < 0.0f))
 		{
 			volumeMat = hitMat;
-			volumeIor = volumeMat.ior;
 
 			r.origin = hit.hitPoint + flippedNormal * -0.0001f; // offset ray origin slightly to prevent self intersection
 			surfaceCount = surfaceCount + 1;
@@ -662,7 +662,6 @@ __device__ float3 radiance(Ray& r, uint32_t& s1, const Scene* scene, size_t boun
 		//Exiting a surface
 		else if (isTransmissionBounce && (dot(hit.normal, transmissionDir) >= 0.0f))
 		{
-			volumeIor = 1.0f;
 			volumeMat = hitMat;
 			r.origin = hit.hitPoint + flippedNormal * -0.0001f; // offset ray origin slightly to prevent self intersection
 			surfaceCount = surfaceCount - 1;
@@ -679,15 +678,16 @@ __device__ float3 radiance(Ray& r, uint32_t& s1, const Scene* scene, size_t boun
 		}
 		mask *= 1.0f / p;
 
-		//accucolor = { albedoBuf[i] };
+		///debug output
+		//accucolor = {};
 	}
 
 	//MAIN OUTPUT
-	albedoBuf[i] = accuAlbedo;
-	normalBuf[i] = normalize(accuNormal);
+	albedoOut = accuAlbedo;
+	normalOut = normalize(accuNormal);
 	return accucolor;
 
-	// 
+	///debug output
 	//return { float(inVolume),float(inVolume),float(inVolume) };
 	//return { float(surfaceCount)*0.25f, float(surfaceCount) * 0.25f, float(surfaceCount) * 0.25f };
 }
@@ -743,7 +743,7 @@ __global__ void render_kernel(float4* buf, float3* albedoBuf, float3* normalBuf,
 		//DOF
 		//float2 defocusJitter = randomPointInCircle(s1) * camera.aperture; //Even distribution
 		//float3 edgeBiasedJitter = randomPointInCircle(s1);
-		float2 defocusJitter = randomPointInCircle(s1, ((float)samples) * 0.01f) * camera.aperture; //Edge biased
+		float2 defocusJitter = randomPointInCircle(s1, 0.8f) * camera.aperture; //Edge biased
 		ray.origin = camera.pos + camRight * defocusJitter.x * aspect.x + camUp * defocusJitter.y * aspect.y;
 
 		//MSAA
@@ -752,9 +752,7 @@ __global__ void render_kernel(float4* buf, float3* albedoBuf, float3* normalBuf,
 
 		ray.direction = normalize(jitteredViewPoint - ray.origin);
 
-		finalBeauty += radiance(ray, s1, scene, bounces, vbo, samples, albedoBuf, normalBuf, i, &camera, skyTex);
-		finalAlbedo += albedoBuf[i];
-		finalNormal += normalBuf[i];
+		finalBeauty += radiance(ray, s1, scene, bounces, vbo, samples, finalAlbedo, finalNormal, i, &camera, skyTex);
 	}
 
 	// Write rgb value of pixel to image buffer on the GPU
@@ -769,6 +767,9 @@ __global__ void render_kernel(float4* buf, float3* albedoBuf, float3* normalBuf,
 
 	normalBuf[i] *= factor;
 	normalBuf[i] += finalNormal * scale;
+
+	//buf[i] *= factor;
+	//buf[i] += make_float4(finalAlbedo, 1.0f) * scale;
 }
 
 __global__ void floatToImageData_kernel(uint32_t* outputBuffer, float4* inputBuffer, uint32_t width, uint32_t height, uint32_t sampleIndex, const Scene* scene)
