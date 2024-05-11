@@ -9,7 +9,7 @@ class Denoiser
 {
 public:
 	Denoiser() {}
-    Denoiser::~Denoiser();
+    ~Denoiser();
 
     void Denoise(const Scene* scene, bool enabled);
     void InitOptix(void* inputBeautyBuffer, void* inputAlbedoBuffer, void* inputNormalBuffer, uint32_t width, uint32_t height);
