@@ -11,9 +11,9 @@ using namespace Walnut;
 Camera::Camera(float verticalFOV, float nearClip, float farClip)
 	: m_VerticalFOV(verticalFOV), m_NearClip(nearClip), m_FarClip(farClip)
 {
-	m_ForwardDirection = glm::vec3(0.5f, -0.1, -1.0f);
+	m_ForwardDirection = glm::vec3(0.0f, 0.0f, -1.0f);
 	//m_Position = glm::vec3(57.0f, 31.4f, 216.0f);
-	m_Position = glm::vec3(-1.17f, 1.06f, 2.41f);
+	m_Position = glm::vec3(0.0f, 0.0f, 3.0f);
 }
 
 void Camera::SetIsContextFocused(bool focus)

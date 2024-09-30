@@ -16,6 +16,7 @@ void* ImageLoader::LoadImageFile(const std::string path, uint32_t width, uint32_
 
     if (fptr == nullptr)
     {
+        fprintf(stderr, "LoadImageFile: Invalid file path.");
         return nullptr;
     }
 

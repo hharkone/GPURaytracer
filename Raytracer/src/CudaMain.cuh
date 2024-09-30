@@ -26,8 +26,10 @@ public:
 		m_localToWorldMat = new float[16];
 
 		m_hostMesh = new GPU_Mesh();
-		//m_hostMesh->LoadOBJFile("meshes/dragon2.obj", 0u);
-		m_hostMesh->LoadOBJFile("meshes/suzanne_high.obj", 0u);
+		//m_hostMesh->LoadOBJFile("meshes/cube_quads.obj", 0u);
+		//m_hostMesh->LoadOBJFile("meshes/skelly_boi.obj", 0u);
+		m_hostMesh->LoadOBJFile("meshes/dragon2.obj", 0u);
+		//m_hostMesh->LoadOBJFile("meshes/suzanne2.obj", 0u);
 		m_hostMesh->BuildBVH();
 
 		ImageLoader imgLoader;
@@ -36,7 +38,9 @@ public:
 		//m_skyTexture = (float*)imgLoader.LoadImageFile("Images/clarens_midday_8k.raw", 8192, 4096);
 		//m_skyTexture = (float*)imgLoader.LoadImageFile("Images/bridge1.raw", 8192, 4096);
 		//m_skyTexture = (float*)imgLoader.LoadImageFile("Images/xanderklinge_8k.raw", 8192, 4096);
-		m_skyTexture = (float*)imgLoader.LoadImageFile("Images/studio_19.raw", 8192, 4096);
+		//m_skyTexture = (float*)imgLoader.LoadImageFile("Images/studio_19.raw", 8192, 4096);
+		//m_skyTexture = (float*)imgLoader.LoadImageFile("Images/circus_arena_8k.raw", 8192, 4096);
+		m_skyTexture = (float*)imgLoader.LoadImageFile("Images/trekker_monument_8k.raw", 8192, 4096);
 
 		cudaMalloc(&m_deviceScene, sizeof(Scene));
 

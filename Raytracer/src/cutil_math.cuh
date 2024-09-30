@@ -445,9 +445,21 @@ inline __host__ __device__ float3 fabs(float3 v)
     return make_float3(fabs(v.x), fabs(v.y), fabs(v.z));
 }
 
+// power
 inline __host__ __device__ float3 powf(float3& a, float p)
 {
     return make_float3(pow(a.x, p), pow(a.y, p), pow(a.z, p));
+}
+
+// fractional value
+inline __host__ __device__ float fracf(float x)
+{
+    return x - floorf(x);
+}
+
+inline __host__ __device__ float3 fracf(float3 v)
+{
+    return make_float3(fracf(v.x), fracf(v.y), fracf(v.z));
 }
 
 // float4 functions

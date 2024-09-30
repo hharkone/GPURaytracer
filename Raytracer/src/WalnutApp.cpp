@@ -57,7 +57,7 @@ public:
 
 		ImGui::Checkbox("Accumulate", &m_renderer.GetSettings().accumulate);
 		ImGui::Checkbox("Use OPTIX Denoiser", &m_renderer.GetSettings().denoise);
-		if (ImGui::SliderInt("Max Bounces", &m_renderer.GetSettings().bounces, 0, 30)) { m_sceneChanged = true; }
+		if (ImGui::SliderInt("Max Bounces", &m_renderer.GetSettings().bounces, 1, 30)) { m_sceneChanged = true; }
 		if (ImGui::SliderInt("BVH Debug", &m_renderer.GetSettings().samples, 0, 1000)) { m_sceneChanged = true; }
 
 		if (ImGui::Button("Reset") || m_sceneChanged)
@@ -105,6 +105,7 @@ public:
 			m_sceneChanged = true;
 		}
 		ImGui::Text("");
+		if (ImGui::SliderFloat("Background Brightness", &m_scene.backgroundBrightness, 0.0f, 1.0f, "%.3f", flags)) { m_sceneChanged = true; }
 		if (item_current == 1)
 		{
 			if (ImGui::ColorEdit3("Sky Color", &(m_scene.skyColor.x))) { m_sceneChanged = true; }
@@ -165,6 +166,7 @@ public:
 			if (ImGui::ColorEdit3("Transmission Color", &(mat.transmissionColor.x))) { m_sceneChanged = true; }
 			if (ImGui::SliderFloat("Transmission", &mat.transmission, 0.0f, 1.0f, "%.3f")) { m_sceneChanged = true; }
 			if (ImGui::SliderFloat("Transmission Roughness", &mat.transmissionRoughness, 0.0f, 1.0f, "%.3f")) { m_sceneChanged = true; }
+			if (ImGui::SliderFloat("Transmission Aberration", &mat.transmissionAberration, 0.0f, 1.0f, "%.3f")) { m_sceneChanged = true; }
 			if (ImGui::SliderFloat("Transmission Density", &mat.transmissionDensity, 0.0f, 1.0f, "%.3f")) { m_sceneChanged = true; }
 			ImGui::Text("");
 			ImGui::Separator();

@@ -528,7 +528,7 @@ __device__ HitInfo intersect_scene(Ray& r, const Scene* scene, const GPU_Mesh* v
 	return closestHit;
 }
 
-__device__ float3 refractionRay(const float3 d, const float3 n, float ior)
+__device__ float3 refractionRay(const float3 d, const float3 n, float ior, bool& totalInternalReflection)
 {
 	float cosI = clamp(dot(n, d), -1.0f, 1.0f);
 
@@ -550,16 +550,40 @@ __device__ float3 refractionRay(const float3 d, const float3 n, float ior)
 
 	if (k < 0.0f)
 	{
+		totalInternalReflection = true;
 		return reflect(d, normal);
 		//return make_float3(0.0f, 0.0f, 0.0f);
 	}
 	else
 	{
+		totalInternalReflection = false;
 		return normalize(d * eta + normal * (eta * cosI - fsqrtf(k)));
 	}
 }
 
-__device__ float3 radiance(Ray& r, uint32_t& s1, const Scene* scene, size_t bounces, const GPU_Mesh* vbo, int debug, float3& albedoOut, float3& normalOut, uint32_t i, Camera_GPU* camera, float* skyTex) // Returns ray color
+__device__ float3 spectrum(float x)
+{
+	//x = clamp(x, 0.0f, 1.0f);
+	const float3 cs = make_float3(3.54541723f, 2.86670055f, 2.29421995f);
+	const float3 xs = make_float3(0.69548916f, 0.49416934f, 0.28269708f);
+	const float3 ys = make_float3(0.02320775f, 0.15936245f, 0.53520021f);
+
+	float3 cs2 = (cs * (make_float3(x) - xs));
+
+	float3 y = make_float3(1.0f, 1.0f, 1.0f) - cs2 * cs2;
+	y = clamp((y - ys), 0.0f, 1.0f);
+
+	return y * make_float3(2.0f, 2.0f, 20.0f);
+}
+
+__device__ float3 hsv2rgb(float3 c)
+{
+	float4 K = make_float4(1.0f, 2.0f / 3.0f, 1.0f / 3.0f, 3.0f);
+	float3 p = fabs(fracf(make_float3(c.x) + make_float3(K)) * 6.0f - make_float3(K.w));
+	return c.z * lerp(make_float3(K.x), clamp(p - make_float3(K.x), 0.0f, 1.0f), c.y);
+}
+
+__device__ float3 radiance(Ray& r, uint32_t s1, uint32_t& s2, const Scene* scene, size_t bounces, const GPU_Mesh* vbo, int debug, float3& albedoOut, float3& normalOut, uint32_t i, Camera_GPU* camera, float* skyTex) // Returns ray color
 {
 	float3 accucolor = make_float3(0.0f, 0.0f, 0.0f); // Accumulates ray colour with each iteration through bounce loop
 	float3 accuAlbedo = make_float3(0.0f, 0.0f, 0.0f); // Accumulates ray colour with each iteration through bounce loop
@@ -567,12 +591,17 @@ __device__ float3 radiance(Ray& r, uint32_t& s1, const Scene* scene, size_t boun
 	float3 mask = make_float3(1.0f, 1.0f, 1.0f);
 
 	bool inVolume = false;
+	bool totalInternalReflection = false;
 	Material volumeMat;
 	float thickness = 0.0f;
 	uint16_t surfaceCount = 0;
+	uint32_t s = 2345u;
+
+	
 
 	for (size_t b = 0; b < bounces; b++)
 	{
+		//float aberration = randomValue(s1);
 		// Test ray for intersection with scene
 		HitInfo hit = intersect_scene(r, scene, vbo, debug);
 
@@ -583,13 +612,16 @@ __device__ float3 radiance(Ray& r, uint32_t& s1, const Scene* scene, size_t boun
 
 		if (!hit.didHit)
 		{
-			//absorption = { 0.0f,0.0f,0.0f };
-			accucolor += mask * getEnvironmentLight(r, scene, skyTex);
+			float bgMask = 1.0f;
 			if (b <= 0)
 			{
-				accuAlbedo += getEnvironmentLight(r, scene, skyTex);
+				bgMask = scene->backgroundBrightness;
+				accuAlbedo += getEnvironmentLight(r, scene, skyTex) * bgMask;
 				accuNormal += { 0.0f, 0.0f, 1.0f };
 			}
+
+			accucolor += mask * getEnvironmentLight(r, scene, skyTex) * bgMask;
+
 			break;
 		}
 
@@ -611,7 +643,7 @@ __device__ float3 radiance(Ray& r, uint32_t& s1, const Scene* scene, size_t boun
 		float ndotl = fmaxf(dot(-r.direction, flippedNormal), 0.0f);
 		float F = fresnel(ndotl, 0.0f, hitMat.ior);
 
-		float apparentRoughness = lerp(hitMat.roughness, 0.0f, F);
+		float apparentRoughness = lerp(hitMat.roughness * hitMat.roughness, 0.0f, F);
 
 		bool isSpecularBounce = max(hitMat.metalness, F) >= randomValue(s1);
 		bool isTransmissionBounce = (hitMat.transmission * (float)!isSpecularBounce) >= randomValue(s1);
@@ -619,7 +651,13 @@ __device__ float3 radiance(Ray& r, uint32_t& s1, const Scene* scene, size_t boun
 		float3 diffuseDir = normalize(flippedNormal + randomDirection(s1));
 		float3 specularDir = reflect(r.direction, normalize(flippedNormal + randomInUnitSphere(s1) * apparentRoughness));
 		
-		float3 transmissionDir = refractionRay(r.direction, normalize(hit.normal + randomInUnitSphere(s1) * hitMat.transmissionRoughness), hitMat.ior);
+		
+		//float chromaticAberration = fmaxf(hitMat.ior + (aberration * 2.0f - 1.0f) * hitMat.transmissionAberration * (hitMat.ior-1.0f), 1.0f);
+		//float3 cromaticColor = spectrum(1.0f-aberration) * make_float3(0.5f, 0.5f, 0.098f) * 2.83067f;
+		//float3 cromaticColor = hsv2rgb(make_float3(1.0f-aberration, 0.5f, 1.0f)) * 2.93067f;
+		float3 transmissionDir = refractionRay(r.direction, normalize(hit.normal + randomInUnitSphere(s1) * hitMat.transmissionRoughness * hitMat.transmissionRoughness), volumeMat.ior, totalInternalReflection);
+		isSpecularBounce = (isSpecularBounce || totalInternalReflection);
+		isTransmissionBounce = (isTransmissionBounce * !totalInternalReflection);
 
 		float3 linearSurfColor = srgbToLinear(hitMat.albedo);
 		float3 linearTransmissionColor = srgbToLinear(volumeMat.transmissionColor);
@@ -630,7 +668,7 @@ __device__ float3 radiance(Ray& r, uint32_t& s1, const Scene* scene, size_t boun
 		float3 absorptionColor = powf(linearTransmissionColor, transmissionDensity * (1.0-expf(-volumeMat.transmissionDensity)) * 10.0f);
 
 		//EMISSION
-		accucolor += mask * srgbToLinear(hitMat.emission) * hitMat.emissionIntensity;
+		accucolor += mask * srgbToLinear(hitMat.emission) * hitMat.emissionIntensity * absorptionColor;
 
 		//MAIN OUTPUT
 		mask = mask * lerp(
@@ -647,24 +685,23 @@ __device__ float3 radiance(Ray& r, uint32_t& s1, const Scene* scene, size_t boun
 			accuAlbedo = lerp(linearSurfColor, linearTransmissionColor, hitMat.transmission) + srgbToLinear(hitMat.emission) * hitMat.emissionIntensity;
 		}
 
-		
-
 		r.origin = hit.hitPoint + flippedNormal * 0.0001f; // offset ray origin slightly to prevent self intersection
 
 		//Entering a surface
-		if (isTransmissionBounce && (dot(hit.normal, transmissionDir) < 0.0f))
+		if (isTransmissionBounce && (dot(flippedNormal, transmissionDir) < 0.0f))
 		{
 			volumeMat = hitMat;
 
 			r.origin = hit.hitPoint + flippedNormal * -0.0001f; // offset ray origin slightly to prevent self intersection
-			surfaceCount = surfaceCount + 1;
+			surfaceCount++;
 		}
 		//Exiting a surface
-		else if (isTransmissionBounce && (dot(hit.normal, transmissionDir) >= 0.0f))
+		else if (isTransmissionBounce && (dot(flippedNormal, transmissionDir) >= 0.0f))
 		{
 			volumeMat = hitMat;
+			volumeMat.ior = 1.001;
 			r.origin = hit.hitPoint + flippedNormal * -0.0001f; // offset ray origin slightly to prevent self intersection
-			surfaceCount = surfaceCount - 1;
+			surfaceCount--;
 		}
 
 		inVolume = (surfaceCount >= 1);
@@ -678,8 +715,9 @@ __device__ float3 radiance(Ray& r, uint32_t& s1, const Scene* scene, size_t boun
 		}
 		mask *= 1.0f / p;
 
+
 		///debug output
-		//accucolor = {};
+		//accucolor = { cromaticColor };
 	}
 
 	//MAIN OUTPUT
@@ -708,7 +746,7 @@ __global__ void render_kernel(float4* buf, float3* albedoBuf, float3* normalBuf,
 	
 	// Seeds for random number generator
 	uint32_t s1 = x * y * sampleIndex + i;
-
+	uint32_t s2 = i;
 
 	//float4 outputImageTempFloat4 = tex2D<float4>(skyTex, 0.0f, 0.0f);
 
@@ -741,18 +779,16 @@ __global__ void render_kernel(float4* buf, float3* albedoBuf, float3* normalBuf,
 		Ray ray = Ray(camera.pos, {0.0f, 0.0f, 0.0f});
 
 		//DOF
-		//float2 defocusJitter = randomPointInCircle(s1) * camera.aperture; //Even distribution
-		//float3 edgeBiasedJitter = randomPointInCircle(s1);
 		float2 defocusJitter = randomPointInCircle(s1, 0.8f) * camera.aperture; //Edge biased
-		ray.origin = camera.pos + camRight * defocusJitter.x * aspect.x + camUp * defocusJitter.y * aspect.y;
+		ray.origin = camera.pos +camRight * defocusJitter.x * aspect.x + camUp * defocusJitter.y * aspect.y;
 
 		//MSAA
-		float2 jitter = randomPointInCircle(s1, 1.0f) * 2.0f;
+		float2 jitter = make_float2(randomValue(s1) * 2.0 - 1.0, randomValue(s1) * 2.0 - 1.0);
 		float3 jitteredViewPoint = viewPoint + camRight * jitter.x * pixelSize.x + camUp * jitter.y * pixelSize.y;
 
 		ray.direction = normalize(jitteredViewPoint - ray.origin);
-
-		finalBeauty += radiance(ray, s1, scene, bounces, vbo, samples, finalAlbedo, finalNormal, i, &camera, skyTex);
+		
+		finalBeauty += radiance(ray, s1, s2, scene, bounces, vbo, samples, finalAlbedo, finalNormal, i, &camera, skyTex);
 	}
 
 	// Write rgb value of pixel to image buffer on the GPU

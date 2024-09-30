@@ -34,7 +34,7 @@ void GPU_Mesh::LoadOBJFile(const std::string& path, uint16_t materialIndex)
     std::string line;
 
     float x, y, z;
-    int f1, f2, f3, f4, f5, f6, f7, f8, f9;
+    int f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12;
     std::string s;
 
     std::vector<float3> pos;
@@ -62,21 +62,8 @@ void GPU_Mesh::LoadOBJFile(const std::string& path, uint16_t materialIndex)
         }
         else if (test == "f ")
         {
-            if (sscanf_s(line.c_str(), "f %i//%i %i//%i %i//%i\n", &f1, &f2, &f3, &f4, &f5, &f6) == 6 && uv.size() == 0)
-            {
-                tris.push_back(f1 - 1);
-                tris.push_back(f2 - 1);
-
-                tris.push_back(f3 - 1);
-                tris.push_back(f4 - 1);
-
-                tris.push_back(f5 - 1);
-                tris.push_back(f6 - 1);
-
-                importTriangleCount += 1u;
-                numTris++;
-            }
-            if (sscanf_s(line.c_str(), "f %i/%i/%i %i/%i/%i %i/%i/%i\n", &f1, &f2, &f3, &f4, &f5, &f6, &f7, &f8, &f9) == 9)
+            //Quads, with UV
+            if (sscanf_s(line.c_str(), "f %i/%i/%i %i/%i/%i %i/%i/%i %i/%i/%i\n", &f1, &f2, &f3, &f4, &f5, &f6, &f7, &f8, &f9, &f10, &f11, &f12) == 12)
             {
                 tris.push_back(f1 - 1);
                 tris.push_back(f3 - 1);
@@ -89,6 +76,76 @@ void GPU_Mesh::LoadOBJFile(const std::string& path, uint16_t materialIndex)
                 tris.push_back(f7 - 1);
                 tris.push_back(f9 - 1);
                 tris.push_back(f8 - 1);
+
+                tris.push_back(f7 - 1);
+                tris.push_back(f9 - 1);
+                tris.push_back(f8 - 1);
+
+                tris.push_back(f10 - 1);
+                tris.push_back(f12 - 1);
+                tris.push_back(f11 - 1);
+
+                tris.push_back(f1 - 1);
+                tris.push_back(f3 - 1);
+                tris.push_back(f2 - 1);
+
+
+                importTriangleCount += 2u;
+                numTris += 2u;
+            }
+            //Tris, with UV
+            else if (sscanf_s(line.c_str(), "f %i/%i/%i %i/%i/%i %i/%i/%i\n", &f1, &f2, &f3, &f4, &f5, &f6, &f7, &f8, &f9) == 9)
+            {
+                tris.push_back(f1 - 1);
+                tris.push_back(f3 - 1);
+                tris.push_back(f2 - 1);
+
+                tris.push_back(f4 - 1);
+                tris.push_back(f6 - 1);
+                tris.push_back(f5 - 1);
+
+                tris.push_back(f7 - 1);
+                tris.push_back(f9 - 1);
+                tris.push_back(f8 - 1);
+
+                importTriangleCount += 1u;
+                numTris++;
+            }
+            //Quads, no UV
+            else if (sscanf_s(line.c_str(), "f %i//%i %i//%i %i//%i %i//%i\n", &f1, &f2, &f3, &f4, &f5, &f6, &f7, &f8) == 8 && uv.size() == 0)
+            {
+                tris.push_back(f1 - 1);
+                tris.push_back(f2 - 1);
+
+                tris.push_back(f3 - 1);
+                tris.push_back(f4 - 1);
+
+                tris.push_back(f5 - 1);
+                tris.push_back(f6 - 1);
+
+                tris.push_back(f5 - 1);
+                tris.push_back(f6 - 1);
+
+                tris.push_back(f7 - 1);
+                tris.push_back(f8 - 1);
+
+                tris.push_back(f1 - 1);
+                tris.push_back(f2 - 1);
+
+                importTriangleCount += 2u;
+                numTris += 2u;
+            }
+            //Tris, no UV
+            else if (sscanf_s(line.c_str(), "f %i//%i %i//%i %i//%i\n", &f1, &f2, &f3, &f4, &f5, &f6) == 6 && uv.size() == 0)
+            {
+                tris.push_back(f1 - 1);
+                tris.push_back(f2 - 1);
+
+                tris.push_back(f3 - 1);
+                tris.push_back(f4 - 1);
+
+                tris.push_back(f5 - 1);
+                tris.push_back(f6 - 1);
 
                 importTriangleCount += 1u;
                 numTris++;

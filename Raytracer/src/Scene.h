@@ -11,6 +11,7 @@ struct Material
     float ior = 1.5f;
     float transmission = 0.0f;
     float transmissionRoughness = 0.0f;
+    float transmissionAberration = 0.0f;
     float transmissionDensity = 0.0f;
     float3 transmissionColor{ 1.0f, 1.0f, 1.0f };
     float  metalness = 0.0f;
@@ -59,27 +60,29 @@ struct Scene
     float sunFocus = 34.0f;
     float sunIntensity = 22.0f;
     float skyRotation = 0.0f;
+    float backgroundBrightness = 1.0f;
 
     Material materials[8] =
     {
-        Material{ { 0.5f, 0.5f,  0.5f  }, 0.21f, { 0.0f, 0.0f, 0.0f }, 0.0f, 1.5f, 0.5f, 1.0f, 1.0f, { 0.95f, 0.75f, 0.4f }, 0.0f }, //Glass
-        Material{ { 0.7f, 0.1f,  0.1f  }, 0.05f, { 0.0f, 0.0f, 0.0f }, 0.0f, 1.5f, 0.0f, 0.0f, 0.1f, { 1.0f, 1.0f, 1.0f }, 0.0f }, //Red	
-        Material{ { 0.5f, 0.7f,  0.8f  }, 0.1f,  { 0.0f, 0.0f, 0.0f }, 0.0f, 1.5f, 0.0f, 0.0f, 0.1f, { 1.0f, 1.0f, 1.0f }, 0.0f }, //Blue
-        Material{ { 0.8f, 0.8f,  0.8f  }, 0.5f,  { 0.0f, 0.0f, 0.0f }, 0.0f, 1.5f, 0.0f, 0.0f, 0.1f, { 1.0f, 1.0f, 1.0f }, 0.0f }, //White
-        Material{ { 1.0f, 0.9f,  0.6f  }, 0.1f,  { 0.0f, 0.0f, 0.0f }, 0.0f, 1.5f, 0.0f, 0.0f, 0.1f, { 1.0f, 1.0f, 1.0f }, 1.0f }, //Gold
-        Material{ { 0.98f,0.815f,0.75f }, 0.1f,  { 0.0f, 0.0f, 0.0f }, 0.0f, 1.5f, 0.0f, 0.0f, 0.1f, { 1.0f, 1.0f, 1.0f }, 1.0f }, //Copper
-        Material{ { 0.0f, 0.0f,  0.0f  }, 0.1f,  { 1.0f, 0.8f, 0.6f }, 7.0f, 1.5f, 0.0f, 0.0f, 0.1f, { 1.0f, 1.0f, 1.0f }, 0.0f }, //Light1
-        Material{ { 0.0f, 0.0f,  0.0f  }, 0.1f,  { 0.6f, 0.8f, 1.0f }, 4.5f, 1.5f, 0.0f, 0.0f, 0.1f, { 1.0f, 1.0f, 1.0f }, 0.0f }  //Light2
+        Material{ { 0.5f, 0.5f,  0.5f  }, 0.21f, { 0.0f, 0.0f, 0.0f }, 0.0f, 1.5f, 0.5f, 0.0f, 1.0f, 1.0f, { 0.95f, 0.75f, 0.4f }, 0.0f }, //Glass
+        Material{ { 0.7f, 0.1f,  0.1f  }, 0.05f, { 0.0f, 0.0f, 0.0f }, 0.0f, 1.5f, 0.0f, 0.0f, 0.0f, 0.1f, { 1.0f, 1.0f, 1.0f }, 0.0f }, //Red	
+        Material{ { 0.5f, 0.7f,  0.8f  }, 0.1f,  { 0.0f, 0.0f, 0.0f }, 0.0f, 1.5f, 0.0f, 0.0f, 0.0f, 0.1f, { 1.0f, 1.0f, 1.0f }, 0.0f }, //Blue
+        Material{ { 0.7f, 0.7f,  0.7f  }, 0.2f,  { 0.0f, 0.0f, 0.0f }, 0.0f, 1.5f, 0.0f, 0.0f, 0.0f, 0.1f, { 1.0f, 1.0f, 1.0f }, 0.0f }, //White
+        Material{ { 1.0f, 0.9f,  0.6f  }, 0.1f,  { 0.0f, 0.0f, 0.0f }, 0.0f, 1.5f, 0.0f, 0.0f, 0.0f, 0.1f, { 1.0f, 1.0f, 1.0f }, 1.0f }, //Gold
+        Material{ { 0.98f,0.815f,0.75f }, 0.1f,  { 0.0f, 0.0f, 0.0f }, 0.0f, 1.5f, 0.0f, 0.0f, 0.0f, 0.1f, { 1.0f, 1.0f, 1.0f }, 1.0f }, //Copper
+        Material{ { 0.0f, 0.0f,  0.0f  }, 0.1f,  { 1.0f, 0.8f, 0.6f }, 7.0f, 1.5f, 0.0f, 0.0f, 0.0f, 0.1f, { 1.0f, 1.0f, 1.0f }, 0.0f }, //Light1
+        Material{ { 0.0f, 0.0f,  0.0f  }, 0.1f,  { 0.6f, 0.8f, 1.0f }, 4.5f, 1.5f, 0.0f, 0.0f, 0.0f, 0.1f, { 1.0f, 1.0f, 1.0f }, 0.0f }  //Light2
     };
 
     Sphere spheresSimple[3] =
     {
         //{ float radius, { float3 position }, { Material }}
           //Sphere{ 1.0f,  { 1.58f, 1.9f, -1.77f }, 7u},
+          Sphere{ 0.25f,  { 0.0f, 0.0f, 0.0f }, 7u},
           Sphere{ 19.0f, {  0.0f, -19.0f, 0.0f }, 1u},
-          //Sphere{ 1.3f,  { -3.9f, 1.8f, -0.56f }, 6u}
+          Sphere{ 1.3f,  { -3.9f, 1.8f, -0.56f }, 6u}
     };
 
     size_t materialCount = 8u;
-    size_t sphereCount = 3u;
+    size_t sphereCount = 1u;
 };
