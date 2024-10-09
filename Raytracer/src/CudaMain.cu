@@ -660,7 +660,7 @@ __device__ float3 radiance(Ray& r, uint32_t s1, uint32_t& s2, const Scene* scene
 		//float chromaticAberration = fmaxf(hitMat.ior + (aberration * 2.0f - 1.0f) * hitMat.transmissionAberration * (hitMat.ior-1.0f), 1.0f);
 		//float3 cromaticColor = spectrum(1.0f-aberration) * make_float3(0.5f, 0.5f, 0.098f) * 2.83067f;
 		//float3 cromaticColor = hsv2rgb(make_float3(1.0f-aberration, 0.5f, 1.0f)) * 2.93067f;
-		float3 transmissionDir = refractionRay(r.direction, normalize(hit.normal + randomInUnitSphere(s1) * hitMat.transmissionRoughness * hitMat.transmissionRoughness), volumeMat.ior, totalInternalReflection);
+		float3 transmissionDir = refractionRay(normalize(r.direction + randomInUnitSphere(s1) * hitMat.transmissionRoughness * hitMat.transmissionRoughness), normalize(hit.normal), volumeMat.ior, totalInternalReflection);
 		isSpecularBounce = (isSpecularBounce || totalInternalReflection);
 		isTransmissionBounce = (isTransmissionBounce * !totalInternalReflection);
 

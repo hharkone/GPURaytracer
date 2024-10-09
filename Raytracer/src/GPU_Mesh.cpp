@@ -63,7 +63,7 @@ void GPU_Mesh::LoadOBJFile(const std::string& path, uint16_t materialIndex)
             else if (sscanf_s(line.c_str(), "v %f %f %f\n", &x, &y, &z) == 3) //vertex position
             {
                 pos.push_back(make_float3(x, y, z));
-                color.push_back(make_float3(1.0f, 0.1f, 0.1f));
+                color.push_back(make_float3(1.0f, 1.0f, 1.0f));
             }
 
         }
@@ -286,10 +286,6 @@ void GPU_Mesh::Subdivide(uint32_t nodeIdx)
     {
         return;
     }
-    if (nodesUsed >= 7)
-    {
-        int debug = 1;
-    }
 
     // determine split axis and position
     float3 extent = node.aabbMax - node.aabbMin;
@@ -369,4 +365,6 @@ void GPU_Mesh::BuildBVH()
     memcpy(newArr, bvhNode, nodesUsed * sizeof(BVHNode));
     delete[] bvhNode;
     bvhNode = newArr;
+
+    fprintf(stderr, "BVH built using: %i nodes\n", nodesUsed);
 }
