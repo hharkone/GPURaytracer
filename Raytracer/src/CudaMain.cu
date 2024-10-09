@@ -57,6 +57,7 @@ struct HitInfo
 	float dst = FLT_MAX;
 	float3 hitPoint {0.0f, 0.0f, 0.0f};
 	float3 normal{ 0.0f, 0.0f, 0.0f };
+	float3 color{ 0.0f, 0.0f, 0.0f };
 	size_t materialIndex = 0u;
 };
 
@@ -308,12 +309,16 @@ __device__ HitInfo rayTriangleIntersect(const Ray& ray, const GPU_Mesh::Triangle
 		normal = normalize(tri->n0 + tri->n1 + tri->n2);
 	}
 
+	float3 color = tri->c0 * w + tri->c1 * u + tri->c2 * v;
+	//color = make_float3(1.0f, 1.0f, 1.0f);
+
 	// Initialize hit info
 	HitInfo hit;
 	//hit.didHit = determinant >= 1E-6 && dst >= 0.0f && u >= 0.0f && v >= 0.0f && w >= 0.0f;
 	hit.didHit = dst >= 0.0f && u >= 0.0f && v >= 0.0f && w >= 0.0f;
 	hit.hitPoint = (ray.origin) + ray.direction * dst;
 	hit.normal = normal;
+	hit.color = color;
 	//hit.normal = normalize(normalVector);
 	hit.dst = dst;
 	hit.inside = (dot(normalVector, ray.direction) > 0.0f ? true : false);
@@ -684,7 +689,8 @@ __device__ float3 radiance(Ray& r, uint32_t s1, uint32_t& s2, const Scene* scene
 
 		inVolume = (surfaceCount >= 1);
 
-		float3 linearSurfColor = srgbToLinear(hitMat.albedo);
+		float3 linearVertexColor = srgbToLinear(hit.color);
+		float3 linearSurfColor = srgbToLinear(hitMat.albedo) * linearVertexColor;
 		float3 linearTransmissionColor = srgbToLinear(volumeMat.transmissionColor);
 
 		float transmissionDistance = thickness * volumeMat.transmissionDensity * 10.0f;

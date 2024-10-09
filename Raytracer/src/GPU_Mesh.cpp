@@ -31,14 +31,22 @@ void GPU_Mesh::LoadOBJFile(const std::string& path, uint16_t materialIndex)
     uint32_t importTriangleCount = 0u;
 
     std::ifstream infile(path, std::ifstream::in);
+
+    if (infile.fail())
+    {
+        fprintf(stderr, "Mesh importing faled, invalid filepath.\n");
+        return;
+    }
+
     std::string line;
 
-    float x, y, z;
+    float x, y, z, r, g, b;
     int f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12;
     std::string s;
 
     std::vector<float3> pos;
     std::vector<float3> normal;
+    std::vector<float3> color;
     std::vector<float2> uv;
     std::vector<int> tris;
 
@@ -47,17 +55,26 @@ void GPU_Mesh::LoadOBJFile(const std::string& path, uint16_t materialIndex)
         std::string test = line.substr(0, 2);
         if (test == "v ")
         {
-            if (sscanf_s(line.c_str(), "v %f %f %f\n", &x, &y, &z) == 3)
+            if (sscanf_s(line.c_str(), "v %f %f %f %f %f %f\n", &x, &y, &z, &r, &g, &b) == 6) //vertex position with color data
+            {
                 pos.push_back(make_float3(x, y, z));
+                color.push_back(make_float3(r, g, b));
+            }
+            else if (sscanf_s(line.c_str(), "v %f %f %f\n", &x, &y, &z) == 3) //vertex position
+            {
+                pos.push_back(make_float3(x, y, z));
+                color.push_back(make_float3(1.0f, 0.1f, 0.1f));
+            }
+
         }
         else if (test == "vn")
         {
-            if (sscanf_s(line.c_str(), "vn %f %f %f\n", &x, &y, &z) == 3)
+            if (sscanf_s(line.c_str(), "vn %f %f %f\n", &x, &y, &z) == 3) // vertex normal
                 normal.push_back(make_float3(x, y, z));
         }
         else if (test == "vt")
         {
-            if (sscanf_s(line.c_str(), "vt %f %f\n", &x, &y) == 2)
+            if (sscanf_s(line.c_str(), "vt %f %f\n", &x, &y) == 2) // vertex UV
                 uv.push_back(make_float2(materialIndex, materialIndex));
         }
         else if (test == "f ")
@@ -177,14 +194,17 @@ void GPU_Mesh::LoadOBJFile(const std::string& path, uint16_t materialIndex)
             Triangle newTri;
 
             newTri.pos0 = pos[tris[j + 0u]];
+            newTri.c0 = color[tris[j + 0u]];
             newTri.n0 = normal[tris[j + 1u]];
             newTri.uv0 = {0.0f, 0.0f};
 
             newTri.pos1 = pos[tris[j + 2u]];
+            newTri.c1 = color[tris[j + 2u]];
             newTri.n1 = normal[tris[j + 3u]];
             newTri.uv1 = { 0.0f, 0.0f };
 
             newTri.pos2 = pos[tris[j + 4u]];
+            newTri.c2 = color[tris[j + 4u]];
             newTri.n2 = normal[tris[j + 5u]];
             newTri.uv2 = { 0.0f, 0.0f };
 
@@ -198,14 +218,17 @@ void GPU_Mesh::LoadOBJFile(const std::string& path, uint16_t materialIndex)
             Triangle newTri;
 
             newTri.pos0 = pos[tris[j + 0u]];
+            newTri.c0 = color[tris[j + 0u]];
             newTri.n0 = normal[tris[j + 1u]];
             newTri.uv0 = uv[tris[j + 2u]];
 
             newTri.pos1 = pos[tris[j + 3u]];
+            newTri.c1 = color[tris[j + 3u]];
             newTri.n1 = normal[tris[j + 4u]];
             newTri.uv1 = uv[tris[j + 5u]];
 
             newTri.pos2 = pos[tris[j + 6u]];
+            newTri.c2 = color[tris[j + 6u]];
             newTri.n2 = normal[tris[j + 7u]];
             newTri.uv2 = uv[tris[j + 8u]];
 

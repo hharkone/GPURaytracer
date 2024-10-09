@@ -64,7 +64,7 @@ struct Scene
 
     Material materials[8] =
     {
-        Material{ { 0.5f, 0.5f,  0.5f  }, 0.21f, { 0.0f, 0.0f, 0.0f }, 0.0f, 1.5f, 0.5f, 0.0f, 1.0f, 1.0f, { 0.95f, 0.75f, 0.4f }, 0.0f }, //Glass
+        Material{ { 0.8f, 0.8f,  0.8f  }, 0.21f, { 0.0f, 0.0f, 0.0f }, 0.0f, 1.5f, 0.0f, 0.0f, 1.0f, 1.0f, { 0.95f, 0.75f, 0.4f }, 0.0f }, //Diffuse
         Material{ { 0.7f, 0.1f,  0.1f  }, 0.05f, { 0.0f, 0.0f, 0.0f }, 0.0f, 1.5f, 0.0f, 0.0f, 0.0f, 0.1f, { 1.0f, 1.0f, 1.0f }, 0.0f }, //Red	
         Material{ { 0.5f, 0.7f,  0.8f  }, 0.1f,  { 0.0f, 0.0f, 0.0f }, 0.0f, 1.5f, 0.0f, 0.0f, 0.0f, 0.1f, { 1.0f, 1.0f, 1.0f }, 0.0f }, //Blue
         Material{ { 0.7f, 0.7f,  0.7f  }, 0.2f,  { 0.0f, 0.0f, 0.0f }, 0.0f, 1.5f, 0.0f, 0.0f, 0.0f, 0.1f, { 1.0f, 1.0f, 1.0f }, 0.0f }, //White
@@ -84,5 +84,5 @@ struct Scene
     };
 
     size_t materialCount = 8u;
-    size_t sphereCount = 1u;
+    size_t sphereCount = 0u;
 };

@@ -15,11 +15,12 @@ public:
     {
         float3 pos0, pos1, pos2;
         float3 n0, n1, n2;
+        float3 c0, c1, c2;
         float2 uv0, uv1, uv2;
         float3 centroid;
 
     private:
-        float padding0 = 1337.0f;
+        //float2 padding0;
     };
 
     struct MeshInfo
