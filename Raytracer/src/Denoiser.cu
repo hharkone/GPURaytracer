@@ -32,7 +32,7 @@ inline void optixCheckReportError(OptixResult result, char const* const func, co
 #define OPTIX_CHECK(val) optixCheckReportError((val), #val, __FILE__, __LINE__)
 
 
-__global__ void tonemapper_kernel2(float4* inputBuffer, float4* outputBuffer, uint32_t width, uint32_t height, const Scene* scene)
+__global__ void tonemapper_kernel2(float4* inputBuffer, float4* outputBuffer, uint32_t width, uint32_t height, const TonemapSettings tonemapper)
 {
 	uint32_t x = blockDim.x * blockIdx.x + threadIdx.x;
 	uint32_t y = blockDim.y * blockIdx.y + threadIdx.y;
@@ -44,14 +44,14 @@ __global__ void tonemapper_kernel2(float4* inputBuffer, float4* outputBuffer, ui
 	// Index of current pixel (calculated using thread index)
 	uint32_t i = (height - y - 1) * width + x;
 
-	float A = scene->tonemap.A;
-	float B = scene->tonemap.B;
-	float C = scene->tonemap.C;
-	float D = scene->tonemap.D;
-	float E = scene->tonemap.E;
-	float F = scene->tonemap.F;
-	float W = scene->tonemap.W;
-	float Exp = scene->tonemap.Exposure;
+	float A = tonemapper.A;
+	float B = tonemapper.B;
+	float C = tonemapper.C;
+	float D = tonemapper.D;
+	float E = tonemapper.E;
+	float F = tonemapper.F;
+	float W = tonemapper.W;
+	float Exp = tonemapper.Exposure;
 
 	float3 c = (make_float3(inputBuffer[i].x, inputBuffer[i].y, inputBuffer[i].z)) * Exp;
 
@@ -92,7 +92,7 @@ void Denoiser::InitOptix(void* inputBeautyBuffer, void* inputAlbedoBuffer, void*
 		return;
 	}
 
-	m_deviceScene.resize(sizeof(Scene));
+	//m_deviceScene.resize(sizeof(Scene));
 
 	m_floatDenoisedBuffer_GPU.resize(width * height * sizeof(float4));
 	m_floatTonemappedBuffer_GPU.resize(width * height * sizeof(float4));
@@ -179,12 +179,12 @@ void Denoiser::InitOptix(void* inputBeautyBuffer, void* inputAlbedoBuffer, void*
 	return;
 }
 
-void Denoiser::Denoise(const Scene* scene, bool enabled)
+void Denoiser::Denoise(const TonemapSettings* tonemapper, bool enabled)
 {
 	int tx = 8;
 	int ty = 8;
 
-	m_deviceScene.upload(scene, 1u);
+	//m_deviceScene.upload(scene, 1u);
 
 	// dim3 is CUDA specific type, block and grid are required to schedule CUDA threads over streaming multiprocessors
 	dim3 blocks(m_width / tx + 1, m_height / ty + 1, 1);
@@ -209,11 +209,11 @@ void Denoiser::Denoise(const Scene* scene, bool enabled)
 		CU_CHECK(cudaStreamSynchronize(m_cudaStream));
 		CU_CHECK(cudaDeviceSynchronize());
 
-		tonemapper_kernel2 <<<blocks, threads >>> ((float4*)m_floatDenoisedBuffer_GPU.d_pointer(), (float4*)m_floatTonemappedBuffer_GPU.d_pointer(), m_width, m_height, (Scene*)m_deviceScene.d_pointer());
+		tonemapper_kernel2 <<<blocks, threads >>> ((float4*)m_floatDenoisedBuffer_GPU.d_pointer(), (float4*)m_floatTonemappedBuffer_GPU.d_pointer(), m_width, m_height, *tonemapper);
 	}
 	else
 	{
-		tonemapper_kernel2 <<<blocks, threads >>> ((float4*)m_optixLayer.input.data, (float4*)m_floatTonemappedBuffer_GPU.d_pointer(), m_width, m_height, (Scene*)m_deviceScene.d_pointer());
+		tonemapper_kernel2 <<<blocks, threads >>> ((float4*)m_optixLayer.input.data, (float4*)m_floatTonemappedBuffer_GPU.d_pointer(), m_width, m_height, *tonemapper);
 	}
 
 	cudaStatus = cudaGetLastError();
@@ -240,5 +240,4 @@ Denoiser::~Denoiser()
 	cudaFree(m_denoiser_scratch_buffer);
 	m_floatDenoisedBuffer_GPU.free();
 	m_floatTonemappedBuffer_GPU.free();
-	m_deviceScene.free();
 }

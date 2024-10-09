@@ -14,7 +14,8 @@ project "Raytracer"
       "../Walnut/vendor/glm",
       "../Walnut/Walnut/src",
       "%{IncludeDir.VulkanSDK}",
-      "%{RT_IncludeDir.CUDA}"
+      "%{RT_IncludeDir.CUDA}",
+	  "%{RT_IncludeDir.OPTIX}"
    }
 
    libdirs

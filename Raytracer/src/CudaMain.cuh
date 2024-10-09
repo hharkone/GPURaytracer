@@ -11,7 +11,7 @@
 class CudaRenderer
 {
 public:
-	CudaRenderer(uint32_t width, uint32_t height, const Scene** scene, uint32_t* sampleIndex, int* samples, int* bounces)
+	CudaRenderer(uint32_t width, uint32_t height, const Scene* scene, uint32_t* sampleIndex, int* samples, int* bounces)
 		: m_sampleIndex(sampleIndex), m_samples(samples),
 		  m_bounces(bounces), m_scene(scene)
 	{
@@ -28,9 +28,11 @@ public:
 		m_hostMesh = new GPU_Mesh();
 		//m_hostMesh->LoadOBJFile("meshes/cube_quads.obj", 0u);
 		//m_hostMesh->LoadOBJFile("meshes/skelly_boi.obj", 0u);
-		m_hostMesh->LoadOBJFile("meshes/dragon2.obj", 0u);
-		//m_hostMesh->LoadOBJFile("meshes/suzanne2.obj", 0u);
+		//m_hostMesh->LoadOBJFile("meshes/angel.obj", 0u);
+		m_hostMesh->LoadOBJFile("meshes/buddha.obj", 0u);
 		m_hostMesh->BuildBVH();
+
+		m_deviceScene.alloc(sizeof(Scene));
 
 		ImageLoader imgLoader;
 		//m_skyTexture = (float*)imgLoader.LoadImageFile("Images/river_rocks_8k.raw", 8192, 4096);
@@ -40,15 +42,9 @@ public:
 		//m_skyTexture = (float*)imgLoader.LoadImageFile("Images/xanderklinge_8k.raw", 8192, 4096);
 		//m_skyTexture = (float*)imgLoader.LoadImageFile("Images/studio_19.raw", 8192, 4096);
 		//m_skyTexture = (float*)imgLoader.LoadImageFile("Images/circus_arena_8k.raw", 8192, 4096);
-		m_skyTexture = (float*)imgLoader.LoadImageFile("Images/trekker_monument_8k.raw", 8192, 4096);
+		//m_skyTexture = (float*)imgLoader.LoadImageFile("Images/trekker_monument_8k.raw", 8192, 4096);
+		m_skyTexture = (float*)imgLoader.LoadImageFile("Images/tief_etz_8k.raw", 8192, 4096);
 
-		cudaMalloc(&m_deviceScene, sizeof(Scene));
-
-		cudaStatus = cudaGetLastError();
-		if (cudaStatus != cudaSuccess)
-		{
-			fprintf(stderr, "cudaMemcpy m_deviceScene failed: %s\n", cudaGetErrorString(cudaStatus));
-		}
 
 		cudaMalloc(&m_deviceMesh, sizeof(GPU_Mesh));
 		cudaMemcpy(m_deviceMesh, m_hostMesh, sizeof(GPU_Mesh), cudaMemcpyHostToDevice);
@@ -106,11 +102,14 @@ public:
 		m_floatOutputBuffer_GPU.free();
 		m_floatAlbedoBuffer_GPU.free();
 		m_floatNormalBuffer_GPU.free();
+		m_envTextureBuffer_GPU.free();
+
+		m_deviceScene.free();
 
 		cudaFree(m_deviceMesh);
-		cudaFree(m_deviceScene);
 	}
 
+	void SetScene(const Scene* scene);
 	void SetCamera(float3 pos, float3 dir, float aperture, float focusDist);
 	void SetInvViewMat(float4 x, float4 y, float4 z, float4 w);
 	void SetInvProjMat(float4 x, float4 y, float4 z, float4 w);
@@ -131,8 +130,7 @@ public:
 private:
 	float m_aperture;
 	float m_focusDist;
-	const Scene** m_scene;
-	Scene* m_deviceScene;
+	const Scene* m_scene;
 	GPU_Mesh* m_hostMesh;
 	GPU_Mesh* m_deviceMesh;
 	size_t m_bufferSize;
@@ -152,6 +150,8 @@ private:
 	CUDABuffer m_floatAlbedoBuffer_GPU;     //Final float albedo output on the device
 	CUDABuffer m_floatNormalBuffer_GPU;     //Final float normal output on the device
 	CUDABuffer m_envTextureBuffer_GPU;     //Final float normal output on the device
+
+	CUDABuffer m_deviceScene;
 
 	float* m_skyTexture;
 

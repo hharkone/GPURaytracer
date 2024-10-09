@@ -11,7 +11,7 @@ public:
 	Denoiser() {}
     ~Denoiser();
 
-    void Denoise(const Scene* scene, bool enabled);
+    void Denoise(const TonemapSettings* tonemapper, bool enabled);
     void InitOptix(void* inputBeautyBuffer, void* inputAlbedoBuffer, void* inputNormalBuffer, uint32_t width, uint32_t height);
     float* GetDenoisedBuffer() { return m_finalOutputBuffer; }
 
@@ -31,7 +31,6 @@ private:
 
     CUDABuffer m_floatDenoisedBuffer_GPU;     //Denoised linear float output on the device
     CUDABuffer m_floatTonemappedBuffer_GPU;   //Final tonemapped float output on the device
-    CUDABuffer m_deviceScene;
 
     float* m_finalOutputBuffer = nullptr;	//Final float output
 };

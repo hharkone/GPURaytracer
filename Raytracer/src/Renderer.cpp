@@ -37,7 +37,7 @@ void Renderer::OnResize(uint32_t width, uint32_t height)
 
 	if (!m_cudaRenderer)
 	{
-		m_cudaRenderer = std::shared_ptr<CudaRenderer>(new CudaRenderer(width, height, &m_activeScene, &m_frameIndex, &GetSettings().samples, &m_settings.bounces));
+		m_cudaRenderer = std::shared_ptr<CudaRenderer>(new CudaRenderer(width, height, m_activeScene, &m_frameIndex, &GetSettings().samples, &m_settings.bounces));
 	}
 	else
 	{
@@ -93,13 +93,13 @@ void Renderer::Render(const Scene& scene, const Camera& camera)
 			m_cudaRenderer->SetInvProjMat(x2, y2, z2, w2);
 			m_cudaRenderer->SetViewMat(x3, y3, z3, w3);
 			m_cudaRenderer->SetLocalToWorldMat(x4, y4, z4, w4);
-
+			m_cudaRenderer->SetScene(m_activeScene);
 			m_cudaRenderer->Compute();
 
 			m_frameIndex++;
 		}
 
-		m_denoiser.Denoise(m_activeScene, m_settings.denoise);
+		m_denoiser.Denoise(&m_activeScene->tonemap, m_settings.denoise);
 
 		if (m_denoiser.GetDenoisedBuffer())
 		{

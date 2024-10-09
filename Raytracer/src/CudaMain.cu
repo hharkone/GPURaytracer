@@ -659,6 +659,31 @@ __device__ float3 radiance(Ray& r, uint32_t s1, uint32_t& s2, const Scene* scene
 		isSpecularBounce = (isSpecularBounce || totalInternalReflection);
 		isTransmissionBounce = (isTransmissionBounce * !totalInternalReflection);
 
+
+		r.origin = hit.hitPoint + flippedNormal * 0.0001f; // offset ray origin slightly to prevent self intersection
+		r.direction = normalize(lerp(lerp(diffuseDir, transmissionDir, isTransmissionBounce), specularDir, isSpecularBounce));
+
+		//Entering a surface
+		if (isTransmissionBounce && (dot(flippedNormal, transmissionDir) < 0.0f))
+		{
+			volumeMat = hitMat;
+
+			r.origin = hit.hitPoint + flippedNormal * -0.0001f; // offset ray origin slightly to prevent self intersection
+			surfaceCount++;
+			//inVolume = true;
+		}
+		//Exiting a surface
+		else if (isTransmissionBounce && (dot(flippedNormal, transmissionDir) >= 0.0f))
+		{
+			volumeMat = hitMat;
+			volumeMat.ior = 1.001;
+			r.origin = hit.hitPoint + flippedNormal * -0.0001f; // offset ray origin slightly to prevent self intersection
+			surfaceCount--;
+			//inVolume = false;
+		}
+
+		inVolume = (surfaceCount >= 1);
+
 		float3 linearSurfColor = srgbToLinear(hitMat.albedo);
 		float3 linearTransmissionColor = srgbToLinear(volumeMat.transmissionColor);
 
@@ -666,6 +691,7 @@ __device__ float3 radiance(Ray& r, uint32_t s1, uint32_t& s2, const Scene* scene
 		float transmissionDensity = 1.0-expf(-transmissionDistance);
 
 		float3 absorptionColor = powf(linearTransmissionColor, transmissionDensity * (1.0-expf(-volumeMat.transmissionDensity)) * 10.0f);
+		absorptionColor = (inVolume ? absorptionColor : make_float3(1.0f));
 
 		//EMISSION
 		accucolor += mask * srgbToLinear(hitMat.emission) * hitMat.emissionIntensity * absorptionColor;
@@ -685,28 +711,7 @@ __device__ float3 radiance(Ray& r, uint32_t s1, uint32_t& s2, const Scene* scene
 			accuAlbedo = lerp(linearSurfColor, linearTransmissionColor, hitMat.transmission) + srgbToLinear(hitMat.emission) * hitMat.emissionIntensity;
 		}
 
-		r.origin = hit.hitPoint + flippedNormal * 0.0001f; // offset ray origin slightly to prevent self intersection
 
-		//Entering a surface
-		if (isTransmissionBounce && (dot(flippedNormal, transmissionDir) < 0.0f))
-		{
-			volumeMat = hitMat;
-
-			r.origin = hit.hitPoint + flippedNormal * -0.0001f; // offset ray origin slightly to prevent self intersection
-			surfaceCount++;
-		}
-		//Exiting a surface
-		else if (isTransmissionBounce && (dot(flippedNormal, transmissionDir) >= 0.0f))
-		{
-			volumeMat = hitMat;
-			volumeMat.ior = 1.001;
-			r.origin = hit.hitPoint + flippedNormal * -0.0001f; // offset ray origin slightly to prevent self intersection
-			surfaceCount--;
-		}
-
-		inVolume = (surfaceCount >= 1);
-
-		r.direction = normalize(lerp(lerp(diffuseDir, transmissionDir, isTransmissionBounce), specularDir, isSpecularBounce));
 
 		float p = fmaxf(mask.x, fmaxf(mask.y, mask.z));
 		if (randomValue(s1) >= p)
@@ -842,16 +847,12 @@ void CudaRenderer::Compute(void)
 		goto Error;
 	}
 
-	if (m_deviceScene != nullptr)
+	if (m_scene == NULL)
 	{
-		cudaStatus = cudaMemcpy(m_deviceScene, *m_scene, sizeof(Scene), cudaMemcpyHostToDevice);
-
-		if (cudaStatus != cudaSuccess)
-		{
-			fprintf(stderr, "cudaMemcpy m_deviceScene failed: %s\n", cudaGetErrorString(cudaStatus));
-			goto Error;
-		}
+		return;
 	}
+
+	m_deviceScene.upload(m_scene, 1u);
 
 	Camera_GPU camera_buffer_obj;
 	memcpy(&camera_buffer_obj.invProjMat[0],		 m_invProjMat,      sizeof(float) * 16);
@@ -868,7 +869,7 @@ void CudaRenderer::Compute(void)
 										  m_width,
 										  m_height,
 										  camera_buffer_obj,
-										  m_deviceScene,
+										  (Scene*)m_deviceScene.d_pointer(),
 										  *m_samples,
 										  *m_bounces,
 										  *m_sampleIndex,
@@ -927,6 +928,12 @@ void CudaRenderer::OnResize(uint32_t width, uint32_t height)
 	}
 
 	Clear();
+}
+
+void CudaRenderer::SetScene(const Scene* scene)
+{
+	m_scene = scene;
+	m_deviceScene.upload(scene, 1u);
 }
 
 void CudaRenderer::SetCamera(float3 pos, float3 dir, float aperture, float focusDist)

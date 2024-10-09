@@ -1,9 +1,11 @@
 -- RaytracerExternal.lua
 
 CUDA_SDK = os.getenv("CUDA_PATH")
+OPTIX_SDK = os.getenv("OPTIX_PATH")
 
 RT_IncludeDir = {}
 RT_IncludeDir["CUDA"] = "%{CUDA_SDK}/include"
+RT_IncludeDir["OPTIX"] = "%{OPTIX_SDK}/include"
 
 RT_LibraryDir = {}
 RT_LibraryDir["CUDA"] = "%{CUDA_SDK}/lib/x64"
