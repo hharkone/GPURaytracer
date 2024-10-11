@@ -156,6 +156,7 @@ public:
 			ImGui::Text("Material: %i", i);
 			ImGui::Text("Surface");
 			if (ImGui::ColorEdit3("Albedo", &(mat.albedo.x))) { m_sceneChanged = true; }
+			if (ImGui::SliderFloat("Vertex Color Influence", &(mat.vcolor), 0.0f, 1.0f, "%.3f")) { m_sceneChanged = true; }
 			if (ImGui::SliderFloat("Metalness", &(mat.metalness), 0.0f, 1.0f, "%.3f")) { m_sceneChanged = true; }
 			if (ImGui::SliderFloat("Roughness", &(mat.roughness), 0.0f, 1.0f, "%.3f")) { m_sceneChanged = true; }
 			if (ImGui::SliderFloat("IOR", &mat.ior, 1.0f, 32.0f, "%.3f", flagLog)) { m_sceneChanged = true; }

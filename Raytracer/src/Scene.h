@@ -5,6 +5,7 @@
 struct Material
 {
     float3 albedo{ 0.8f, 0.8f, 0.8f };
+    float vcolor{ 0.0f };
     float  roughness{ 0.6f };
     float3 emission{ 0.0f, 0.0f, 0.0f };
     float emissionIntensity = 0.0f;
@@ -64,14 +65,14 @@ struct Scene
 
     Material materials[8] =
     {
-        Material{ { 0.8f, 0.8f,  0.8f  }, 0.21f, { 0.0f, 0.0f, 0.0f }, 0.0f, 1.5f, 0.0f, 0.0f, 1.0f, 1.0f, { 0.95f, 0.75f, 0.4f }, 0.0f }, //Diffuse
-        Material{ { 0.7f, 0.1f,  0.1f  }, 0.05f, { 0.0f, 0.0f, 0.0f }, 0.0f, 1.5f, 0.0f, 0.0f, 0.0f, 0.1f, { 1.0f, 1.0f, 1.0f }, 0.0f }, //Red	
-        Material{ { 0.5f, 0.7f,  0.8f  }, 0.1f,  { 0.0f, 0.0f, 0.0f }, 0.0f, 1.5f, 0.0f, 0.0f, 0.0f, 0.1f, { 1.0f, 1.0f, 1.0f }, 0.0f }, //Blue
-        Material{ { 0.7f, 0.7f,  0.7f  }, 0.2f,  { 0.0f, 0.0f, 0.0f }, 0.0f, 1.5f, 0.0f, 0.0f, 0.0f, 0.1f, { 1.0f, 1.0f, 1.0f }, 0.0f }, //White
-        Material{ { 1.0f, 0.9f,  0.6f  }, 0.1f,  { 0.0f, 0.0f, 0.0f }, 0.0f, 1.5f, 0.0f, 0.0f, 0.0f, 0.1f, { 1.0f, 1.0f, 1.0f }, 1.0f }, //Gold
-        Material{ { 0.98f,0.815f,0.75f }, 0.1f,  { 0.0f, 0.0f, 0.0f }, 0.0f, 1.5f, 0.0f, 0.0f, 0.0f, 0.1f, { 1.0f, 1.0f, 1.0f }, 1.0f }, //Copper
-        Material{ { 0.0f, 0.0f,  0.0f  }, 0.1f,  { 1.0f, 0.8f, 0.6f }, 7.0f, 1.5f, 0.0f, 0.0f, 0.0f, 0.1f, { 1.0f, 1.0f, 1.0f }, 0.0f }, //Light1
-        Material{ { 0.0f, 0.0f,  0.0f  }, 0.1f,  { 0.6f, 0.8f, 1.0f }, 4.5f, 1.5f, 0.0f, 0.0f, 0.0f, 0.1f, { 1.0f, 1.0f, 1.0f }, 0.0f }  //Light2
+        Material{ { 0.8f, 0.8f,  0.8f  }, 0.0f, 0.21f, { 0.0f, 0.0f, 0.0f }, 0.0f, 1.5f, 0.0f, 0.0f, 1.0f, 1.0f, { 0.95f, 0.75f, 0.4f }, 0.0f }, //Diffuse
+        Material{ { 0.7f, 0.1f,  0.1f  }, 0.0f, 0.05f, { 0.0f, 0.0f, 0.0f }, 0.0f, 1.5f, 0.0f, 0.0f, 0.0f, 0.1f, { 1.0f, 1.0f, 1.0f }, 0.0f }, //Red	
+        Material{ { 0.5f, 0.7f,  0.8f  }, 0.0f, 0.1f,  { 0.0f, 0.0f, 0.0f }, 0.0f, 1.5f, 0.0f, 0.0f, 0.0f, 0.1f, { 1.0f, 1.0f, 1.0f }, 0.0f }, //Blue
+        Material{ { 0.7f, 0.7f,  0.7f  }, 0.0f, 0.2f,  { 0.0f, 0.0f, 0.0f }, 0.0f, 1.5f, 0.0f, 0.0f, 0.0f, 0.1f, { 1.0f, 1.0f, 1.0f }, 0.0f }, //White
+        Material{ { 1.0f, 0.9f,  0.6f  }, 0.0f, 0.1f,  { 0.0f, 0.0f, 0.0f }, 0.0f, 1.5f, 0.0f, 0.0f, 0.0f, 0.1f, { 1.0f, 1.0f, 1.0f }, 1.0f }, //Gold
+        Material{ { 0.98f,0.815f,0.75f }, 0.0f, 0.1f,  { 0.0f, 0.0f, 0.0f }, 0.0f, 1.5f, 0.0f, 0.0f, 0.0f, 0.1f, { 1.0f, 1.0f, 1.0f }, 1.0f }, //Copper
+        Material{ { 0.0f, 0.0f,  0.0f  }, 0.0f, 0.1f,  { 1.0f, 0.8f, 0.6f }, 7.0f, 1.5f, 0.0f, 0.0f, 0.0f, 0.1f, { 1.0f, 1.0f, 1.0f }, 0.0f }, //Light1
+        Material{ { 0.0f, 0.0f,  0.0f  }, 0.0f, 0.1f,  { 0.6f, 0.8f, 1.0f }, 4.5f, 1.5f, 0.0f, 0.0f, 0.0f, 0.1f, { 1.0f, 1.0f, 1.0f }, 0.0f }  //Light2
     };
 
     Sphere spheresSimple[3] =
@@ -84,5 +85,5 @@ struct Scene
     };
 
     size_t materialCount = 8u;
-    size_t sphereCount = 0u;
+    size_t sphereCount = 3u;
 };

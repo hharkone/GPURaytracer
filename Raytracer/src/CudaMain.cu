@@ -647,6 +647,7 @@ __device__ float3 radiance(Ray& r, uint32_t s1, uint32_t& s2, const Scene* scene
 
 		float ndotl = fmaxf(dot(-r.direction, flippedNormal), 0.0f);
 		float F = fresnel(ndotl, 0.0f, hitMat.ior);
+		float F82 = clamp(fresnel(ndotl, 0.0f, 1.5f) * 3.0f - 1.0f, 0.0f, 1.0f); //Hacking desaturated edges for metals
 
 		float apparentRoughness = lerp(hitMat.roughness * hitMat.roughness, 0.0f, F);
 
@@ -689,7 +690,7 @@ __device__ float3 radiance(Ray& r, uint32_t s1, uint32_t& s2, const Scene* scene
 
 		inVolume = (surfaceCount >= 1);
 
-		float3 linearVertexColor = srgbToLinear(hit.color);
+		float3 linearVertexColor = srgbToLinear(lerp(make_float3(1.0f, 1.0f, 1.0f), hit.color, hitMat.vcolor));
 		float3 linearSurfColor = srgbToLinear(hitMat.albedo) * linearVertexColor;
 		float3 linearTransmissionColor = srgbToLinear(volumeMat.transmissionColor);
 
@@ -705,8 +706,9 @@ __device__ float3 radiance(Ray& r, uint32_t s1, uint32_t& s2, const Scene* scene
 		//MAIN OUTPUT
 		mask = mask * lerp(
 						lerp(linearSurfColor, absorptionColor, isTransmissionBounce),
-						lerp(make_float3(1.0f), linearSurfColor, hitMat.metalness),
+						lerp(make_float3(1.0f), lerp(linearSurfColor, make_float3(1.0f), F82), hitMat.metalness),
 						isSpecularBounce);
+
 		if (b == 0)
 		{
 			float target[4];
@@ -717,15 +719,13 @@ __device__ float3 radiance(Ray& r, uint32_t s1, uint32_t& s2, const Scene* scene
 			accuAlbedo = lerp(linearSurfColor, linearTransmissionColor, hitMat.transmission) + srgbToLinear(hitMat.emission) * hitMat.emissionIntensity;
 		}
 
-
-
 		float p = fmaxf(mask.x, fmaxf(mask.y, mask.z));
 		if (randomValue(s1) >= p)
 		{
 			break;
 		}
-		mask *= 1.0f / p;
 
+		mask *= 1.0f / p;
 
 		///debug output
 		//accucolor = { cromaticColor };

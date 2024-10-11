@@ -13,3 +13,5 @@ Raytracer/x64/**
 # Exclude
 !vendor/bin
 Raytracer/test.obj
+Raytracer/meshes/**
+Raytracer/images/**
