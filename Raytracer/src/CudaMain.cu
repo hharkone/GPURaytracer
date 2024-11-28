@@ -381,6 +381,15 @@ __device__ bool rayBoxIntersectionDebug(const Ray& ray, HitInfo& hit, const floa
 	hit.dst = tmin;
 	hit.hitPoint = ray.direction * tmin + ray.origin;
 
+	if (ray.origin.x < bmax.x && ray.origin.x > bmin.x &&
+		ray.origin.y < bmax.y && ray.origin.y > bmin.y &&
+		ray.origin.z < bmax.z && ray.origin.z > bmin.z)
+	{
+		hit.dst = tmax;
+		hit.hitPoint = ray.direction * tmax + ray.origin;
+		hit.inside = true;
+	}
+
 	float3 p = hit.hitPoint - c;
 	float3 d = (bmin - bmax) * 0.5f;
 
@@ -390,6 +399,9 @@ __device__ bool rayBoxIntersectionDebug(const Ray& ray, HitInfo& hit, const floa
 										float(int(p.y / abs(d.y) * bias)),
 										float(int(p.z / abs(d.z) * bias))) );
 
+	hit.inside = (dot(hit.normal, ray.direction) > 0.0f ? true : false);
+	hit.color = make_float3(1.0f, 1.0f, 1.0f);
+	hit.materialIndex = 0u;
 	//hit.hitPoint = c;
 
 	return didHit;
@@ -406,107 +418,107 @@ __device__ float IntersectAABB(const Ray& ray, const HitInfo& hit, const float3 
 	if( tmax >= tmin && tmin < hit.dst && tmax > 0) return tmin; else return FLT_MAX;
 }
 
-__device__ void IntersectBVH(Ray& ray, HitInfo& hit, const GPU_Mesh* vbo, int debug)
+__device__ void IntersectBVH(Ray& ray, HitInfo& hit, const GPU_Mesh* vbo, const RenderSettings* rendererSettings)
 {
+	//if (rendererSettings->bvhDebug == false)
+	//{
+	//	HitInfo closestHit;
 
-#define USE_BVH 1
+	//	for (uint16_t i = 0; i < vbo->numTris; i++)
+	//	{
+	//		hit = rayTriangleIntersect(ray, &vbo->triangleBuffer[i]);
 
-#if	USE_BVH == 0
-	HitInfo closestHit;
+	//		if (hit.didHit && hit.dst < closestHit.dst)
+	//		{
+	//			closestHit = hit;
+	//		}
+	//	}
 
-	for (uint16_t i = 0; i < vbo->numTris; i++)
+	//	hit = closestHit;
+
+	//}
+
+	if (rendererSettings->bvhDebug == false)
 	{
-		hit = rayTriangleIntersect(ray, &vbo->triangleBuffer[i]);
+		GPU_Mesh::BVHNode* node = &vbo->bvhNode[0];
+		GPU_Mesh::BVHNode* stack[256];
 
-		if (hit.didHit && hit.dst < closestHit.dst)
+		uint32_t stackPtr = 0;
+
+		HitInfo closestHit;
+
+		while (1)
 		{
-			closestHit = hit;
-		}
-	}
-
-	hit = closestHit;
-
-#endif
-
-#if USE_BVH == 1
-
-	GPU_Mesh::BVHNode* node = &vbo->bvhNode[0];
-	GPU_Mesh::BVHNode* stack[256];
-
-	uint32_t stackPtr = 0;
-
-	HitInfo closestHit;
-
-	while (1)
-	{
-		if (node->triCount > 0) // isLeaf()
-		{
-			for (uint32_t i = 0; i < node->triCount; i++)
+			if (node->triCount > 0) // isLeaf()
 			{
-				uint32_t instPrim = vbo->triIdx[node->leftFirst + i];
-				GPU_Mesh::Triangle* triangle = &vbo->triangleBuffer[instPrim];
-
-				//if(stackPtr < debug)
-				hit = rayTriangleIntersect(ray, triangle);
-
-				if (hit.didHit && hit.dst < closestHit.dst)
+				for (uint32_t i = 0; i < node->triCount; i++)
 				{
-					closestHit = hit;
+					uint32_t instPrim = vbo->triIdx[node->leftFirst + i];
+					GPU_Mesh::Triangle* triangle = &vbo->triangleBuffer[instPrim];
+
+					//if(stackPtr < debug)
+					hit = rayTriangleIntersect(ray, triangle);
+
+					if (hit.didHit && hit.dst < closestHit.dst)
+					{
+						closestHit = hit;
+					}
 				}
+				if (stackPtr == 0) break; else node = stack[--stackPtr];
+				continue;
 			}
-			if (stackPtr == 0) break; else node = stack[--stackPtr];
-			continue;
-		}
 
-		GPU_Mesh::BVHNode* child1 = &vbo->bvhNode[node->leftFirst];
-		GPU_Mesh::BVHNode* child2 = &vbo->bvhNode[node->leftFirst +1];
+			GPU_Mesh::BVHNode* child1 = &vbo->bvhNode[node->leftFirst];
+			GPU_Mesh::BVHNode* child2 = &vbo->bvhNode[node->leftFirst + 1];
 
-		float dist1 = IntersectAABB(ray, closestHit, child1->aabbMin, child1->aabbMax);
-		float dist2 = IntersectAABB(ray, closestHit, child2->aabbMin, child2->aabbMax);
+			float dist1 = IntersectAABB(ray, closestHit, child1->aabbMin, child1->aabbMax);
+			float dist2 = IntersectAABB(ray, closestHit, child2->aabbMin, child2->aabbMax);
 
-		//
-		//hit.dst = fminf(dist1, dist2);
+			//
+			//hit.dst = fminf(dist1, dist2);
 
-		if (dist1 > dist2)
-		{
-			float d = dist1; dist1 = dist2; dist2 = d;
-			GPU_Mesh::BVHNode* c = child1; child1 = child2; child2 = c;
-		}
-		if (dist1 == FLT_MAX)
-		{
-			if (stackPtr == 0)
+			if (dist1 > dist2)
 			{
-				break;
+				float d = dist1; dist1 = dist2; dist2 = d;
+				GPU_Mesh::BVHNode* c = child1; child1 = child2; child2 = c;
+			}
+			if (dist1 == FLT_MAX)
+			{
+				if (stackPtr == 0)
+				{
+					break;
+				}
+				else
+				{
+					node = stack[--stackPtr];
+				}
 			}
 			else
 			{
-				node = stack[--stackPtr];
+				node = child1;
+				if (dist2 != FLT_MAX) stack[stackPtr++] = child2;
 			}
 		}
-		else
+
+		hit = closestHit;
+
+	}
+
+	else
+	{
+		HitInfo closestHit;
+
+		GPU_Mesh::BVHNode* child1 = &vbo->bvhNode[uint32_t(vbo->nodesUsed * ((float)rendererSettings->debug * 0.001f))];
+
+		if (rayBoxIntersectionDebug(ray, closestHit, child1->aabbMin, child1->aabbMax))
 		{
-			node = child1;
-			if (dist2 != FLT_MAX) stack[stackPtr++] = child2;
+			hit = closestHit;
 		}
 	}
 
-	hit = closestHit;
-
-#elif USE_BVH == 2
-
-	HitInfo closestHit;
-
-	GPU_Mesh::BVHNode* child1 = &vbo->bvhNode[debug];
-
-	if (rayBoxIntersectionDebug(ray, closestHit, child1->aabbMin, child1->aabbMax))
-	{
-		hit = closestHit;
-	}
-
-#endif
 }
 
-__device__ HitInfo intersect_scene(Ray& r, const Scene* scene, const GPU_Mesh* vbo, int debug)
+__device__ HitInfo intersect_scene(Ray& r, const Scene* scene, const GPU_Mesh* vbo, const RenderSettings* rendererSettings)
 {
 	HitInfo hit;
 	HitInfo closestHit;
@@ -522,7 +534,7 @@ __device__ HitInfo intersect_scene(Ray& r, const Scene* scene, const GPU_Mesh* v
 		}
 	}
 
-	IntersectBVH(r, hit, vbo, debug);
+	IntersectBVH(r, hit, vbo, rendererSettings);
 
 	if (hit.didHit && hit.dst < closestHit.dst)
 	{
@@ -588,7 +600,7 @@ __device__ float3 hsv2rgb(float3 c)
 	return c.z * lerp(make_float3(K.x), clamp(p - make_float3(K.x), 0.0f, 1.0f), c.y);
 }
 
-__device__ float3 radiance(Ray& r, uint32_t s1, uint32_t& s2, const Scene* scene, size_t bounces, const GPU_Mesh* vbo, int debug, float3& albedoOut, float3& normalOut, uint32_t i, Camera_GPU* camera, float* skyTex) // Returns ray color
+__device__ float3 radiance(Ray& r, uint32_t s1, uint32_t& s2, const Scene* scene, const RenderSettings* rendererSettings, const GPU_Mesh* vbo, float3& albedoOut, float3& normalOut, uint32_t i, Camera_GPU* camera, float* skyTex) // Returns ray color
 {
 	float3 accucolor = make_float3(0.0f, 0.0f, 0.0f); // Accumulates ray colour with each iteration through bounce loop
 	float3 accuAlbedo = make_float3(0.0f, 0.0f, 0.0f); // Accumulates ray colour with each iteration through bounce loop
@@ -604,11 +616,11 @@ __device__ float3 radiance(Ray& r, uint32_t s1, uint32_t& s2, const Scene* scene
 
 	
 
-	for (size_t b = 0; b < bounces; b++)
+	for (size_t b = 0; b < rendererSettings->bounces; b++)
 	{
 		//float aberration = randomValue(s1);
 		// Test ray for intersection with scene
-		HitInfo hit = intersect_scene(r, scene, vbo, debug);
+		HitInfo hit = intersect_scene(r, scene, vbo, rendererSettings);
 
 		if (inVolume)
 		{
@@ -728,7 +740,7 @@ __device__ float3 radiance(Ray& r, uint32_t s1, uint32_t& s2, const Scene* scene
 		mask *= 1.0f / p;
 
 		///debug output
-		//accucolor = { cromaticColor };
+		//accucolor = { transmissionDistance,transmissionDistance,transmissionDistance };
 	}
 
 	//MAIN OUTPUT
@@ -737,12 +749,12 @@ __device__ float3 radiance(Ray& r, uint32_t s1, uint32_t& s2, const Scene* scene
 	return accucolor;
 
 	///debug output
-	//return { float(inVolume),float(inVolume),float(inVolume) };
+	//return { normalOut };
 	//return { float(surfaceCount)*0.25f, float(surfaceCount) * 0.25f, float(surfaceCount) * 0.25f };
 }
 
-__global__ void render_kernel(float4* buf, float3* albedoBuf, float3* normalBuf, uint32_t width, uint32_t height, Camera_GPU camera, const Scene* scene, int samples,
-							  size_t bounces, uint32_t sampleIndex, const GPU_Mesh* vbo, float* skyTex)
+__global__ void render_kernel(float4* buf, float3* albedoBuf, float3* normalBuf, uint32_t width, uint32_t height, Camera_GPU camera, const Scene* scene,
+							   const RenderSettings* rendererSettings, uint32_t sampleIndex, const GPU_Mesh* vbo, float* skyTex)
 {
 	// Assign a CUDA thread to every pixel (x,y) blockIdx, blockDim and threadIdx are CUDA specific
 	// Keywords replaces nested outer loops in CPU code looping over image rows and image columns
@@ -799,7 +811,7 @@ __global__ void render_kernel(float4* buf, float3* albedoBuf, float3* normalBuf,
 
 		ray.direction = normalize(jitteredViewPoint - ray.origin);
 		
-		finalBeauty += radiance(ray, s1, s2, scene, bounces, vbo, samples, finalAlbedo, finalNormal, i, &camera, skyTex);
+		finalBeauty += radiance(ray, s1, s2, scene, rendererSettings, vbo, finalAlbedo, finalNormal, i, &camera, skyTex);
 	}
 
 	// Write rgb value of pixel to image buffer on the GPU
@@ -853,12 +865,13 @@ void CudaRenderer::Compute(void)
 		goto Error;
 	}
 
-	if (m_scene == NULL)
+	if (m_scene == NULL || m_rendererSettings == NULL)
 	{
 		return;
 	}
 
 	m_deviceScene.upload(m_scene, 1u);
+	m_deviceSettings.upload(m_rendererSettings, 1u);
 
 	Camera_GPU camera_buffer_obj;
 	memcpy(&camera_buffer_obj.invProjMat[0],		 m_invProjMat,      sizeof(float) * 16);
@@ -876,8 +889,7 @@ void CudaRenderer::Compute(void)
 										  m_height,
 										  camera_buffer_obj,
 										  (Scene*)m_deviceScene.d_pointer(),
-										  *m_samples,
-										  *m_bounces,
+										  (RenderSettings*)m_deviceSettings.d_pointer(),
 										  *m_sampleIndex,
 										  m_deviceMesh,
 										  m_skyTexture);

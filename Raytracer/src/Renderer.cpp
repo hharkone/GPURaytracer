@@ -37,7 +37,7 @@ void Renderer::OnResize(uint32_t width, uint32_t height)
 
 	if (!m_cudaRenderer)
 	{
-		m_cudaRenderer = std::shared_ptr<CudaRenderer>(new CudaRenderer(width, height, m_activeScene, &m_frameIndex, &GetSettings().samples, &m_settings.bounces));
+		m_cudaRenderer = std::shared_ptr<CudaRenderer>(new CudaRenderer(width, height, m_activeScene, &m_frameIndex, &GetSettings()));
 	}
 	else
 	{

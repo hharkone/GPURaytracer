@@ -7,13 +7,13 @@
 #include "GPU_Mesh.h"
 #include "ImageLoader.h"
 #include "CudaBuffer.h"
+#include "RendererSettings.h"
 
 class CudaRenderer
 {
 public:
-	CudaRenderer(uint32_t width, uint32_t height, const Scene* scene, uint32_t* sampleIndex, int* samples, int* bounces)
-		: m_sampleIndex(sampleIndex), m_samples(samples),
-		  m_bounces(bounces), m_scene(scene)
+	CudaRenderer(uint32_t width, uint32_t height, const Scene* scene, uint32_t* sampleIndex, RenderSettings* rendererSettings)
+		: m_scene(scene), m_sampleIndex(sampleIndex), m_rendererSettings(rendererSettings)
 	{
 		cudaError_t cudaStatus = cudaErrorStartupFailure;
 
@@ -27,12 +27,14 @@ public:
 
 		m_hostMesh = new GPU_Mesh();
 		//m_hostMesh->LoadOBJFile("meshes/cube_quads.obj", 0u);
-		m_hostMesh->LoadOBJFile("meshes/puffer.obj", 0u);
+		//m_hostMesh->LoadOBJFile("meshes/torus_simple.obj", 0u);
+		m_hostMesh->LoadOBJFile("meshes/lion.obj", 0u);
 		//m_hostMesh->LoadOBJFile("meshes/angel.obj", 0u);
 		//m_hostMesh->LoadOBJFile("meshes/buddha.obj", 0u);
 		m_hostMesh->BuildBVH();
 
 		m_deviceScene.alloc(sizeof(Scene));
+		m_deviceSettings.alloc(sizeof(RenderSettings));
 
 		ImageLoader imgLoader;
 		//m_skyTexture = (float*)imgLoader.LoadImageFile("Images/river_rocks_8k.raw", 8192, 4096);
@@ -107,7 +109,7 @@ public:
 		m_envTextureBuffer_GPU.free();
 
 		m_deviceScene.free();
-
+		m_deviceSettings.free();
 		cudaFree(m_deviceMesh);
 	}
 
@@ -132,7 +134,7 @@ public:
 private:
 	float m_aperture;
 	float m_focusDist;
-	const Scene* m_scene;
+	const Scene* m_scene = nullptr;
 	GPU_Mesh* m_hostMesh;
 	GPU_Mesh* m_deviceMesh;
 	size_t m_bufferSize;
@@ -145,6 +147,7 @@ private:
 	float* m_invProjMat = nullptr;
 	float* m_viewMat = nullptr;
 	float* m_localToWorldMat = nullptr;
+	const RenderSettings* m_rendererSettings = nullptr;
 
 	//Float image Buffers
 	//CUDABuffer m_accumulationBuffer_GPU;    //Raw samples buffer
@@ -154,6 +157,7 @@ private:
 	CUDABuffer m_envTextureBuffer_GPU;     //Final float normal output on the device
 
 	CUDABuffer m_deviceScene;
+	CUDABuffer m_deviceSettings;
 
 	float* m_skyTexture;
 
