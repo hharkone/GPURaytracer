@@ -28,16 +28,6 @@ typedef unsigned short ushort;
 #ifndef __CUDACC__
 #include <math.h>
 
-inline float __cdecl fminf(float a, float b)
-{
-    return a < b ? a : b;
-}
-
-inline float __cdecl fmaxf(float a, float b)
-{
-    return a > b ? a : b;
-}
-
 inline int max(int a, int b)
 {
     return a > b ? a : b;
@@ -56,7 +46,17 @@ inline float rsqrtf(float x)
 
 // float functions
 ////////////////////////////////////////////////////////////////////////////////
+/*
+inline __device__ __host__ float fminf(float a, float b)
+{
+    return a < b ? a : b;
+}
 
+inline __device__ __host__ float fmaxf(float a, float b)
+{
+    return a > b ? a : b;
+}
+*/
 // lerp
 inline __device__ __host__ float lerp(float a, float b, float t)
 {
@@ -73,6 +73,17 @@ inline __device__ __host__ float clamp(float f, float a, float b)
 inline __device__ __host__ float fsqrtf(float a)
 {
     return sqrtf(a);
+}
+
+inline __device__ __host__ int fsign(float x)
+{
+    int t = x < 0 ? -1 : 0;
+    return x > 0 ? 1 : t;
+}
+
+inline __device__ __host__ float fstep(float a, float x)
+{
+    return x >= a;
 }
 
 // int2 functions
@@ -295,6 +306,18 @@ inline __host__ __device__ float3 make_float3(int3 a)
 inline __host__ __device__ float3 operator-(float3& a)
 {
     return make_float3(-a.x, -a.y, -a.z);
+}
+
+//step
+inline __host__ __device__ float3 fstep(float  a, float3 x)
+{
+    return make_float3(fstep(a, x.x), fstep(a, x.y), fstep(a, x.z));
+}
+
+//sign
+inline __host__ __device__ float3 fsign(float3 a)
+{
+    return make_float3(fsign(a.x), fsign(a.y), fsign(a.z));
 }
 
 // min

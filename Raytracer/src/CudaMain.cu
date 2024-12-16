@@ -348,7 +348,7 @@ void __device__ IntersectTri(Ray& ray, HitInfo& hit, GPU_Mesh::Triangle* tri)
 		hit.didHit = true;
 	}
 }
-
+/*
 __device__ bool rayBoxIntersection(const Ray& r, const float3& min, const float3& max)
 {
 	float t[9];
@@ -358,14 +358,14 @@ __device__ bool rayBoxIntersection(const Ray& r, const float3& min, const float3
 	t[4] = (max.y - r.origin.y) / r.direction.y;
 	t[5] = (min.z - r.origin.z) / r.direction.z;
 	t[6] = (max.z - r.origin.z) / r.direction.z;
-	t[7] = fmaxf(fmax(fminf(t[1], t[2]), fminf(t[3], t[4])), fminf(t[5], t[6]));
-	t[8] = fminf(fmin(fmaxf(t[1], t[2]), fmaxf(t[3], t[4])), fmaxf(t[5], t[6]));
+	t[7] = fmaxff(fmaxf(fminff(t[1], t[2]), fminff(t[3], t[4])), fminff(t[5], t[6]));
+	t[8] = fminff(fminf(fmaxff(t[1], t[2]), fmaxff(t[3], t[4])), fmaxff(t[5], t[6]));
 	//t[9] = (t[8] < 0 || t[7] > t[8]) ? FLT_MAX : t[7];
 
 	return (t[8] < 0 || t[7] > t[8]);
 }
 
-__device__ bool rayBoxIntersectionDebug(const Ray& ray, HitInfo& hit, const float3& bmin, const float3& bmax)
+__device__ bool rayBoxIntersection(const Ray& ray, HitInfo& hit, const float3& bmin, const float3& bmax)
 {
 	float tx1 = (bmin.x - ray.origin.x) / ray.direction.x, tx2 = (bmax.x - ray.origin.x) / ray.direction.x;
 	float tmin = min(tx1, tx2), tmax = max(tx1, tx2);
@@ -408,14 +408,61 @@ __device__ bool rayBoxIntersectionDebug(const Ray& ray, HitInfo& hit, const floa
 	return didHit;
 }
 
+*/
+__device__ bool rayBoxIntersection(const Ray& ray, HitInfo& hit, const Box& box)
+{
+	float3 bmin = (box.pos - (box.size * 0.5f));
+	float3 bmax = (box.pos + (box.size * 0.5f));
+
+	float tx1 = (bmin.x - ray.origin.x) / ray.direction.x, tx2 = (bmax.x - ray.origin.x) / ray.direction.x;
+	float tmin = fminf(tx1, tx2), tmax = fmaxf(tx1, tx2);
+	float ty1 = (bmin.y - ray.origin.y) / ray.direction.y, ty2 = (bmax.y - ray.origin.y) / ray.direction.y;
+	tmin = fmaxf(tmin, fminf(ty1, ty2)), tmax = fminf(tmax, fmaxf(ty1, ty2));
+	float tz1 = (bmin.z - ray.origin.z) / ray.direction.z, tz2 = (bmax.z - ray.origin.z) / ray.direction.z;
+	tmin = fmaxf(tmin, fminf(tz1, tz2)), tmax = fminf(tmax, fmaxf(tz1, tz2));
+
+	bool didHit (tmax >= tmin && tmin < hit.dst && tmax > 0.0f);
+
+	
+
+	if (didHit)
+	{
+		hit.didHit = true;
+		hit.dst = tmin;
+		hit.hitPoint = ray.direction * tmin + ray.origin;
+
+		if (ray.origin.x < ( bmax.x) && ray.origin.x > ( bmin.x) &&
+			ray.origin.y < ( bmax.y) && ray.origin.y > ( bmin.y) &&
+			ray.origin.z < ( bmax.z) && ray.origin.z > ( bmin.z))
+		{
+			hit.dst = tmax;
+			hit.hitPoint = ray.direction * tmax + ray.origin;
+			hit.inside = true;
+		}
+
+		float bias = 0.000001f;
+
+		float3 center = (bmin + bmax) * 0.5f;
+		float3 centerToPoint = hit.hitPoint - center;
+		float3 halfSize = box.size * 0.5f;
+
+		hit.normal = normalize(fsign(centerToPoint) * fstep(-bias, fabs(centerToPoint) - halfSize));
+		hit.inside = (dot(hit.normal, ray.direction) > 0.0f ? true : false);
+		hit.color = {1.0f, 1.0f, 1.0f};
+		hit.materialIndex = box.materialIndex;
+	}
+
+	return didHit;
+}
+
 __device__ float IntersectAABB(const Ray& ray, const HitInfo& hit, const float3 bmin, const float3 bmax)
 {
 	float tx1 = (bmin.x - ray.origin.x) / ray.direction.x, tx2 = (bmax.x - ray.origin.x) / ray.direction.x;
-	float tmin = min(tx1, tx2), tmax = max(tx1, tx2);
+	float tmin = fminf(tx1, tx2), tmax = fmaxf(tx1, tx2);
 	float ty1 = (bmin.y - ray.origin.y) / ray.direction.y, ty2 = (bmax.y - ray.origin.y) / ray.direction.y;
-	tmin = max(tmin, min(ty1, ty2)), tmax = min(tmax, max(ty1, ty2));
+	tmin = fmaxf(tmin, fminf(ty1, ty2)), tmax = fminf(tmax, fmaxf(ty1, ty2));
 	float tz1 = (bmin.z - ray.origin.z) / ray.direction.z, tz2 = (bmax.z - ray.origin.z) / ray.direction.z;
-	tmin = max(tmin, min(tz1, tz2)), tmax = min(tmax, max(tz1, tz2));
+	tmin = fmaxf(tmin, fminf(tz1, tz2)), tmax = fminf(tmax, fmaxf(tz1, tz2));
 	if( tmax >= tmin && tmin < hit.dst && tmax > 0) return tmin; else return FLT_MAX;
 }
 
@@ -438,100 +485,82 @@ __device__ void IntersectBVH(Ray& ray, HitInfo& hit, const GPU_Mesh* vbo, const 
 	//	hit = closestHit;
 
 	//}
+	GPU_Mesh::BVHNode* node = &vbo->bvhNode[0];
+	GPU_Mesh::BVHNode* stack[256];
 
-	//if (rendererSettings->bvhDebug == false)
-	if (true)
+	uint32_t hitDepth = 0u;
+	uint32_t stackPtr = 0u;
+
+	HitInfo closestHit;
+
+	while (1)
 	{
-		GPU_Mesh::BVHNode* node = &vbo->bvhNode[0];
-		GPU_Mesh::BVHNode* stack[256];
-
-		uint32_t hitDepth = 0u;
-		uint32_t stackPtr = 0u;
-
-		HitInfo closestHit;
-
-		while (1)
+		if (node->triCount > 0) // isLeaf()
 		{
-			if (node->triCount > 0) // isLeaf()
+			for (uint32_t i = 0; i < node->triCount; i++)
 			{
-				for (uint32_t i = 0; i < node->triCount; i++)
+				uint32_t instPrim = vbo->triIdx[node->leftFirst + i];
+				GPU_Mesh::Triangle* triangle = &vbo->triangleBuffer[instPrim];
+
+				hit = rayTriangleIntersect(ray, triangle);
+
+				if (hit.didHit && hit.dst < closestHit.dst)
 				{
-					uint32_t instPrim = vbo->triIdx[node->leftFirst + i];
-					GPU_Mesh::Triangle* triangle = &vbo->triangleBuffer[instPrim];
-
-					hit = rayTriangleIntersect(ray, triangle);
-
-					if (hit.didHit && hit.dst < closestHit.dst)
-					{
-						closestHit = hit;
-					}
+					closestHit = hit;
 				}
-
-				if (stackPtr == 0)
-				{
-					break;
-				}
-
-				else
-				{
-					node = stack[--stackPtr];
-				}
-
-				continue;
 			}
 
-			GPU_Mesh::BVHNode* child1 = &vbo->bvhNode[node->leftFirst];
-			GPU_Mesh::BVHNode* child2 = &vbo->bvhNode[node->leftFirst + 1];
-
-			float dist1 = IntersectAABB(ray, closestHit, child1->aabbMin, child1->aabbMax);
-			float dist2 = IntersectAABB(ray, closestHit, child2->aabbMin, child2->aabbMax);
-
-			//hit.dst = fminf(dist1, dist2);
-
-			if (dist1 > dist2)
+			if (stackPtr == 0)
 			{
-				float d = dist1; dist1 = dist2; dist2 = d;
-				GPU_Mesh::BVHNode* c = child1; child1 = child2; child2 = c;
+				break;
 			}
-			if (dist1 == FLT_MAX)
+
+			else
 			{
-				if (stackPtr == 0)
-				{
-					break;
-				}
-				else
-				{
-					node = stack[--stackPtr];
-				}
+				node = stack[--stackPtr];
+			}
+
+			continue;
+		}
+
+		GPU_Mesh::BVHNode* child1 = &vbo->bvhNode[node->leftFirst];
+		GPU_Mesh::BVHNode* child2 = &vbo->bvhNode[node->leftFirst + 1];
+
+		float dist1 = IntersectAABB(ray, closestHit, child1->aabbMin, child1->aabbMax);
+		float dist2 = IntersectAABB(ray, closestHit, child2->aabbMin, child2->aabbMax);
+
+		//hit.dst = fminff(dist1, dist2);
+
+		if (dist1 > dist2)
+		{
+			float d = dist1; dist1 = dist2; dist2 = d;
+			GPU_Mesh::BVHNode* c = child1; child1 = child2; child2 = c;
+		}
+		if (dist1 == FLT_MAX)
+		{
+			if (stackPtr == 0)
+			{
+				break;
 			}
 			else
 			{
-				node = child1;
-				if (dist2 != FLT_MAX)
-				{
-					stack[stackPtr++] = child2;
-				}
+				node = stack[--stackPtr];
 			}
-
-			hitDepth++;
 		}
-
-		hit = closestHit;
-		hit.hitDepth = hitDepth;
-	}
-
-	else
-	{
-		HitInfo closestHit;
-
-		//GPU_Mesh::BVHNode* child1 = &vbo->bvhNode[uint32_t(vbo->nodesUsed * ((float)rendererSettings->debug * 0.001f))];
-		GPU_Mesh::BVHNode* child1 = &vbo->bvhNode[(uint32_t)rendererSettings->debug];
-		if (rayBoxIntersectionDebug(ray, closestHit, child1->aabbMin, child1->aabbMax))
+		else
 		{
-			hit = closestHit;
+			node = child1;
+			if (dist2 != FLT_MAX)
+			{
+				stack[stackPtr++] = child2;
+			}
 		}
+
+		hitDepth++;
 	}
 
+	hit = closestHit;
+	hit.hitDepth = hitDepth;
 }
 
 __device__ HitInfo intersect_scene(Ray& r, const Scene* scene, const GPU_Mesh* vbo, const RenderSettings* rendererSettings)
@@ -543,6 +572,17 @@ __device__ HitInfo intersect_scene(Ray& r, const Scene* scene, const GPU_Mesh* v
 	{
 		Sphere s = scene->spheresSimple[i];
 		hit = intersect_sphere(r, s);
+
+		if (hit.didHit && hit.dst < closestHit.dst) // If newly computed intersection distance d is smaller than current closest intersection distance
+		{
+			closestHit = hit;
+		}
+	}
+
+	for (size_t i = 0u; i < scene->boxCount; i++)
+	{
+		Box b = scene->boxSimple[i];
+		rayBoxIntersection(r, hit, b);
 
 		if (hit.didHit && hit.dst < closestHit.dst) // If newly computed intersection distance d is smaller than current closest intersection distance
 		{
@@ -688,14 +728,14 @@ __device__ float3 radiance(Ray& r, uint32_t s1, uint32_t& s2, const Scene* scene
 
 		float apparentRoughness = lerp(hitMat.roughness * hitMat.roughness, 0.0f, F);
 
-		bool isSpecularBounce = max(hitMat.metalness, F) >= randomValue(s1);
+		bool isSpecularBounce = fmaxf(hitMat.metalness, F) >= randomValue(s1);
 		bool isTransmissionBounce = (hitMat.transmission * (float)!isSpecularBounce) >= randomValue(s1);
 
 		float3 diffuseDir = normalize(flippedNormal + randomDirection(s1));
 		float3 specularDir = reflect(r.direction, normalize(flippedNormal + randomInUnitSphere(s1) * apparentRoughness));
 		
 		
-		//float chromaticAberration = fmaxf(hitMat.ior + (aberration * 2.0f - 1.0f) * hitMat.transmissionAberration * (hitMat.ior-1.0f), 1.0f);
+		//float chromaticAberration = fmaxff(hitMat.ior + (aberration * 2.0f - 1.0f) * hitMat.transmissionAberration * (hitMat.ior-1.0f), 1.0f);
 		//float3 cromaticColor = spectrum(1.0f-aberration) * make_float3(0.5f, 0.5f, 0.098f) * 2.83067f;
 		//float3 cromaticColor = hsv2rgb(make_float3(1.0f-aberration, 0.5f, 1.0f)) * 2.93067f;
 		float3 transmissionDir = refractionRay(normalize(r.direction + randomInUnitSphere(s1) * hitMat.transmissionRoughness * hitMat.transmissionRoughness), normalize(hit.normal), volumeMat.ior, totalInternalReflection);
@@ -765,7 +805,7 @@ __device__ float3 radiance(Ray& r, uint32_t s1, uint32_t& s2, const Scene* scene
 		mask *= 1.0f / p;
 
 		///debug output
-		//accucolor = { transmissionDistance,transmissionDistance,transmissionDistance };
+		//accucolor = { linearVertexColor };
 		
 	}
 

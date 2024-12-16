@@ -20,8 +20,15 @@ struct Material
 
 struct Sphere
 {
-    float rad;            // Radius
-    float3 pos;           // Position
+    float rad;              // Radius
+    float3 pos;             // Position
+    uint16_t materialIndex; // Material Index
+};
+
+struct Box
+{
+    float3 size;            // Size
+    float3 pos;             // Position
     uint16_t materialIndex; // Material Index
 };
 
@@ -79,11 +86,21 @@ struct Scene
     {
         //{ float radius, { float3 position }, { Material }}
           //Sphere{ 1.0f,  { 1.58f, 1.9f, -1.77f }, 7u},
-          Sphere{ 0.25f,  { 0.0f, 0.0f, 0.0f }, 7u},
-          Sphere{ 19.0f, {  0.0f, -19.0f, 0.0f }, 1u},
-          Sphere{ 1.3f,  { -3.9f, 1.8f, -0.56f }, 6u}
+          Sphere{ 0.25f, {  0.0f,  0.0f,  0.0f  }, 7u},
+          //Sphere{ 19.0f, {  0.0f, -19.0f, 0.0f  }, 1u},
+          Sphere{ 1.3f,  { -3.9f, 1.8f,  -0.56f }, 6u}
+    };
+
+    Box boxSimple[3] =
+    {
+        //{ { float3 size }, { float3 position }, { Material }}
+          //Sphere{ 1.0f,  { 1.58f, 1.9f, -1.77f }, 7u},
+          Box{ { 1.0f,  1.0f,   1.0f },  {  0.0f,  0.0f,  0.0f  }, 7u},
+          Box{ { 10.0f, 10.0f, 10.0f },  {  0.0f, -5.0f, 0.0f   }, 1u},
+          Box{ { 1.0f,  1.0f,   1.0f },  { -3.9f,  1.8f, -0.56f }, 6u}
     };
 
     size_t materialCount = 8u;
-    size_t sphereCount = 3u;
+    size_t sphereCount = 2u;
+    size_t boxCount = 3u;
 };

@@ -79,6 +79,8 @@ public:
 		ImGui::End();
 
 		ImGui::Begin("Scene");
+
+		ImGui::Text("Spheres: ", m_scene.sphereCount);
 		for (size_t i = 0u; i < m_scene.sphereCount; i++)
 		{
 			ImGui::PushID((int)i);
@@ -96,6 +98,26 @@ public:
 			ImGui::Separator();
 			ImGui::PopID();
 		}
+
+		ImGui::Text("Boxes: ", m_scene.boxCount);
+		for (size_t i = 0u; i < m_scene.boxCount; i++)
+		{
+			ImGui::PushID((int)i + m_scene.sphereCount);
+			ImGui::AlignTextToFramePadding();
+
+			Box& box = m_scene.boxSimple[i];
+			int dragInt = (int)box.materialIndex;
+
+			ImGui::Text("Box: %i", i);
+			if (ImGui::DragFloat3("Size", &box.size.x, 0.01f)) { m_sceneChanged = true; }
+			if (ImGui::DragFloat3("Position", &box.pos.x, 0.01f)) { m_sceneChanged = true; }
+			if (ImGui::SliderInt("Material ID", &dragInt, 0, (int)m_scene.materialCount - 1)) { m_sceneChanged = true; }
+			box.materialIndex = (uint16_t)dragInt;
+
+			ImGui::Separator();
+			ImGui::PopID();
+		}
+
 		ImGui::End();
 
 		ImGui::Begin("Scene Settings");
