@@ -59,6 +59,7 @@ struct HitInfo
 	float3 normal{ 0.0f, 0.0f, 0.0f };
 	float3 color{ 0.0f, 0.0f, 0.0f };
 	size_t materialIndex = 0u;
+	uint32_t hitDepth = 0u;
 };
 
 struct Camera_GPU
@@ -438,12 +439,14 @@ __device__ void IntersectBVH(Ray& ray, HitInfo& hit, const GPU_Mesh* vbo, const 
 
 	//}
 
-	if (rendererSettings->bvhDebug == false)
+	//if (rendererSettings->bvhDebug == false)
+	if (true)
 	{
 		GPU_Mesh::BVHNode* node = &vbo->bvhNode[0];
 		GPU_Mesh::BVHNode* stack[256];
 
-		uint32_t stackPtr = 0;
+		uint32_t hitDepth = 0u;
+		uint32_t stackPtr = 0u;
 
 		HitInfo closestHit;
 
@@ -456,7 +459,6 @@ __device__ void IntersectBVH(Ray& ray, HitInfo& hit, const GPU_Mesh* vbo, const 
 					uint32_t instPrim = vbo->triIdx[node->leftFirst + i];
 					GPU_Mesh::Triangle* triangle = &vbo->triangleBuffer[instPrim];
 
-					//if(stackPtr < debug)
 					hit = rayTriangleIntersect(ray, triangle);
 
 					if (hit.didHit && hit.dst < closestHit.dst)
@@ -464,7 +466,17 @@ __device__ void IntersectBVH(Ray& ray, HitInfo& hit, const GPU_Mesh* vbo, const 
 						closestHit = hit;
 					}
 				}
-				if (stackPtr == 0) break; else node = stack[--stackPtr];
+
+				if (stackPtr == 0)
+				{
+					break;
+				}
+
+				else
+				{
+					node = stack[--stackPtr];
+				}
+
 				continue;
 			}
 
@@ -474,7 +486,6 @@ __device__ void IntersectBVH(Ray& ray, HitInfo& hit, const GPU_Mesh* vbo, const 
 			float dist1 = IntersectAABB(ray, closestHit, child1->aabbMin, child1->aabbMax);
 			float dist2 = IntersectAABB(ray, closestHit, child2->aabbMin, child2->aabbMax);
 
-			//
 			//hit.dst = fminf(dist1, dist2);
 
 			if (dist1 > dist2)
@@ -496,20 +507,25 @@ __device__ void IntersectBVH(Ray& ray, HitInfo& hit, const GPU_Mesh* vbo, const 
 			else
 			{
 				node = child1;
-				if (dist2 != FLT_MAX) stack[stackPtr++] = child2;
+				if (dist2 != FLT_MAX)
+				{
+					stack[stackPtr++] = child2;
+				}
 			}
+
+			hitDepth++;
 		}
 
 		hit = closestHit;
-
+		hit.hitDepth = hitDepth;
 	}
 
 	else
 	{
 		HitInfo closestHit;
 
-		GPU_Mesh::BVHNode* child1 = &vbo->bvhNode[uint32_t(vbo->nodesUsed * ((float)rendererSettings->debug * 0.001f))];
-
+		//GPU_Mesh::BVHNode* child1 = &vbo->bvhNode[uint32_t(vbo->nodesUsed * ((float)rendererSettings->debug * 0.001f))];
+		GPU_Mesh::BVHNode* child1 = &vbo->bvhNode[(uint32_t)rendererSettings->debug];
 		if (rayBoxIntersectionDebug(ray, closestHit, child1->aabbMin, child1->aabbMax))
 		{
 			hit = closestHit;
@@ -540,6 +556,8 @@ __device__ HitInfo intersect_scene(Ray& r, const Scene* scene, const GPU_Mesh* v
 	{
 		closestHit = hit;
 	}
+
+	closestHit.hitDepth = hit.hitDepth;
 
 	// Returns true if an intersection with the scene occurred, false when no hit
 	return closestHit;
@@ -613,7 +631,7 @@ __device__ float3 radiance(Ray& r, uint32_t s1, uint32_t& s2, const Scene* scene
 	float thickness = 0.0f;
 	uint16_t surfaceCount = 0;
 	uint32_t s = 2345u;
-
+	float hitDepth = 0.0f;
 	
 
 	for (size_t b = 0; b < rendererSettings->bounces; b++)
@@ -621,6 +639,13 @@ __device__ float3 radiance(Ray& r, uint32_t s1, uint32_t& s2, const Scene* scene
 		//float aberration = randomValue(s1);
 		// Test ray for intersection with scene
 		HitInfo hit = intersect_scene(r, scene, vbo, rendererSettings);
+		hitDepth = hit.hitDepth * 0.01f;
+
+		if (rendererSettings->bvhDebug)
+		{
+			return { make_float3(hitDepth) };
+			break;
+		}
 
 		if (inVolume)
 		{
@@ -741,7 +766,13 @@ __device__ float3 radiance(Ray& r, uint32_t s1, uint32_t& s2, const Scene* scene
 
 		///debug output
 		//accucolor = { transmissionDistance,transmissionDistance,transmissionDistance };
+		
 	}
+
+	//if (rendererSettings->bvhDebug)
+	//{
+	//	return { hitDepth, hitDepth, hitDepth };
+	//}
 
 	//MAIN OUTPUT
 	albedoOut = accuAlbedo;
@@ -749,8 +780,8 @@ __device__ float3 radiance(Ray& r, uint32_t s1, uint32_t& s2, const Scene* scene
 	return accucolor;
 
 	///debug output
-	//return { normalOut };
 	//return { float(surfaceCount)*0.25f, float(surfaceCount) * 0.25f, float(surfaceCount) * 0.25f };
+
 }
 
 __global__ void render_kernel(float4* buf, float3* albedoBuf, float3* normalBuf, uint32_t width, uint32_t height, Camera_GPU camera, const Scene* scene,
