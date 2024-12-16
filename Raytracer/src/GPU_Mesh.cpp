@@ -28,6 +28,14 @@ void GPU_Mesh::CalculateBbox(GPU_Mesh::MeshInfo& meshInfo)
 
 void GPU_Mesh::LoadOBJFile(const std::string& path, uint16_t materialIndex)
 {
+    filepath = path;
+
+    if (TryLoadCache(filepath))
+    {
+        loadedFromCache = true;
+        return;
+    }
+
     uint32_t importTriangleCount = 0u;
 
     std::ifstream infile(path, std::ifstream::in);
@@ -332,8 +340,83 @@ void GPU_Mesh::Subdivide(uint32_t nodeIdx)
     Subdivide(rightChildIdx);
 }
 
+std::string CacheFilePath(const std::string& filename)
+{
+    std::string BVHcacheFilename(filename);
+    size_t lastindex = BVHcacheFilename.find_last_of(".");
+    BVHcacheFilename.substr(0, lastindex);
+    return BVHcacheFilename += ".bvh";
+}
+
+bool GPU_Mesh::TryLoadCache(const std::string& filename)
+{
+    std::string cacheFile = CacheFilePath(filename);
+
+    FILE* fp = fopen(cacheFile.c_str(), "rb");
+    if (!fp)
+    {
+        fprintf(stderr, "Attempt to read BVH cache failed.\n");
+        return false;
+    }
+
+    // BVH has been built already and stored in a file, read the file
+    fprintf(stderr, "Cache exists, reading the pre-calculated BVH data...\n");
+
+    if (1 != fread(&nodesUsed, sizeof(uint32_t), 1, fp)) return false;
+    if (1 != fread(&numTris, sizeof(uint32_t), 1, fp)) return false;
+
+    bvhNode = new BVHNode[nodesUsed];
+    triIdx = new uint32_t[numTris];
+    triangleBuffer = new Triangle[numTris];
+    meshInfoBuffer = new MeshInfo[1u];
+
+    if (nodesUsed != fread(bvhNode, sizeof(BVHNode), nodesUsed, fp)) return false;
+    if (numTris != fread(triIdx, sizeof(uint32_t), numTris, fp)) return false;
+    if (numTris != fread(triangleBuffer, sizeof(Triangle), numTris, fp)) return false;
+    if (1 != fread(meshInfoBuffer, sizeof(MeshInfo), 1, fp)) return false;
+
+    fclose(fp);
+    fprintf(stderr, "BVH cache read.\n");
+
+    return true;
+}
+
+bool GPU_Mesh::TrySaveCache(const std::string& filename)
+{
+    std::string cacheFile = CacheFilePath(filename);
+    FILE* fp = fopen(cacheFile.c_str(), "rb");
+
+    if (!fp)
+    {
+        // Now store the results, if possible...
+        fprintf(stderr, "No BVH cache exists, writing BVH data...\n");
+
+        fp = fopen(cacheFile.c_str(), "wb");
+        if (!fp) return false;
+
+        if (1 != fwrite(&nodesUsed, sizeof(uint32_t), 1, fp)) return false;
+        if (1 != fwrite(&numTris, sizeof(uint32_t), 1, fp)) return false;
+        if (nodesUsed != fwrite(bvhNode, sizeof(BVHNode), nodesUsed, fp)) return false;
+        if (numTris != fwrite(triIdx, sizeof(uint32_t), numTris, fp)) return false;
+        if (numTris != fwrite(triangleBuffer, sizeof(Triangle), numTris, fp)) return false;
+        if (1 != fwrite(meshInfoBuffer, sizeof(MeshInfo), 1, fp)) return false;
+
+        fclose(fp);
+        fprintf(stderr, "BVH cache written.\n");
+
+        return true;
+    }
+
+    return false;
+}
+
 void GPU_Mesh::BuildBVH()
 {
+    if (loadedFromCache)
+    {
+        return;
+    }
+
     if (numTris == 0)
     {
         return;
@@ -367,4 +450,9 @@ void GPU_Mesh::BuildBVH()
     bvhNode = newArr;
 
     fprintf(stderr, "BVH built using: %i nodes\n", nodesUsed);
+
+    if (TrySaveCache(filepath))
+    {
+        return;
+    }
 }

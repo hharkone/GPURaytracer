@@ -38,20 +38,24 @@ public:
         uint leftFirst, triCount;
     };
 
+    uint32_t nodesUsed = 1u;
+    uint32_t numTris = 0u;
     BVHNode* bvhNode = nullptr;
-    std::vector<BVHNode> bvhNodeVector;
+    //std::vector<BVHNode> bvhNodeVector;
     Triangle* triangleBuffer = nullptr;
     MeshInfo* meshInfoBuffer = nullptr;
     uint32_t numMeshes = 0u;
-    uint32_t numTris = 0u;
-    uint32_t nodesUsed = 1u;
     uint32_t maxNodes;
     uint32_t* triIdx = nullptr;
     int buildStackPtr;
+    std::string filepath;
 
 private:
     uint32_t rootNodeIdx = 0;
     void UpdateNodeBounds(uint32_t nodeIdx);
     void Subdivide(uint32_t nodeIdx);
     void CalculateBbox(GPU_Mesh::MeshInfo& meshInfo);
+    bool TryLoadCache(const std::string& filename);
+    bool TrySaveCache(const std::string& filename);
+    bool loadedFromCache = false;
 };

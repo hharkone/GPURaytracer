@@ -29,10 +29,11 @@ public:
 		//m_hostMesh->LoadOBJFile("meshes/cube_quads.obj", 0u);
 		//m_hostMesh->LoadOBJFile("meshes/torus_simple.obj", 0u);
 		//m_hostMesh->LoadOBJFile("meshes/lion.obj", 0u);
-		m_hostMesh->LoadOBJFile("meshes/lion_LP.obj", 0u);
+		//m_hostMesh->LoadOBJFile("meshes/lion_LP.obj", 0u);
 		//m_hostMesh->LoadOBJFile("meshes/angel.obj", 0u);
 		//m_hostMesh->LoadOBJFile("meshes/buddha.obj", 0u);
 		//m_hostMesh->LoadOBJFile("meshes/eagle.obj", 0u);
+		m_hostMesh->LoadOBJFile("meshes/dragon2.obj", 0u);
 		m_hostMesh->BuildBVH();
 
 		m_deviceScene.alloc(sizeof(Scene));
