@@ -28,14 +28,14 @@ struct Sphere
 struct TonemapSettings
 {
     //Tonemapper
-    float A = 0.4f;
+    float A = 0.389f;
     float B = 0.24f;
-    float C = 0.13f;
-    float D = 0.1f;
+    float C = 0.18f;
+    float D = 0.137f;
     float E = 0.03f;
-    float F = 0.30f;
-    float W = 2.0f;
-    float Exposure = 1.0f;
+    float F = 0.18f;
+    float W = 1.8f;
+    float Exposure = 1.3f;
 };
 
 enum class EnvironmentType

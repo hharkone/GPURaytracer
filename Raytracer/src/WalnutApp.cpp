@@ -51,7 +51,7 @@ public:
 
 		ImGui::Begin("Settings");
 		ImGui::Text("CUDA Device: %s", prop.name);
-		ImGui::Text("Last render time: %.3f ms", m_renderTimeMs);
+		ImGui::Text("Last render time: %.3f ms   FPS: %i", m_renderTimeMs, (1000u / std::max((uint32_t)m_renderTimeMs, 1u)));
 		ImGui::Text("%i Million primary rays per second", m_raysPerSec);
 		ImGui::Text("Sample Index: %i", m_renderer.GetFrameIndex());
 
