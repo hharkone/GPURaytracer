@@ -394,12 +394,12 @@ bool GPU_Mesh::TrySaveCache(const std::string& filename)
         fp = fopen(cacheFile.c_str(), "wb");
         if (!fp) return false;
 
-        if (1 != fwrite(&nodesUsed, sizeof(uint32_t), 1, fp)) return false;
-        if (1 != fwrite(&numTris, sizeof(uint32_t), 1, fp)) return false;
-        if (nodesUsed != fwrite(bvhNode, sizeof(BVHNode), nodesUsed, fp)) return false;
-        if (numTris != fwrite(triIdx, sizeof(uint32_t), numTris, fp)) return false;
-        if (numTris != fwrite(triangleBuffer, sizeof(Triangle), numTris, fp)) return false;
-        if (1 != fwrite(meshInfoBuffer, sizeof(MeshInfo), 1, fp)) return false;
+        if (1 != fwrite(&nodesUsed, sizeof(uint32_t), 1, fp)) goto CACHE_FAIL;
+        if (1 != fwrite(&numTris, sizeof(uint32_t), 1, fp))  goto CACHE_FAIL;
+        if (nodesUsed != fwrite(bvhNode, sizeof(BVHNode), nodesUsed, fp))  goto CACHE_FAIL;
+        if (numTris != fwrite(triIdx, sizeof(uint32_t), numTris, fp))  goto CACHE_FAIL;
+        if (numTris != fwrite(triangleBuffer, sizeof(Triangle), numTris, fp))  goto CACHE_FAIL;
+        if (1 != fwrite(meshInfoBuffer, sizeof(MeshInfo), 1, fp))  goto CACHE_FAIL;
 
         fclose(fp);
         fprintf(stderr, "BVH cache written.\n");
@@ -407,6 +407,9 @@ bool GPU_Mesh::TrySaveCache(const std::string& filename)
         return true;
     }
 
+CACHE_FAIL:
+    fclose(fp);
+    fprintf(stderr, "BVH cache file loading failed.\n");
     return false;
 }
 

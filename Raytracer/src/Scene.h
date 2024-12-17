@@ -72,9 +72,10 @@ struct Scene
 
     Material materials[8] =
     {
+        // Albedo, vcolor amount, roughness, emission, emission intensity, ior, trans, trans rough, trans aber, trans dens, trans col, metal
         Material{ { 0.8f, 0.8f,  0.8f  }, 0.0f, 0.21f, { 0.0f, 0.0f, 0.0f }, 0.0f, 1.5f, 0.0f, 0.0f, 1.0f, 1.0f, { 0.95f, 0.75f, 0.4f }, 0.0f }, //Diffuse
         Material{ { 0.7f, 0.1f,  0.1f  }, 0.0f, 0.05f, { 0.0f, 0.0f, 0.0f }, 0.0f, 1.5f, 0.0f, 0.0f, 0.0f, 0.1f, { 1.0f, 1.0f, 1.0f }, 0.0f }, //Red	
-        Material{ { 0.5f, 0.7f,  0.8f  }, 0.0f, 0.1f,  { 0.0f, 0.0f, 0.0f }, 0.0f, 1.5f, 0.0f, 0.0f, 0.0f, 0.1f, { 1.0f, 1.0f, 1.0f }, 0.0f }, //Blue
+        Material{ { 0.5f, 0.7f,  0.8f  }, 0.0f, 0.1f,  { 0.0f, 0.0f, 0.0f }, 0.0f, 1.5f, 1.0f, 0.0f, 0.0f, 0.1f, { 0.3f, 0.6f, 0.7f }, 0.0f }, //Blue
         Material{ { 0.7f, 0.7f,  0.7f  }, 0.0f, 0.2f,  { 0.0f, 0.0f, 0.0f }, 0.0f, 1.5f, 0.0f, 0.0f, 0.0f, 0.1f, { 1.0f, 1.0f, 1.0f }, 0.0f }, //White
         Material{ { 1.0f, 0.9f,  0.6f  }, 0.0f, 0.1f,  { 0.0f, 0.0f, 0.0f }, 0.0f, 1.5f, 0.0f, 0.0f, 0.0f, 0.1f, { 1.0f, 1.0f, 1.0f }, 1.0f }, //Gold
         Material{ { 0.98f,0.815f,0.75f }, 0.0f, 0.1f,  { 0.0f, 0.0f, 0.0f }, 0.0f, 1.5f, 0.0f, 0.0f, 0.0f, 0.1f, { 1.0f, 1.0f, 1.0f }, 1.0f }, //Copper
@@ -88,14 +89,14 @@ struct Scene
           //Sphere{ 1.0f,  { 1.58f, 1.9f, -1.77f }, 7u},
           Sphere{ 0.25f, {  0.0f,  0.0f,  0.0f  }, 7u},
           //Sphere{ 19.0f, {  0.0f, -19.0f, 0.0f  }, 1u},
-          Sphere{ 1.3f,  { -3.9f, 1.8f,  -0.56f }, 6u}
+          Sphere{ 1.3f,  { -5.9f, 2.8f,  -0.56f }, 6u}
     };
 
     Box boxSimple[3] =
     {
         //{ { float3 size }, { float3 position }, { Material }}
           //Sphere{ 1.0f,  { 1.58f, 1.9f, -1.77f }, 7u},
-          Box{ { 1.0f,  1.0f,   1.0f },  {  0.0f,  0.0f,  0.0f  }, 7u},
+          Box{ { 2.0f,  2.0f,   2.0f },  {  0.0f,  1.0f,  0.0f  }, 2u},
           Box{ { 10.0f, 10.0f, 10.0f },  {  0.0f, -5.0f, 0.0f   }, 1u},
           Box{ { 1.0f,  1.0f,   1.0f },  { -3.9f,  1.8f, -0.56f }, 6u}
     };
