@@ -325,11 +325,6 @@ void GPU_Mesh::Subdivide(uint32_t nodeIdx)
     bvhNode[rightChildIdx].leftFirst = i;
     bvhNode[rightChildIdx].triCount = node.triCount - leftCount;
 
-    //bvhNodeVector.at(leftChildIdx).leftFirst = node.leftFirst;
-    //bvhNodeVector.at(leftChildIdx).triCount = leftCount;
-    //bvhNodeVector.at(rightChildIdx).leftFirst = i;
-    //bvhNodeVector.at(rightChildIdx).triCount = node.triCount - leftCount;
-
     node.leftFirst = leftChildIdx;
     node.triCount = 0;
 

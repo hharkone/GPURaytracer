@@ -60,6 +60,7 @@ struct HitInfo
 	float3 color{ 0.0f, 0.0f, 0.0f };
 	size_t materialIndex = 0u;
 	uint32_t bvhDepth = 0u;
+	//uint16_t nodeID = 0u;
 };
 
 struct Camera_GPU
@@ -468,33 +469,18 @@ __device__ float IntersectAABB(const Ray& ray, const HitInfo& hit, const float3 
 
 __device__ void IntersectBVH(Ray& ray, HitInfo& hit, const GPU_Mesh* vbo, const RenderSettings* rendererSettings)
 {
-	//if (rendererSettings->bvhDebug == false)
-	//{
-	//	HitInfo closestHit;
-
-	//	for (uint16_t i = 0; i < vbo->numTris; i++)
-	//	{
-	//		hit = rayTriangleIntersect(ray, &vbo->triangleBuffer[i]);
-
-	//		if (hit.didHit && hit.dst < closestHit.dst)
-	//		{
-	//			closestHit = hit;
-	//		}
-	//	}
-
-	//	hit = closestHit;
-
-	//}
-	GPU_Mesh::BVHNode* node = &vbo->bvhNode[0];
-	GPU_Mesh::BVHNode* stack[256];
-
 	uint32_t hitDepth = 0u;
 	uint32_t stackPtr = 0u;
 
+	GPU_Mesh::BVHNode* node = &vbo->bvhNode[0];
+	GPU_Mesh::BVHNode* stack[256];
+	stack[stackPtr++] = 0u;
+
 	HitInfo closestHit;
 
-	while (1)
+	while (stackPtr > 0u)
 	{
+		hitDepth++;
 		if (node->triCount > 0) // isLeaf()
 		{
 			for (uint32_t i = 0; i < node->triCount; i++)
@@ -528,7 +514,6 @@ __device__ void IntersectBVH(Ray& ray, HitInfo& hit, const GPU_Mesh* vbo, const 
 
 		float dist1 = IntersectAABB(ray, closestHit, child1->aabbMin, child1->aabbMax);
 		float dist2 = IntersectAABB(ray, closestHit, child2->aabbMin, child2->aabbMax);
-
 		//hit.dst = fminff(dist1, dist2);
 
 		if (dist1 > dist2)
@@ -555,8 +540,6 @@ __device__ void IntersectBVH(Ray& ray, HitInfo& hit, const GPU_Mesh* vbo, const 
 				stack[stackPtr++] = child2;
 			}
 		}
-
-		hitDepth++;
 	}
 
 	hit = closestHit;
@@ -598,6 +581,7 @@ __device__ HitInfo intersect_scene(Ray& r, const Scene* scene, const GPU_Mesh* v
 	}
 
 	closestHit.dst = hit.dst;
+	closestHit.bvhDepth = hit.bvhDepth;
 
 	// Returns true if an intersection with the scene occurred, false when no hit
 	return closestHit;
@@ -651,6 +635,23 @@ __device__ float3 spectrum(float x)
 	return y * make_float3(2.0f, 2.0f, 20.0f);
 }
 
+__device__ float3 bump3(float3 x)
+{
+	float3 y = make_float3(1.0f) - x * x;
+		   y = cfmaxf(y, make_float3(0.0f));
+	return y;
+}
+
+__device__ float3 spectral_gems(float w)
+{
+	float x = clamp(w, 0.0f, 1.0f);
+
+	return bump3(make_float3(4.0f * (x - 0.75f), // Red
+						     4.0f * (x - 0.50f), // Green
+							 4.0f * (x - 0.25f)) // Blue
+	);
+}
+
 __device__ float3 hsv2rgb(float3 c)
 {
 	float4 K = make_float4(1.0f, 2.0f / 3.0f, 1.0f / 3.0f, 3.0f);
@@ -675,6 +676,13 @@ __device__ float3 radiance(Ray& r, uint32_t s1, uint32_t& s2, const Scene* scene
 	uint16_t matIndexMap[20u] = { 0u };
 	float3 debug = make_float3(0.0f, 0.0f, 0.0f);
 
+	float rt = randomValue(s1);
+
+	//make_float3(2.428571428f, 2.318181818f, 2.318181818f)
+	//float3 dispersionColor = srgbToLinear(spectral_gems(rt)) * make_float3(2.428571428f);
+
+	//dispersionColor = make_float3(rt < 0.333f ? 1.0f : 0.0f, (rt >= 0.333f && rt < 0.666f) ? 1.0f : 0.0f, (rt >= 0.666f) ? 1.0f : 0.0f) * 3.0f;
+
 	for (size_t b = 0; b < rendererSettings->bounces; b++)
 	{
 		//float aberration = randomValue(s1);
@@ -683,7 +691,8 @@ __device__ float3 radiance(Ray& r, uint32_t s1, uint32_t& s2, const Scene* scene
 
 		if (rendererSettings->bvhDebug)
 		{
-			bvhDepth = hit.bvhDepth * 0.01f;
+			bvhDepth = float(hit.bvhDepth) * 0.01f;
+			//return { dispersionColor };
 			return { srgbToLinear(make_float3(bvhDepth)) };
 			break;
 		}
@@ -705,20 +714,23 @@ __device__ float3 radiance(Ray& r, uint32_t s1, uint32_t& s2, const Scene* scene
 
 		Material hitMat = scene->materials[hit.materialIndex];
 		float iorDiff = hitMat.ior;
+		//float disperseIor = hitMat.ior + (1.0f - rt) * hitMat.transmissionAberration * (hitMat.ior-1.0f);
 
 		if (inVolume)
 		{
-			thickness = thickness + length(hit.hitPoint - r.origin);
+			thickness = length(hit.hitPoint - r.origin);
 			uint16_t prevMatIndex = clamp(transmissionCount, (uint16_t)0u, (uint16_t)19u);
 
 			volumeMat = scene->materials[matIndexMap[prevMatIndex]];
+			iorDiff = fmaxf(fmaxf(hitMat.ior, volumeMat.ior) / fminf(hitMat.ior, volumeMat.ior), 1.0f);
+			//iorDiff = fmaxf(hitMat.ior / volumeMat.ior, 1.0f);
 
-			iorDiff = fmaxf(hitMat.ior / volumeMat.ior, 1.0f);
-
-			if (matIndexMap[prevMatIndex] == hit.materialIndex)
+			if (hit.inside && transmissionCount <= 1u) //Interface to air
 			{
 				iorDiff = hitMat.ior;
 			}
+
+			//disperseIor = iorDiff + (1.0f - rt) * hitMat.transmissionAberration * (iorDiff - 1.0f);
 		}
 		if(!inVolume)
 		{
@@ -728,11 +740,7 @@ __device__ float3 radiance(Ray& r, uint32_t s1, uint32_t& s2, const Scene* scene
 			volumeMat.transmissionRoughness = 0.0f;
 		}
 
-		//if (inVolume)
-		//{
-		//	uint16_t lastIndex = max(surfaceCount - 1, 0u);
-		//	iorDiff = fmaxf(iorMap[surfaceCount] / iorMap[lastIndex], 1.0f);
-		//}
+		//float disperseIorDiff = fmaxf(disperseIor / 1.0f, 1.0f);
 
 		// Create 2 random numbers
 		float r1 = 2 * M_PI * randomValue(s1); // Pick random number on unit circle (radius = 1, circumference = 2*Pi) for azimuth
@@ -745,7 +753,9 @@ __device__ float3 radiance(Ray& r, uint32_t s1, uint32_t& s2, const Scene* scene
 		float F = fresnel(ndotl, 0.0f, iorDiff);
 		float F82 = clamp(fresnel(ndotl, 0.0f, 1.5f) * 3.0f - 1.0f, 0.0f, 1.0f); //Hacking desaturated edges for metals
 
-		float apparentRoughness = lerp(hitMat.roughness * hitMat.roughness, 0.0f, F);
+		float3 transmissionDir = refractionRay(normalize(r.direction + randomInUnitSphere(s1) * hitMat.transmissionRoughness * hitMat.transmissionRoughness), hit.normal, iorDiff, totalInternalReflection);
+
+		float apparentRoughness = lerp(lerp(hitMat.roughness * hitMat.roughness, 0.0f, F), 0.0f, totalInternalReflection);
 
 		bool isSpecularBounce = fmaxf(hitMat.metalness, F) >= randomValue(s1);
 		bool isTransmissionBounce = (hitMat.transmission * (float)!isSpecularBounce) >= randomValue(s1);
@@ -755,7 +765,7 @@ __device__ float3 radiance(Ray& r, uint32_t s1, uint32_t& s2, const Scene* scene
 		//float chromaticAberration = fmaxff(hitMat.ior + (aberration * 2.0f - 1.0f) * hitMat.transmissionAberration * (hitMat.ior-1.0f), 1.0f);
 		//float3 cromaticColor = spectrum(1.0f-aberration) * make_float3(0.5f, 0.5f, 0.098f) * 2.83067f;
 		//float3 cromaticColor = hsv2rgb(make_float3(1.0f-aberration, 0.5f, 1.0f)) * 2.93067f;
-		float3 transmissionDir = refractionRay(normalize(r.direction + randomInUnitSphere(s1) * hitMat.transmissionRoughness * hitMat.transmissionRoughness), hit.normal, iorDiff, totalInternalReflection);
+
 		isSpecularBounce = (isSpecularBounce || totalInternalReflection);
 		isTransmissionBounce = (isTransmissionBounce * !totalInternalReflection);
 
@@ -776,9 +786,14 @@ __device__ float3 radiance(Ray& r, uint32_t s1, uint32_t& s2, const Scene* scene
 
 		float3 volumeAbsorptionColor = powf(linearVolumeTransmissionColor, volumeTransmissionDensity * (1.0-expf(-volumeMat.transmissionDensity)) * 10.0f);
 		volumeAbsorptionColor = (inVolume ? volumeAbsorptionColor : make_float3(1.0f));
-
+		/*
+		if (b == 0u) // Tint ray to a spectral color
+		{
+			mask = mask * lerp(make_float3(1.0f), dispersionColor, isTransmissionBounce);
+		}
+		*/
 		//EMISSION
-		accucolor += mask * srgbToLinear(hitMat.emission) * hitMat.emissionIntensity * absorptionColor * volumeAbsorptionColor;
+		accucolor += mask * srgbToLinear(hitMat.emission) * hitMat.emissionIntensity * volumeAbsorptionColor;
 
 		//MAIN OUTPUT
 		mask = mask * lerp(
@@ -815,7 +830,7 @@ __device__ float3 radiance(Ray& r, uint32_t s1, uint32_t& s2, const Scene* scene
 				transmissionCount++;
 				transmissionCount = min(transmissionCount, 19u);
 				matIndexMap[transmissionCount] = hit.materialIndex;
-				thickness = 0.0f;
+				//thickness = 0.0f;
 
 				r.origin = hit.hitPoint + flippedNormal * -0.000001f; // offset ray origin slightly to prevent self intersection
 				r.direction = normalize(transmissionDir); // maybe should be inside tranmission if statement
@@ -826,15 +841,15 @@ __device__ float3 radiance(Ray& r, uint32_t s1, uint32_t& s2, const Scene* scene
 				transmissionCount--;
 				transmissionCount = max(transmissionCount, 0u);
 
-				thickness = 0.0f;
+				//thickness = 0.0f;
 
-				r.origin = hit.hitPoint + flippedNormal * -0.0000001f; // offset ray origin slightly to prevent self intersection
+				r.origin = hit.hitPoint + flippedNormal * -0.000001f; // offset ray origin slightly to prevent self intersection
 				r.direction = normalize(transmissionDir); // maybe should be inside tranmission if statement
 			}
 		}
 
 		//volumeMat.ior = (surfaceCount > 0) ? volumeMat.ior : 1.0f;
-		inVolume = (transmissionCount > 0);
+		inVolume = (transmissionCount > 0u);
 		///debug output
 		//accucolor = { srgbToLinear(make_float3((float)transmissionCount * 0.05f)) };
 		//debug = srgbToLinear(make_float3((float)transmissionCount * 0.25f));
