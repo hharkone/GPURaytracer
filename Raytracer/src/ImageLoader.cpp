@@ -2,6 +2,45 @@
 #include <fstream>
 #include <stdio.h>
 
+#define TINYEXR_USE_MINIZ 0
+#define TINYEXR_USE_STB_ZLIB 1
+#define TINYEXR_IMPLEMENTATION
+#define STB_IMAGE_WRITE_IMPLEMENTATION 1
+#include "stb_image.h"
+#include "stb_image_write.h"
+#include "zlib.h"
+#include "tinyexr.h"
+
+void ImageLoader::LoadImageFile(const std::string path)
+{
+    float* out; // width * height * RGBA
+    int width;
+    int height;
+    const char* err = NULL; // or nullptr in C++11
+
+    int ret = LoadEXR(&out, &width, &height, path.c_str(), &err);
+
+    if (ret != TINYEXR_SUCCESS)
+    {
+        if (err)
+        {
+            fprintf(stderr, "ImageLoader: %s\n", err);
+            FreeEXRErrorMessage(err); // release memory of error message.
+        }
+
+    }
+    else
+    {
+        gpuImage.height = (size_t)height;
+        gpuImage.width = (size_t)width;
+
+        gpuBuffer.alloc_and_upload(out, gpuImage.width * gpuImage.height * 4u);
+        gpuImage.imageData_GPU = gpuBuffer.d_pointer();
+
+        free(out); // release memory of image data
+    }
+}
+/*
 void* ImageLoader::LoadImageFile(const std::string path, uint32_t width, uint32_t height)
 {
     m_width = width;
@@ -32,52 +71,12 @@ void* ImageLoader::LoadImageFile(const std::string path, uint32_t width, uint32_
         fprintf(stderr, "cudaMemcpy ImageLoader failed: %s\n", cudaGetErrorString(cudaStatus));
     }
 
-    /*
-    size_t d_pitchBytes;
-    cudaMallocPitch((void**)&m_devPtr, &d_pitchBytes, width * sizeof(float), height);
-
-    size_t h_pitchBytes = width * sizeof(float);
-    cudaMemcpy2D(m_devPtr, d_pitchBytes, m_imageData, h_pitchBytes, width * sizeof(float), height, cudaMemcpyHostToDevice);
-
-    cudaResourceDesc texRes;
-    memset(&texRes, 0, sizeof(cudaResourceDesc));
-    cudaChannelFormatDesc channelDesc = cudaCreateChannelDesc<float4>();
-
-    texRes.resType = cudaResourceTypePitch2D;
-    texRes.res.pitch2D.devPtr = m_devPtr;
-    texRes.res.pitch2D.desc = channelDesc;
-    texRes.res.pitch2D.width = width;
-    texRes.res.pitch2D.height = height;
-    texRes.res.pitch2D.pitchInBytes = h_pitchBytes;
-
-    cudaTextureDesc texDescr;
-    memset(&texDescr, 0, sizeof(cudaTextureDesc));
-
-    texDescr.addressMode[0] = cudaAddressModeClamp;
-    texDescr.addressMode[1] = cudaAddressModeClamp;
-    texDescr.borderColor[0] = 0.0f;
-    texDescr.borderColor[1] = 0.0f;
-    texDescr.disableTrilinearOptimization = 1;
-    texDescr.filterMode = cudaFilterModeLinear;
-    texDescr.maxAnisotropy = 1;
-    texDescr.minMipmapLevelClamp = 1.0f;
-    texDescr.maxMipmapLevelClamp = 1.0f;
-    texDescr.mipmapFilterMode = cudaFilterModePoint;
-    texDescr.mipmapLevelBias = 0.0f;
-    texDescr.normalizedCoords = 0;
-    texDescr.readMode = cudaReadModeElementType;
-    texDescr.sRGB = 0;
-
-    cudaCreateTextureObject(pTexObject, &texRes, &texDescr, NULL);
-    
-    return pTexObject;
-    */
-
     return m_devPtr;
 }
+*/
 
 ImageLoader::~ImageLoader()
 {
-    delete[] m_imageData;
-    cudaFree(pTexObject);
+    //delete[] m_imageData;
+    //cudaFree(pTexObject);
 }

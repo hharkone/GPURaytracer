@@ -1,7 +1,6 @@
 #include <glm/gtc/type_ptr.hpp>
 #include <deque>
 
-
 #include "Walnut/Application.h"
 #include "Walnut/EntryPoint.h"
 #include "Walnut/Image.h"
@@ -9,8 +8,16 @@
 #include "Renderer.h"
 #include "Camera.h"
 #include "cuda_runtime.h"
-
-
+/*
+#define TINYEXR_USE_MINIZ 0
+#define TINYEXR_USE_STB_ZLIB 1
+#define TINYEXR_IMPLEMENTATION
+#define STB_IMAGE_WRITE_IMPLEMENTATION 1
+#include "stb_image.h"
+#include "stb_image_write.h"
+#include "zlib.h"
+#include "tinyexr.h"
+*/
 using namespace Walnut;
 
 class ExampleLayer : public Walnut::Layer
@@ -67,6 +74,11 @@ public:
 			m_sceneChanged = false;
 		}
 
+		if (ImGui::Button("Save Render"))
+		{
+			//SaveRender();
+		}
+
 		ImGui::End();
 		
 		ImGui::Begin("Camera");
@@ -102,7 +114,7 @@ public:
 		ImGui::Text("Boxes: ", m_scene.boxCount);
 		for (size_t i = 0u; i < m_scene.boxCount; i++)
 		{
-			ImGui::PushID((int)i + m_scene.sphereCount);
+			ImGui::PushID((int)i + (int)m_scene.sphereCount);
 			ImGui::AlignTextToFramePadding();
 
 			Box& box = m_scene.boxSimple[i];

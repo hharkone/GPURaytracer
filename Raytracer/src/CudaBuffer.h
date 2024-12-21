@@ -4,6 +4,7 @@
 #include <assert.h>
 #include <vector>
 #include <sstream>
+#include <cuda.h>
 
 #define CUDA_CHECK(call)                                  \
 {                 \

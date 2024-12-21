@@ -317,7 +317,7 @@ inline __host__ __device__ float3 fstep(float  a, float3 x)
 //sign
 inline __host__ __device__ float3 fsign(float3 a)
 {
-    return make_float3(fsign(a.x), fsign(a.y), fsign(a.z));
+    return make_float3((float)fsign(a.x), (float)fsign(a.y), (float)fsign(a.z));
 }
 
 // min

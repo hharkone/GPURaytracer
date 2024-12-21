@@ -9,6 +9,7 @@
 #include "CudaBuffer.h"
 #include "RendererSettings.h"
 
+
 class CudaRenderer
 {
 public:
@@ -28,30 +29,44 @@ public:
 		m_hostMesh = new GPU_Mesh();
 		//m_hostMesh->LoadOBJFile("meshes/cube_quads.obj", 0u);
 		//m_hostMesh->LoadOBJFile("meshes/torus_simple.obj", 0u);
-		//m_hostMesh->LoadOBJFile("meshes/lion.obj", 0u);
+		m_hostMesh->LoadOBJFile("meshes/lion.obj", 0u);
 		//m_hostMesh->LoadOBJFile("meshes/lion_LP.obj", 0u);
 		//m_hostMesh->LoadOBJFile("meshes/angel.obj", 0u);
 		//m_hostMesh->LoadOBJFile("meshes/buddha.obj", 0u);
 		//m_hostMesh->LoadOBJFile("meshes/eagle.obj", 0u);
-		m_hostMesh->LoadOBJFile("meshes/dragon2.obj", 0u);
+		//m_hostMesh->LoadOBJFile("meshes/dragon2.obj", 0u);
 		m_hostMesh->BuildBVH();
 
 		m_deviceScene.alloc(sizeof(Scene));
 		m_deviceSettings.alloc(sizeof(RenderSettings));
 
-		ImageLoader imgLoader;
 		//m_skyTexture = (float*)imgLoader.LoadImageFile("Images/river_rocks_8k.raw", 8192, 4096);
 		//m_skyTexture = (float*)imgLoader.LoadImageFile("Images/paul_lobe_haus_8k.raw", 8192, 4096);
 		//m_skyTexture = (float*)imgLoader.LoadImageFile("Images/clarens_midday_8k.raw", 8192, 4096);
 		//m_skyTexture = (float*)imgLoader.LoadImageFile("Images/bridge1.raw", 8192, 4096);
 		//m_skyTexture = (float*)imgLoader.LoadImageFile("Images/xanderklinge_8k.raw", 8192, 4096);
-		m_skyTexture = (float*)imgLoader.LoadImageFile("Images/studio_19.raw", 8192, 4096);
+		//m_skyTexture = (float*)imgLoader.LoadImageFile("Images/studio_19.raw", 8192, 4096);
+		m_imgLoader.LoadImageFile("Images/industrial_sunset_puresky_8k.exr");
 		//m_skyTexture = (float*)imgLoader.LoadImageFile("Images/circus_arena_8k.raw", 8192, 4096);
 		//m_skyTexture = (float*)imgLoader.LoadImageFile("Images/trekker_monument_8k.raw", 8192, 4096);
 		//m_skyTexture = (float*)imgLoader.LoadImageFile("Images/tief_etz_8k.raw", 8192, 4096);
 		//m_skyTexture = (float*)imgLoader.LoadImageFile("Images/industrial_workshop_foundry_8k.raw", 8192, 4096);
 		//m_skyTexture = (float*)imgLoader.LoadImageFile("Images/Panels2k.raw", 8192, 4096);
 
+		//cudaDeviceSynchronize();
+
+		//cudaMalloc(&m_imgLoader.gpuImage.imageData_GPU, m_imgLoader.gpuImage.width * m_imgLoader.gpuImage.height * sizeof(float) * 4u);
+		//cudaMemcpy(m_imgLoader.gpuImage.imageData_GPU, imgData, m_imgLoader.gpuImage.width * m_imgLoader.gpuImage.height * sizeof(float) * 4u, cudaMemcpyHostToDevice);
+
+		//cudaDeviceSynchronize();
+
+		//free(imgData);
+
+		cudaStatus = cudaGetLastError();
+		if (cudaStatus != cudaSuccess)
+		{
+			fprintf(stderr, "ImageLoader: Data buffer copy to device failed: %s\n", cudaGetErrorString(cudaStatus));
+		}
 
 		cudaMalloc(&m_deviceMesh, sizeof(GPU_Mesh));
 		cudaMemcpy(m_deviceMesh, m_hostMesh, sizeof(GPU_Mesh), cudaMemcpyHostToDevice);
@@ -162,7 +177,8 @@ private:
 	CUDABuffer m_deviceScene;
 	CUDABuffer m_deviceSettings;
 
-	float* m_skyTexture;
+	ImageLoader m_imgLoader;
+	//float* m_skyTexture;
 
 	float* m_finalOutputBuffer = nullptr;	//Final float output
 };

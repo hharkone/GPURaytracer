@@ -171,7 +171,7 @@ __device__ float3 randomInUnitSphere(uint32_t& state)
 	return normalize(make_float3(x, y, z)) * dsqr;
 }
 
-__device__ void vector4_matrix4_mult(float* vec, float* mat, float* out)
+__device__ void vector4_matrix4_mult(float* vec, const float* mat, float* out)
 {
 	for (int i = 0; i < 4; i++)
 	{
@@ -199,7 +199,7 @@ __device__ float2 toSpherical(float3 dir, const float rot)
 	return make_float2(modf(u, &uselessshit), 1.0f-v);
 }
 
-__device__ float3 getEnvironmentLight(const Ray& ray, const Scene* scene, float* skyTex)
+__device__ float3 getEnvironmentLight(const Ray& ray, const Scene* scene, const GPUImage* skyTex)
 {
 	switch(scene->envType)
 	{
@@ -224,24 +224,21 @@ __device__ float3 getEnvironmentLight(const Ray& ray, const Scene* scene, float*
 		}
 		case EnvironmentType::EnvType_HDRI:
 		{
-			size_t texWidth = 8192u;
-			size_t texHeight = 4096u;
+			size_t texWidth = skyTex->width;
+			size_t texHeight = skyTex->height;
 
 			float2 uv = toSpherical(ray.direction, scene->skyRotation);
-			size_t row = (size_t)(uv.y * (float)texHeight) * 3;
-			size_t col = (size_t)(uv.x * (float)texWidth) * 3;
+			size_t row = (size_t)(uv.y * (float)texHeight) * 4u;
+			size_t col = (size_t)(uv.x * (float)texWidth) * 4u;
 
-			//pixel = (float*)(skyTex + row * 8000u) + 4 * col;
-
-			//size_t pixelIndex = (col * texHeight * 3) + row;
 			size_t pixelIndex = (row * texWidth) + col;
 
-			//pixel = ((float*)skyTex + pixelIndex);
-			float r = *(skyTex + pixelIndex + 0);
-			float g = *(skyTex + pixelIndex + 1);
-			float b = *(skyTex + pixelIndex + 2);
+			float* ptr = (float*)skyTex->imageData_GPU;
+			float x = *(ptr + pixelIndex + 0u);
+			float y = *(ptr + pixelIndex + 1u);
+			float z = *(ptr + pixelIndex + 2u);
 
-			float3 c = make_float3(r,g,b);
+			float3 c = make_float3(x,y,z);
 
 			return c * scene->skyColor * scene->skyBrightness;
 		}
@@ -349,6 +346,7 @@ void __device__ IntersectTri(Ray& ray, HitInfo& hit, GPU_Mesh::Triangle* tri)
 		hit.didHit = true;
 	}
 }
+
 /*
 __device__ bool rayBoxIntersection(const Ray& r, const float3& min, const float3& max)
 {
@@ -410,6 +408,7 @@ __device__ bool rayBoxIntersection(const Ray& ray, HitInfo& hit, const float3& b
 }
 
 */
+
 __device__ bool rayBoxIntersection(const Ray& ray, HitInfo& hit, const Box& box)
 {
 	float3 bmin = (box.pos - (box.size * 0.5f));
@@ -659,7 +658,7 @@ __device__ float3 hsv2rgb(float3 c)
 	return c.z * lerp(make_float3(K.x), clamp(p - make_float3(K.x), 0.0f, 1.0f), c.y);
 }
 
-__device__ float3 radiance(Ray& r, uint32_t s1, uint32_t& s2, const Scene* scene, const RenderSettings* rendererSettings, const GPU_Mesh* vbo, float3& albedoOut, float3& normalOut, uint32_t i, Camera_GPU* camera, float* skyTex) // Returns ray color
+__device__ float3 radiance(Ray& r, uint32_t s1, uint32_t& s2, const Scene* scene, const RenderSettings* rendererSettings, const GPU_Mesh* vbo, float3& albedoOut, float3& normalOut, uint32_t i, const Camera_GPU* camera, const GPUImage* skyTex) // Returns ray color
 {
 	float3 accucolor = make_float3(0.0f, 0.0f, 0.0f); // Accumulates ray colour with each iteration through bounce loop
 	float3 accuAlbedo = make_float3(0.0f, 0.0f, 0.0f); // Accumulates ray colour with each iteration through bounce loop
@@ -872,8 +871,8 @@ __device__ float3 radiance(Ray& r, uint32_t s1, uint32_t& s2, const Scene* scene
 
 }
 
-__global__ void render_kernel(float4* buf, float3* albedoBuf, float3* normalBuf, uint32_t width, uint32_t height, Camera_GPU camera, const Scene* scene,
-							   const RenderSettings* rendererSettings, uint32_t sampleIndex, const GPU_Mesh* vbo, float* skyTex)
+__global__ void render_kernel(float4* buf, float3* albedoBuf, float3* normalBuf, uint32_t width, uint32_t height, const Camera_GPU camera, const Scene* scene,
+							   const RenderSettings* rendererSettings, uint32_t sampleIndex, const GPU_Mesh* vbo, const GPUImage skyTex)
 {
 	// Assign a CUDA thread to every pixel (x,y) blockIdx, blockDim and threadIdx are CUDA specific
 	// Keywords replaces nested outer loops in CPU code looping over image rows and image columns
@@ -930,7 +929,7 @@ __global__ void render_kernel(float4* buf, float3* albedoBuf, float3* normalBuf,
 
 		ray.direction = normalize(jitteredViewPoint - ray.origin);
 		
-		finalBeauty += radiance(ray, s1, s2, scene, rendererSettings, vbo, finalAlbedo, finalNormal, i, &camera, skyTex);
+		finalBeauty += radiance(ray, s1, s2, scene, rendererSettings, vbo, finalAlbedo, finalNormal, i, &camera, &skyTex);
 	}
 
 	// Write rgb value of pixel to image buffer on the GPU
@@ -1011,7 +1010,7 @@ void CudaRenderer::Compute(void)
 										  (RenderSettings*)m_deviceSettings.d_pointer(),
 										  *m_sampleIndex,
 										  m_deviceMesh,
-										  m_skyTexture);
+										  m_imgLoader.gpuImage);
 
 	// Check for any errors launching the kernel
 	cudaStatus = cudaGetLastError();
