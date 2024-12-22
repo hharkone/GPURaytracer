@@ -19,7 +19,8 @@ class Renderer
 public:
 
     Renderer() = default;
-    void OnResize(uint32_t width, uint32_t height);
+    void LoadHDRI(const Scene& scene);
+    void OnResize(const Scene& scene, uint32_t width, uint32_t height);
     void Render(const Scene& scene, const Camera& camera);
     std::shared_ptr<Walnut::Image> GetFinalImage() const { return m_finalImage; }
 

@@ -1,5 +1,6 @@
 #pragma once
 
+#include <string>
 #include <cuda_runtime.h>
 
 struct Material
@@ -56,6 +57,8 @@ struct Scene
 {
     TonemapSettings tonemap;
     EnvironmentType envType = EnvironmentType::EnvType_HDRI;
+    bool envImgPathChanged = false;
+    std::string envImgPath = "";
 
     //Procedural Sky
     float3 skyColor = make_float3(1.0f, 1.0f, 1.0f);

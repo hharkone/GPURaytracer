@@ -1066,6 +1066,12 @@ void CudaRenderer::OnResize(uint32_t width, uint32_t height)
 	Clear();
 }
 
+void CudaRenderer::SetHDRI(std::string path)
+{
+	cudaDeviceSynchronize();
+	m_imgLoader.LoadImageFile(path);
+}
+
 void CudaRenderer::SetScene(const Scene* scene)
 {
 	m_scene = scene;

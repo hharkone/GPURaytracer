@@ -5,6 +5,7 @@
 #define TINYEXR_USE_MINIZ 0
 #define TINYEXR_USE_STB_ZLIB 1
 #define TINYEXR_IMPLEMENTATION
+#define TINYEXR_USE_THREAD 1
 #define STB_IMAGE_WRITE_IMPLEMENTATION 1
 #include "stb_image.h"
 #include "stb_image_write.h"
@@ -33,6 +34,11 @@ void ImageLoader::LoadImageFile(const std::string path)
     {
         gpuImage.height = (size_t)height;
         gpuImage.width = (size_t)width;
+
+        if (gpuBuffer.sizeInBytes != 0u)
+        {
+            gpuBuffer.free();
+        }
 
         gpuBuffer.alloc_and_upload(out, gpuImage.width * gpuImage.height * 4u);
         gpuImage.imageData_GPU = gpuBuffer.d_pointer();
@@ -79,4 +85,5 @@ ImageLoader::~ImageLoader()
 {
     //delete[] m_imageData;
     //cudaFree(pTexObject);
+    gpuBuffer.free();
 }

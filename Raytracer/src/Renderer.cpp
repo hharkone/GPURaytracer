@@ -20,8 +20,16 @@ void Renderer::ResetFrameIndex()
 		m_cudaRenderer->Clear();
 }
 
-void Renderer::OnResize(uint32_t width, uint32_t height)
+void Renderer::LoadHDRI(const Scene& scene)
 {
+	m_activeScene = &scene;
+	m_cudaRenderer->SetHDRI(scene.envImgPath);
+}
+
+void Renderer::OnResize(const Scene& scene, uint32_t width, uint32_t height)
+{
+	m_activeScene = &scene;
+
 	if (m_finalImage)
 	{
 		if (m_finalImage->GetWidth() == width && m_finalImage->GetHeight() == height)

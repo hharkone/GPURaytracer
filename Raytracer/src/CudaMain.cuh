@@ -29,9 +29,10 @@ public:
 		m_hostMesh = new GPU_Mesh();
 		//m_hostMesh->LoadOBJFile("meshes/cube_quads.obj", 0u);
 		//m_hostMesh->LoadOBJFile("meshes/torus_simple.obj", 0u);
-		m_hostMesh->LoadOBJFile("meshes/lion.obj", 0u);
+		//m_hostMesh->LoadOBJFile("meshes/lion.obj", 0u);
+		//m_hostMesh->LoadOBJFile("meshes/plank_high.OBJ", 0u);
 		//m_hostMesh->LoadOBJFile("meshes/lion_LP.obj", 0u);
-		//m_hostMesh->LoadOBJFile("meshes/angel.obj", 0u);
+		m_hostMesh->LoadOBJFile("meshes/dragon.obj", 0u);
 		//m_hostMesh->LoadOBJFile("meshes/buddha.obj", 0u);
 		//m_hostMesh->LoadOBJFile("meshes/eagle.obj", 0u);
 		//m_hostMesh->LoadOBJFile("meshes/dragon2.obj", 0u);
@@ -46,7 +47,11 @@ public:
 		//m_skyTexture = (float*)imgLoader.LoadImageFile("Images/bridge1.raw", 8192, 4096);
 		//m_skyTexture = (float*)imgLoader.LoadImageFile("Images/xanderklinge_8k.raw", 8192, 4096);
 		//m_skyTexture = (float*)imgLoader.LoadImageFile("Images/studio_19.raw", 8192, 4096);
-		m_imgLoader.LoadImageFile("Images/industrial_sunset_puresky_8k.exr");
+		if (scene->envImgPathChanged)
+		{
+			m_imgLoader.LoadImageFile(scene->envImgPath);
+		}
+
 		//m_skyTexture = (float*)imgLoader.LoadImageFile("Images/circus_arena_8k.raw", 8192, 4096);
 		//m_skyTexture = (float*)imgLoader.LoadImageFile("Images/trekker_monument_8k.raw", 8192, 4096);
 		//m_skyTexture = (float*)imgLoader.LoadImageFile("Images/tief_etz_8k.raw", 8192, 4096);
@@ -131,6 +136,7 @@ public:
 		cudaFree(m_deviceMesh);
 	}
 
+	void SetHDRI(std::string path);
 	void SetScene(const Scene* scene);
 	void SetCamera(float3 pos, float3 dir, float aperture, float focusDist);
 	void SetInvViewMat(float4 x, float4 y, float4 z, float4 w);

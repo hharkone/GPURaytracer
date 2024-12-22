@@ -1,5 +1,8 @@
 #include <glm/gtc/type_ptr.hpp>
 #include <deque>
+#include <string>
+#include <iostream>
+#include <filesystem>
 
 #include "Walnut/Application.h"
 #include "Walnut/EntryPoint.h"
@@ -28,6 +31,46 @@ public:
 	{
 		m_rendetTimeVec.resize(20);
 		cudaGetDeviceProperties(&prop, 0);
+	}
+
+	virtual void OnAttach() override
+	{
+		//size_t pathCount = 0u;
+		std::string path = "Images";
+		for (const auto& entry : std::filesystem::directory_iterator(path))
+		{
+			if (entry.is_regular_file() && entry.path().extension() == ".exr")
+			{
+				m_exrFilePaths.push_back(entry);
+				
+				//char* s;
+				//s = new char[strlen(entry.path().string().c_str())];
+				//strcpy(s, entry.path().string().c_str());
+
+				//m_exrFileNames[pathCount] = s;
+
+				//pathCount++;
+			}
+		}
+
+		if (m_exrFilePaths.at(0).exists())
+		{
+			m_scene.envImgPath = m_exrFilePaths.at(0).path().string();
+			m_scene.envImgPathChanged = true;
+			m_sceneChanged = true;
+		}
+
+		/*
+		for (size_t i = 0; std::string path : m_exrFilePaths)
+		{
+			char* newArr[pathCount];
+
+			m_exrFileNames[i] = path.c_str();
+		}
+
+		fprintf(stderr, m_exrFileNames[0]);
+		fprintf(stderr, "\n");
+		*/
 	}
 
 	virtual void OnUpdate(float ts) override
@@ -140,9 +183,11 @@ public:
 			m_sceneChanged = true;
 		}
 		ImGui::Text("");
-		if (ImGui::SliderFloat("Background Brightness", &m_scene.backgroundBrightness, 0.0f, 1.0f, "%.3f", flags)) { m_sceneChanged = true; }
-		if (item_current == 1)
+		ImGui::Separator();
+
+		if (item_current == static_cast<int>(EnvironmentType::EnvType_ProceduralSky))
 		{
+			if (ImGui::SliderFloat("Background Brightness", &m_scene.backgroundBrightness, 0.0f, 1.0f, "%.3f", flags)) { m_sceneChanged = true; }
 			if (ImGui::ColorEdit3("Sky Color", &(m_scene.skyColor.x))) { m_sceneChanged = true; }
 			if (ImGui::SliderFloat("Sky Brightness", &m_scene.skyBrightness, 0.0f, 10.0f, "%.3f", flags)) { m_sceneChanged = true; }
 			if (ImGui::SliderFloat("Sun Focus", &m_scene.sunFocus, 1.0f, 100000.0f, "%.3f", flagLog)) { m_sceneChanged = true; }
@@ -152,20 +197,45 @@ public:
 			if (ImGui::ColorEdit3("Sky Color Zenith", &(m_scene.skyColorZenith.x))) { m_sceneChanged = true; }
 			if (ImGui::ColorEdit3("Ground Color", &(m_scene.groundColor.x))) { m_sceneChanged = true; }
 		}
-		else if (item_current == 0)
+		else if (item_current == static_cast<int>(EnvironmentType::EnvType_Solid))
 		{
+			if (ImGui::SliderFloat("Background Brightness", &m_scene.backgroundBrightness, 0.0f, 1.0f, "%.3f", flags)) { m_sceneChanged = true; }
 			if (ImGui::ColorEdit3("Sky Color", &(m_scene.skyColor.x))) { m_sceneChanged = true; }
 			if (ImGui::SliderFloat("Sky Brightness", &m_scene.skyBrightness, 0.0f, 10.0f, "%.3f", flags)) { m_sceneChanged = true; }
 		}
 		else
 		{
+			static int item_current_idx = 0;
+			const char* combo_preview_value = m_exrFilePaths.at(item_current_idx).path().string().c_str();
+
+			if (ImGui::BeginCombo("EXR Image", combo_preview_value, ImGuiComboFlags_PopupAlignLeft))
+			{
+				for (int n = 0; n < m_exrFilePaths.size(); n++)
+				{
+					const bool is_selected = (item_current_idx == n);
+					if (ImGui::Selectable(m_exrFilePaths.at(n).path().string().c_str(), is_selected))
+					{
+						item_current_idx = n;
+						m_scene.envImgPath = m_exrFilePaths.at(n).path().string();
+						m_scene.envImgPathChanged = true;
+						m_sceneChanged = true;
+					}
+
+					// Set the initial focus when opening the combo (scrolling + keyboard navigation focus)
+					if (is_selected)
+						ImGui::SetItemDefaultFocus();
+				}
+				ImGui::EndCombo();
+			}
+			ImGui::Separator();
+
+			if (ImGui::SliderFloat("Background Brightness", &m_scene.backgroundBrightness, 0.0f, 1.0f, "%.3f", flags)) { m_sceneChanged = true; }
 			if (ImGui::ColorEdit3("Sky Color", &(m_scene.skyColor.x))) { m_sceneChanged = true; }
 			if (ImGui::SliderFloat("Sky Brightness", &m_scene.skyBrightness, 0.0f, 10.0f, "%.3f", flags)) { m_sceneChanged = true; }
 			if (ImGui::SliderFloat("Sky Rotation", &m_scene.skyRotation, 0.0f, 360.0f, "%.3f", flags)) { m_sceneChanged = true; }
 		}
 
 		ImGui::Text("");
-		ImGui::Separator();
 		ImGui::Separator();
 
 		ImGui::Text("Tonemapper");
@@ -229,14 +299,8 @@ public:
 		}
 
 		bool cameraControls = (/*ImGui::IsWindowHovered() &&*/ io.MouseDown[1]);
-		if (cameraControls)
-		{
-			m_camera.SetIsContextFocused(true);
-		}
-		else
-		{
-			m_camera.SetIsContextFocused(false);
-		}
+		m_camera.SetIsContextFocused(cameraControls);
+
 
 		ImGui::End();
 		ImGui::PopStyleVar();
@@ -248,8 +312,15 @@ public:
 	{
 		Timer timer;
 
-		m_renderer.OnResize(m_viewportWidth, m_viewportHeight);
+		m_renderer.OnResize(m_scene, m_viewportWidth, m_viewportHeight);
 		m_camera.OnResize(m_viewportWidth, m_viewportHeight);
+
+		if (m_scene.envImgPathChanged)
+		{
+			m_scene.envImgPathChanged = false;
+			m_renderer.LoadHDRI(m_scene);
+		}
+		
 		m_renderer.Render(m_scene, m_camera);
 
 		m_rendetTimeVec.push_front(timer.ElapsedMillis());
@@ -282,6 +353,7 @@ private:
 	Scene m_scene;
 	cudaDeviceProp prop;
 	bool m_sceneChanged = false;
+	std::vector<std::filesystem::directory_entry> m_exrFilePaths;
 };
 
 Walnut::Application* Walnut::CreateApplication(int argc, char** argv)
