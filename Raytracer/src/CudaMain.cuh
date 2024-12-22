@@ -32,10 +32,10 @@ public:
 		//m_hostMesh->LoadOBJFile("meshes/lion.obj", 0u);
 		//m_hostMesh->LoadOBJFile("meshes/plank_high.OBJ", 0u);
 		//m_hostMesh->LoadOBJFile("meshes/lion_LP.obj", 0u);
-		m_hostMesh->LoadOBJFile("meshes/dragon.obj", 0u);
+		//m_hostMesh->LoadOBJFile("meshes/dragon.obj", 0u);
 		//m_hostMesh->LoadOBJFile("meshes/buddha.obj", 0u);
 		//m_hostMesh->LoadOBJFile("meshes/eagle.obj", 0u);
-		//m_hostMesh->LoadOBJFile("meshes/dragon2.obj", 0u);
+		m_hostMesh->LoadOBJFile("meshes/dragon2.obj", 0u);
 		m_hostMesh->BuildBVH();
 
 		m_deviceScene.alloc(sizeof(Scene));
@@ -129,7 +129,6 @@ public:
 		m_floatOutputBuffer_GPU.free();
 		m_floatAlbedoBuffer_GPU.free();
 		m_floatNormalBuffer_GPU.free();
-		m_envTextureBuffer_GPU.free();
 
 		m_deviceScene.free();
 		m_deviceSettings.free();
@@ -178,7 +177,6 @@ private:
 	CUDABuffer m_floatOutputBuffer_GPU;     //Final float output on the device
 	CUDABuffer m_floatAlbedoBuffer_GPU;     //Final float albedo output on the device
 	CUDABuffer m_floatNormalBuffer_GPU;     //Final float normal output on the device
-	CUDABuffer m_envTextureBuffer_GPU;     //Final float normal output on the device
 
 	CUDABuffer m_deviceScene;
 	CUDABuffer m_deviceSettings;

@@ -46,40 +46,74 @@ void ImageLoader::LoadImageFile(const std::string path)
         free(out); // release memory of image data
     }
 }
-/*
-void* ImageLoader::LoadImageFile(const std::string path, uint32_t width, uint32_t height)
+
+bool ImageLoader::SaveImageFile(const float* rgb, int width, int height, const char* outfilename)
 {
-    m_width = width;
-    m_height = height;
+    EXRHeader header;
+    InitEXRHeader(&header);
 
-    delete[] m_imageData;
+    EXRImage image;
+    InitEXRImage(&image);
 
-    m_imageData = new float3[width * height];
+    image.num_channels = 4;
 
-    FILE* fptr;
-    fopen_s(&fptr, path.c_str(), "r");
+    std::vector<float> images[4];
+    images[0].resize(width * height);
+    images[1].resize(width * height);
+    images[2].resize(width * height);
+    images[3].resize(width * height);
 
-    if (fptr == nullptr)
+    // Split RGBRGBRGB... into R, G and B layer
+    for (int i = 0; i < width * height; i++)
     {
-        fprintf(stderr, "LoadImageFile: Invalid file path.");
-        return nullptr;
+        images[0][i] = rgb[4 * i + 0];
+        images[1][i] = rgb[4 * i + 1];
+        images[2][i] = rgb[4 * i + 2];
+        images[3][i] = rgb[4 * i + 3];
     }
 
-    const std::size_t n = std::fread(m_imageData, sizeof(float), width * height * 3, fptr);
+    float* image_ptr[4];
+    image_ptr[0] = &(images[3].at(0)); // A
+    image_ptr[1] = &(images[2].at(0)); // B
+    image_ptr[2] = &(images[1].at(0)); // G
+    image_ptr[3] = &(images[0].at(0)); // R
 
-    cudaMalloc(&m_devPtr, width * height * sizeof(float3));
-    cudaMemcpy(m_devPtr, m_imageData, width * height * sizeof(float3), cudaMemcpyHostToDevice);
+    image.images = (unsigned char**)image_ptr;
+    image.width = width;
+    image.height = height;
 
-    cudaError_t cudaStatus = cudaErrorStartupFailure;
-    cudaStatus = cudaGetLastError();
-    if (cudaStatus != cudaSuccess)
+    header.num_channels = 4;
+    header.channels = (EXRChannelInfo*)malloc(sizeof(EXRChannelInfo) * header.num_channels);
+    // Must be (A)BGR order, since most of EXR viewers expect this channel order.
+    strncpy(header.channels[0].name, "A", 255); header.channels[0].name[strlen("A")] = '\0';
+    strncpy(header.channels[1].name, "B", 255); header.channels[1].name[strlen("B")] = '\0';
+    strncpy(header.channels[2].name, "G", 255); header.channels[2].name[strlen("G")] = '\0';
+    strncpy(header.channels[3].name, "R", 255); header.channels[3].name[strlen("R")] = '\0';
+
+    header.compression_type = TINYEXR_COMPRESSIONTYPE_RLE;
+    header.pixel_types = (int*)malloc(sizeof(int) * header.num_channels);
+    header.requested_pixel_types = (int*)malloc(sizeof(int) * header.num_channels);
+    for (int i = 0; i < header.num_channels; i++)
     {
-        fprintf(stderr, "cudaMemcpy ImageLoader failed: %s\n", cudaGetErrorString(cudaStatus));
+        header.pixel_types[i] = TINYEXR_PIXELTYPE_FLOAT; // pixel type of input image
+        header.requested_pixel_types[i] = TINYEXR_PIXELTYPE_HALF; // pixel type of output image to be stored in .EXR
     }
 
-    return m_devPtr;
+    const char* err = nullptr;
+    int ret = SaveEXRImageToFile(&image, &header, outfilename, &err);
+    if (ret != TINYEXR_SUCCESS)
+    {
+        fprintf(stderr, "Save EXR err: %s\n", err);
+        FreeEXRErrorMessage(err); // free's buffer for an error message
+        return ret;
+    }
+
+    printf("Saved exr file. [ %s ] \n", outfilename);
+
+    free(header.channels);
+    free(header.pixel_types);
+    free(header.requested_pixel_types);
 }
-*/
 
 ImageLoader::~ImageLoader()
 {

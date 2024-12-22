@@ -3,6 +3,7 @@
 
 #include "Renderer.h"
 #include "Walnut/Random.h"
+#include "ImageLoader.h"
 
 namespace Utils
 {
@@ -24,6 +25,14 @@ void Renderer::LoadHDRI(const Scene& scene)
 {
 	m_activeScene = &scene;
 	m_cudaRenderer->SetHDRI(scene.envImgPath);
+}
+
+void Renderer::SaveRenderToDisk(const std::string path)
+{
+	ImageLoader img = ImageLoader();
+	cudaStreamSynchronize(*m_denoiser.GetCudaStream());
+	cudaDeviceSynchronize();
+	img.SaveImageFile(m_denoiser.GetLinearDenoisedBuffer(), m_finalImage.get()->GetWidth(), m_finalImage.get()->GetHeight(), path.c_str());
 }
 
 void Renderer::OnResize(const Scene& scene, uint32_t width, uint32_t height)

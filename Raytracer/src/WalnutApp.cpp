@@ -35,21 +35,12 @@ public:
 
 	virtual void OnAttach() override
 	{
-		//size_t pathCount = 0u;
 		std::string path = "Images";
 		for (const auto& entry : std::filesystem::directory_iterator(path))
 		{
 			if (entry.is_regular_file() && entry.path().extension() == ".exr")
 			{
 				m_exrFilePaths.push_back(entry);
-				
-				//char* s;
-				//s = new char[strlen(entry.path().string().c_str())];
-				//strcpy(s, entry.path().string().c_str());
-
-				//m_exrFileNames[pathCount] = s;
-
-				//pathCount++;
 			}
 		}
 
@@ -59,18 +50,6 @@ public:
 			m_scene.envImgPathChanged = true;
 			m_sceneChanged = true;
 		}
-
-		/*
-		for (size_t i = 0; std::string path : m_exrFilePaths)
-		{
-			char* newArr[pathCount];
-
-			m_exrFileNames[i] = path.c_str();
-		}
-
-		fprintf(stderr, m_exrFileNames[0]);
-		fprintf(stderr, "\n");
-		*/
 	}
 
 	virtual void OnUpdate(float ts) override
@@ -119,7 +98,7 @@ public:
 
 		if (ImGui::Button("Save Render"))
 		{
-			//SaveRender();
+			m_renderer.SaveRenderToDisk("Renderoutput/render0.exr");
 		}
 
 		ImGui::End();

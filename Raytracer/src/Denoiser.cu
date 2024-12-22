@@ -176,6 +176,10 @@ void Denoiser::InitOptix(void* inputBeautyBuffer, void* inputAlbedoBuffer, void*
 	m_finalOutputBuffer = new float[width * height * 4];
 	memset(m_finalOutputBuffer, 0, width * height * sizeof(float4));
 
+	delete[] m_finalLinearOutputBuffer;
+	m_finalLinearOutputBuffer = new float[width * height * 4];
+	memset(m_finalLinearOutputBuffer, 0, width * height * sizeof(float4));
+
 	return;
 }
 
@@ -226,6 +230,7 @@ void Denoiser::Denoise(const TonemapSettings* tonemapper, bool enabled)
 	cudaDeviceSynchronize();
 
 	CU_CHECK(cudaMemcpy(m_finalOutputBuffer, (void*)m_floatTonemappedBuffer_GPU.d_pointer(), m_width * m_height * sizeof(float4), cudaMemcpyDeviceToHost));
+	CU_CHECK(cudaMemcpy(m_finalLinearOutputBuffer, (void*)m_floatDenoisedBuffer_GPU.d_pointer(), m_width * m_height * sizeof(float4), cudaMemcpyDeviceToHost));
 
 	CU_CHECK(cudaStreamSynchronize(m_cudaStream));
 }
