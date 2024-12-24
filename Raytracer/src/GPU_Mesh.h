@@ -10,6 +10,7 @@ public:
 
     void LoadOBJFile(const std::string& path, uint16_t materialIndex);
     void BuildBVH();
+    ~GPU_Mesh();
 
     struct Triangle
     {
@@ -17,7 +18,7 @@ public:
         float3 n0, n1, n2;
         float3 c0, c1, c2;
         float2 uv0, uv1, uv2;
-        float3 centroid;
+        //float3 centroid;
 
     private:
         //float2 padding0;
@@ -38,12 +39,26 @@ public:
         uint leftFirst, triCount;
     };
 
+    struct aabb
+    {
+        float3 bmin = make_float3(1e30f, 1e30f, 1e30f);
+        float3 bmax = make_float3(-1e30f, -1e30f, -1e30f);
+
+        void grow(float3 p) { bmin = cfminf(bmin, p), bmax = cfmaxf(bmax, p); }
+        float area()
+        {
+            float3 e = bmax - bmin; // box extent
+            return e.x * e.y + e.y * e.z + e.z * e.x;
+        }
+    };
+
     uint32_t nodesUsed = 1u;
     uint32_t numTris = 0u;
     BVHNode* bvhNode = nullptr;
     //std::vector<BVHNode> bvhNodeVector;
     Triangle* triangleBuffer = nullptr;
     MeshInfo* meshInfoBuffer = nullptr;
+    float3* triangleCentroidScratchBuffer = nullptr;
     uint32_t numMeshes = 0u;
     uint32_t maxNodes;
     uint32_t* triIdx = nullptr;
@@ -52,6 +67,7 @@ public:
 
 private:
     uint32_t rootNodeIdx = 0;
+    float EvaluateSAH(BVHNode& node, int axis, float pos);
     void UpdateNodeBounds(uint32_t nodeIdx);
     void Subdivide(uint32_t nodeIdx);
     void CalculateBbox(GPU_Mesh::MeshInfo& meshInfo);

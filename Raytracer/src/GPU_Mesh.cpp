@@ -4,6 +4,8 @@
 
 #include "GPU_Mesh.h"
 
+//#define USE_UNOPTIMIZED_BVH_SPLITTING
+
 void GPU_Mesh::CalculateBbox(GPU_Mesh::MeshInfo& meshInfo)
 {
     float min = FLT_MIN;
@@ -284,16 +286,56 @@ void GPU_Mesh::UpdateNodeBounds(uint32_t nodeIdx)
     }
 }
 
+float GPU_Mesh::EvaluateSAH(BVHNode& node, int axis, float pos)
+{
+    // determine triangle counts and bounds for this split candidate
+    aabb leftBox, rightBox;
+    int leftCount = 0, rightCount = 0;
+    for (uint i = 0; i < node.triCount; i++)
+    {
+        Triangle& triangle = triangleBuffer[triIdx[node.leftFirst + i]];
+        //if (triangle.centroid[axis] < pos)
+        if ((&triangleCentroidScratchBuffer[triIdx[node.leftFirst + i]].x)[axis] < pos)
+        {
+            leftCount++;
+            leftBox.grow(triangle.pos0);
+            leftBox.grow(triangle.pos1);
+            leftBox.grow(triangle.pos2);
+        }
+        else
+        {
+            rightCount++;
+            rightBox.grow(triangle.pos0);
+            rightBox.grow(triangle.pos1);
+            rightBox.grow(triangle.pos2);
+        }
+    }
+    float cost = leftCount * leftBox.area() + rightCount * rightBox.area();
+    return cost > 0 ? cost : 1e30f;
+}
+
 void GPU_Mesh::Subdivide(uint32_t nodeIdx)
 {
     // terminate recursion
     BVHNode& node = bvhNode[nodeIdx];
-    //BVHNode& node = bvhNodeVector.at(nodeIdx);
 
-    if (node.triCount <= 2)
+    if (nodeIdx == 190u)
+    {
+        float debugx = 1.0f;
+    }
+    /*
+    if (node.triCount >= 0u)
+    {
+        maxNodeTris = min(maxNodeTris, node.triCount);
+    }
+    */
+
+    if (node.triCount <= 8)
     {
         return;
     }
+
+#ifdef USE_UNOPTIMIZED_BVH_SPLITTING
 
     // determine split axis and position
     float3 extent = node.aabbMax - node.aabbMin;
@@ -302,12 +344,40 @@ void GPU_Mesh::Subdivide(uint32_t nodeIdx)
     if (extent.z >= (&extent.x)[axis]) axis = 2;
     float splitPos = (&node.aabbMin.x)[axis] + (&extent.x)[axis] * 0.5f;
 
+#else
+    int bestAxis = -1;
+    float bestPos = 0, bestCost = 1e30f;
+    uint splitCount = 8u;
+    for (int axis = 0; axis < 3; axis++) for (uint i = 0; i < splitCount; i++)
+    {
+        //Triangle& triangle = triangleBuffer[triIdx[node.leftFirst + i]];
+        //float candidatePos = (&triangleCentroidScratchBuffer[triIdx[i]].x)[axis];
+        float xx = (1.0f / float(splitCount + 1u)) * float(i + 1u);
+        float3 candidatePos = lerp(node.aabbMin, node.aabbMax, (1.0f / float(splitCount+1u)) * float(i+1u) );
+
+        float cost = EvaluateSAH(node, axis, (&candidatePos.x)[axis]);
+        if (cost < bestCost)
+            bestPos = (&candidatePos.x)[axis], bestAxis = axis, bestCost = cost;
+    }
+    int axis = bestAxis;
+    float splitPos = bestPos;
+
+    float3 e = node.aabbMax - node.aabbMin; // extent of parent
+    float parentArea = e.x * e.y + e.y * e.z + e.z * e.x;
+    float parentCost = node.triCount * parentArea;
+
+    if (bestCost >= parentCost) return;
+#endif
+
     // in-place partition
     uint32_t i = node.leftFirst;
     uint32_t j = i + node.triCount - 1;
     while (i <= j)
     {
-        if ((&triangleBuffer[triIdx[i]].centroid.x)[axis] < splitPos)
+        //if (j <= 0u)
+        //    break;
+
+        if ((&triangleCentroidScratchBuffer[triIdx[i]].x)[axis] < splitPos)
             i++;
         else
             std::swap(triIdx[i], triIdx[j--]);
@@ -345,35 +415,45 @@ std::string CacheFilePath(const std::string& filename)
 
 bool GPU_Mesh::TryLoadCache(const std::string& filename)
 {
+    //return false;
+
     std::string cacheFile = CacheFilePath(filename);
 
     FILE* fp = fopen(cacheFile.c_str(), "rb");
     if (!fp)
     {
-        fprintf(stderr, "Attempt to read BVH cache failed.\n");
+        fprintf(stderr, "No BVH cache exists.\n");
         return false;
     }
 
     // BVH has been built already and stored in a file, read the file
     fprintf(stderr, "Cache exists, reading the pre-calculated BVH data...\n");
 
-    if (1 != fread(&nodesUsed, sizeof(uint32_t), 1, fp)) return false;
-    if (1 != fread(&numTris, sizeof(uint32_t), 1, fp)) return false;
+    if (1 != fread(&nodesUsed, sizeof(uint32_t), 1, fp)) goto CACHE_FAIL;
+    if (1 != fread(&numTris, sizeof(uint32_t), 1, fp)) goto CACHE_FAIL;
 
     bvhNode = new BVHNode[nodesUsed];
     triIdx = new uint32_t[numTris];
     triangleBuffer = new Triangle[numTris];
     meshInfoBuffer = new MeshInfo[1u];
+    triangleCentroidScratchBuffer = new float3[numTris];
 
-    if (nodesUsed != fread(bvhNode, sizeof(BVHNode), nodesUsed, fp)) return false;
-    if (numTris != fread(triIdx, sizeof(uint32_t), numTris, fp)) return false;
-    if (numTris != fread(triangleBuffer, sizeof(Triangle), numTris, fp)) return false;
-    if (1 != fread(meshInfoBuffer, sizeof(MeshInfo), 1, fp)) return false;
+    if (nodesUsed != fread(bvhNode, sizeof(BVHNode), nodesUsed, fp)) goto CACHE_FAIL;
+    if (numTris != fread(triIdx, sizeof(uint32_t), numTris, fp)) goto CACHE_FAIL;
+    if (numTris != fread(triangleBuffer, sizeof(Triangle), numTris, fp)) goto CACHE_FAIL;
+    if (1 != fread(meshInfoBuffer, sizeof(MeshInfo), 1, fp)) goto CACHE_FAIL;
+    if (numTris != fread(triangleCentroidScratchBuffer, sizeof(float3), numTris, fp)) goto CACHE_FAIL;
 
     fclose(fp);
     fprintf(stderr, "BVH cache read.\n");
 
     return true;
+
+CACHE_FAIL:
+    fclose(fp);
+    fprintf(stderr, "ERROR: BVH cache is invalid.\n");
+
+    return false;
 }
 
 bool GPU_Mesh::TrySaveCache(const std::string& filename)
@@ -384,17 +464,19 @@ bool GPU_Mesh::TrySaveCache(const std::string& filename)
     if (!fp)
     {
         // Now store the results, if possible...
-        fprintf(stderr, "No BVH cache exists, writing BVH data...\n");
+        fprintf(stderr, "Writing BVH data...\n");
 
         fp = fopen(cacheFile.c_str(), "wb");
         if (!fp) return false;
 
         if (1 != fwrite(&nodesUsed, sizeof(uint32_t), 1, fp)) goto CACHE_FAIL;
-        if (1 != fwrite(&numTris, sizeof(uint32_t), 1, fp))  goto CACHE_FAIL;
-        if (nodesUsed != fwrite(bvhNode, sizeof(BVHNode), nodesUsed, fp))  goto CACHE_FAIL;
-        if (numTris != fwrite(triIdx, sizeof(uint32_t), numTris, fp))  goto CACHE_FAIL;
-        if (numTris != fwrite(triangleBuffer, sizeof(Triangle), numTris, fp))  goto CACHE_FAIL;
-        if (1 != fwrite(meshInfoBuffer, sizeof(MeshInfo), 1, fp))  goto CACHE_FAIL;
+        if (1 != fwrite(&numTris, sizeof(uint32_t), 1, fp)) goto CACHE_FAIL;
+
+        if (nodesUsed != fwrite(bvhNode, sizeof(BVHNode), nodesUsed, fp)) goto CACHE_FAIL;
+        if (numTris != fwrite(triIdx, sizeof(uint32_t), numTris, fp)) goto CACHE_FAIL;
+        if (numTris != fwrite(triangleBuffer, sizeof(Triangle), numTris, fp)) goto CACHE_FAIL;
+        if (1 != fwrite(meshInfoBuffer, sizeof(MeshInfo), 1, fp)) goto CACHE_FAIL;
+        if (numTris != fwrite(triangleCentroidScratchBuffer, sizeof(float3), numTris, fp)) goto CACHE_FAIL;
 
         fclose(fp);
         fprintf(stderr, "BVH cache written.\n");
@@ -404,7 +486,7 @@ bool GPU_Mesh::TrySaveCache(const std::string& filename)
 
 CACHE_FAIL:
     fclose(fp);
-    fprintf(stderr, "BVH cache file loading failed.\n");
+    fprintf(stderr, "ERROR: BVH cache file writing failed.\n");
     return false;
 }
 
@@ -422,11 +504,13 @@ void GPU_Mesh::BuildBVH()
 
     bvhNode = new BVHNode[numTris * 2 - 1];
     triIdx = new uint32_t[numTris];
+    triangleCentroidScratchBuffer = new float3[numTris];
+
     //bvhNodeVector.resize(numTris * 2 - 1);
 
     for (uint32_t i = 0; i < numTris; i++)
     {
-        triangleBuffer[i].centroid = (triangleBuffer[i].pos0 + triangleBuffer[i].pos1 + triangleBuffer[i].pos2) * 0.3333f;
+        triangleCentroidScratchBuffer[i] = (triangleBuffer[i].pos0 + triangleBuffer[i].pos1 + triangleBuffer[i].pos2) * 0.3333333f;
         triIdx[i] = i;
     }
 
@@ -448,9 +532,31 @@ void GPU_Mesh::BuildBVH()
     bvhNode = newArr;
 
     fprintf(stderr, "BVH built using: %i nodes\n", nodesUsed);
+    /*
+    std::fstream fOut;
+    fOut.open("debug_output.txt", std::ios::out | std::ios::trunc);
 
+    for (uint32_t i = 0; i < nodesUsed; i++)
+    {
+        BVHNode n = bvhNode[i];
+        fOut << "Node: " << i << "\n";
+        fOut << "bbox: " << "[" << n.aabbMin.x << ", " << n.aabbMin.y << ", " << n.aabbMin.z << "],  " << "[" << n.aabbMax.x << ", " << n.aabbMax.y << ", " << n.aabbMax.z << "]" << "\n";
+        fOut << "leftFirst: " << n.leftFirst << "\n";
+        fOut << "triCount: " << n.triCount << "\n\n";
+
+    }
+    */
     if (TrySaveCache(filepath))
     {
         return;
     }
+}
+
+GPU_Mesh::~GPU_Mesh()
+{
+    delete[] bvhNode;
+    delete[] triangleBuffer;
+    delete[] meshInfoBuffer;
+    delete[] triangleCentroidScratchBuffer;
+    delete[] triIdx;
 }

@@ -87,7 +87,7 @@ public:
 		ImGui::Checkbox("Accumulate", &m_renderer.GetSettings().accumulate);
 		ImGui::Checkbox("Use OPTIX Denoiser", &m_renderer.GetSettings().denoise);
 		if (ImGui::SliderInt("Max Bounces", &m_renderer.GetSettings().bounces, 1, 30)) { m_sceneChanged = true; }
-		if (ImGui::SliderInt("BVH Debug", &m_renderer.GetSettings().debug, 0, 1000)) { m_sceneChanged = true; }
+		if (ImGui::SliderInt("BVH Debug", &m_renderer.GetSettings().debug, 0, 64)) { m_sceneChanged = true; }
 		if (ImGui::Checkbox("BVH Debug Enable", &m_renderer.GetSettings().bvhDebug)) { m_sceneChanged = true; }
 
 		if (ImGui::Button("Reset") || m_sceneChanged)

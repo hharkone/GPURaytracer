@@ -41,31 +41,10 @@ public:
 		m_deviceScene.alloc(sizeof(Scene));
 		m_deviceSettings.alloc(sizeof(RenderSettings));
 
-		//m_skyTexture = (float*)imgLoader.LoadImageFile("Images/river_rocks_8k.raw", 8192, 4096);
-		//m_skyTexture = (float*)imgLoader.LoadImageFile("Images/paul_lobe_haus_8k.raw", 8192, 4096);
-		//m_skyTexture = (float*)imgLoader.LoadImageFile("Images/clarens_midday_8k.raw", 8192, 4096);
-		//m_skyTexture = (float*)imgLoader.LoadImageFile("Images/bridge1.raw", 8192, 4096);
-		//m_skyTexture = (float*)imgLoader.LoadImageFile("Images/xanderklinge_8k.raw", 8192, 4096);
-		//m_skyTexture = (float*)imgLoader.LoadImageFile("Images/studio_19.raw", 8192, 4096);
 		if (scene->envImgPathChanged)
 		{
 			m_imgLoader.LoadImageFile(scene->envImgPath);
 		}
-
-		//m_skyTexture = (float*)imgLoader.LoadImageFile("Images/circus_arena_8k.raw", 8192, 4096);
-		//m_skyTexture = (float*)imgLoader.LoadImageFile("Images/trekker_monument_8k.raw", 8192, 4096);
-		//m_skyTexture = (float*)imgLoader.LoadImageFile("Images/tief_etz_8k.raw", 8192, 4096);
-		//m_skyTexture = (float*)imgLoader.LoadImageFile("Images/industrial_workshop_foundry_8k.raw", 8192, 4096);
-		//m_skyTexture = (float*)imgLoader.LoadImageFile("Images/Panels2k.raw", 8192, 4096);
-
-		//cudaDeviceSynchronize();
-
-		//cudaMalloc(&m_imgLoader.gpuImage.imageData_GPU, m_imgLoader.gpuImage.width * m_imgLoader.gpuImage.height * sizeof(float) * 4u);
-		//cudaMemcpy(m_imgLoader.gpuImage.imageData_GPU, imgData, m_imgLoader.gpuImage.width * m_imgLoader.gpuImage.height * sizeof(float) * 4u, cudaMemcpyHostToDevice);
-
-		//cudaDeviceSynchronize();
-
-		//free(imgData);
 
 		cudaStatus = cudaGetLastError();
 		if (cudaStatus != cudaSuccess)

@@ -46,8 +46,9 @@ struct Ray
 {
 	float3 origin; // ray origin
 	float3 direction;  // ray direction
+	float3 invDirection;
 
-	__device__ Ray(float3 o_, float3 d_) : origin(o_), direction(d_) {}
+	__device__ Ray(float3 o_, float3 d_, float3 invD_ ) : origin(o_), direction(d_), invDirection(invD_) {}
 };
 
 struct HitInfo
@@ -142,8 +143,8 @@ __device__ float2 randomInUnitHex(uint32_t& state)
 __device__ float randomValueNormalDistribution(uint32_t& state)
 {
 	// Thanks to https://stackoverflow.com/a/6178290
-	float theta = 2 * 3.1415926 * randomValue(state);
-	float rho = fsqrtf(-2 * log(randomValue(state)));
+	float theta = 2.0f * 3.1415926f * randomValue(state);
+	float rho = fsqrtf(-2.0f * log(randomValue(state)));
 
 	return rho * cos(theta);
 }
@@ -326,7 +327,7 @@ __device__ HitInfo rayTriangleIntersect(const Ray& ray, const GPU_Mesh::Triangle
 	return hit;
 }
 
-void __device__ IntersectTri(Ray& ray, HitInfo& hit, GPU_Mesh::Triangle* tri)
+void __device__ IntersectTri(const Ray& ray, HitInfo& hit, const GPU_Mesh::Triangle* tri)
 {
 	float3 edge1 = tri->pos1 - tri->pos0, edge2 = tri->pos2 - tri->pos0;
 	float3 h = cross(ray.direction, edge2);
@@ -409,16 +410,17 @@ __device__ bool rayBoxIntersection(const Ray& ray, HitInfo& hit, const float3& b
 
 */
 
+
 __device__ bool rayBoxIntersection(const Ray& ray, HitInfo& hit, const Box& box)
 {
 	float3 bmin = (box.pos - (box.size * 0.5f));
 	float3 bmax = (box.pos + (box.size * 0.5f));
 
-	float tx1 = (bmin.x - ray.origin.x) / ray.direction.x, tx2 = (bmax.x - ray.origin.x) / ray.direction.x;
+	float tx1 = (bmin.x - ray.origin.x) * ray.invDirection.x, tx2 = (bmax.x - ray.origin.x) * ray.invDirection.x;
 	float tmin = fminf(tx1, tx2), tmax = fmaxf(tx1, tx2);
-	float ty1 = (bmin.y - ray.origin.y) / ray.direction.y, ty2 = (bmax.y - ray.origin.y) / ray.direction.y;
+	float ty1 = (bmin.y - ray.origin.y) * ray.invDirection.y, ty2 = (bmax.y - ray.origin.y) * ray.invDirection.y;
 	tmin = fmaxf(tmin, fminf(ty1, ty2)), tmax = fminf(tmax, fmaxf(ty1, ty2));
-	float tz1 = (bmin.z - ray.origin.z) / ray.direction.z, tz2 = (bmax.z - ray.origin.z) / ray.direction.z;
+	float tz1 = (bmin.z - ray.origin.z) * ray.invDirection.z, tz2 = (bmax.z - ray.origin.z) * ray.invDirection.z;
 	tmin = fmaxf(tmin, fminf(tz1, tz2)), tmax = fminf(tmax, fmaxf(tz1, tz2));
 
 	bool didHit (tmax >= tmin && tmin < hit.dst && tmax > 0.0f);
@@ -466,32 +468,44 @@ __device__ float IntersectAABB(const Ray& ray, const HitInfo& hit, const float3 
 	if( tmax >= tmin && tmin < hit.dst && tmax > 0) return tmin; else return FLT_MAX;
 }
 
-__device__ void IntersectBVH(Ray& ray, HitInfo& hit, const GPU_Mesh* vbo, const RenderSettings* rendererSettings)
+__device__ float IntersectAABB_D(const Ray& ray, const HitInfo& hit, const float3 bmin, const float3 bmax)
+{
+	float tx1 = (bmin.x - ray.origin.x) * ray.invDirection.x, tx2 = (bmax.x - ray.origin.x) * ray.invDirection.x;
+	float tmin = min(tx1, tx2), tmax = max(tx1, tx2);
+	float ty1 = (bmin.y - ray.origin.y) * ray.invDirection.y, ty2 = (bmax.y - ray.origin.y) * ray.invDirection.y;
+	tmin = max(tmin, min(ty1, ty2)), tmax = min(tmax, max(ty1, ty2));
+	float tz1 = (bmin.z - ray.origin.z) * ray.invDirection.z, tz2 = (bmax.z - ray.origin.z) * ray.invDirection.z;
+	tmin = max(tmin, min(tz1, tz2)), tmax = min(tmax, max(tz1, tz2));
+	if (tmax >= tmin && tmin < hit.dst && tmax > 0) return tmin; else return FLT_MAX;
+}
+
+__device__ void IntersectBVH(const Ray& ray, HitInfo& hit, const GPU_Mesh* vbo, const RenderSettings* rendererSettings)
 {
 	uint32_t hitDepth = 0u;
 	uint32_t stackPtr = 0u;
 
 	GPU_Mesh::BVHNode* node = &vbo->bvhNode[0];
-	GPU_Mesh::BVHNode* stack[256];
+	GPU_Mesh::BVHNode* stack[32];
 	stack[stackPtr++] = 0u;
 
 	HitInfo closestHit;
 
 	while (stackPtr > 0u)
+	//while (1)
 	{
-		hitDepth++;
 		if (node->triCount > 0) // isLeaf()
 		{
 			for (uint32_t i = 0; i < node->triCount; i++)
 			{
-				uint32_t instPrim = vbo->triIdx[node->leftFirst + i];
-				GPU_Mesh::Triangle* triangle = &vbo->triangleBuffer[instPrim];
+				uint32_t triIndex = vbo->triIdx[node->leftFirst + i];
+				GPU_Mesh::Triangle* triangle = &vbo->triangleBuffer[triIndex];
 
 				hit = rayTriangleIntersect(ray, triangle);
 
 				if (hit.didHit && hit.dst < closestHit.dst)
 				{
 					closestHit = hit;
+					closestHit.color = { float(hitDepth) * 10.0f };
 				}
 			}
 
@@ -511,11 +525,11 @@ __device__ void IntersectBVH(Ray& ray, HitInfo& hit, const GPU_Mesh* vbo, const 
 		GPU_Mesh::BVHNode* child1 = &vbo->bvhNode[node->leftFirst];
 		GPU_Mesh::BVHNode* child2 = &vbo->bvhNode[node->leftFirst + 1];
 
-		float dist1 = IntersectAABB(ray, closestHit, child1->aabbMin, child1->aabbMax);
-		float dist2 = IntersectAABB(ray, closestHit, child2->aabbMin, child2->aabbMax);
-		//hit.dst = fminff(dist1, dist2);
+		float dist1 = IntersectAABB_D(ray, closestHit, child1->aabbMin, child1->aabbMax);
+		float dist2 = IntersectAABB_D(ray, closestHit, child2->aabbMin, child2->aabbMax);
+		hit.bvhDepth = fminf(dist1, dist2);
 
-		if (dist1 > dist2)
+		if (dist1 >= dist2)
 		{
 			float d = dist1; dist1 = dist2; dist2 = d;
 			GPU_Mesh::BVHNode* c = child1; child1 = child2; child2 = c;
@@ -539,8 +553,11 @@ __device__ void IntersectBVH(Ray& ray, HitInfo& hit, const GPU_Mesh* vbo, const 
 				stack[stackPtr++] = child2;
 			}
 		}
-	}
 
+		hitDepth++;
+
+	}// while()
+	
 	hit = closestHit;
 	hit.bvhDepth = hitDepth;
 }
@@ -820,6 +837,7 @@ __device__ float3 radiance(Ray& r, uint32_t s1, uint32_t& s2, const Scene* scene
 
 		r.origin = hit.hitPoint + flippedNormal * 0.000001f; // offset ray origin slightly to prevent self intersection
 		r.direction = normalize(lerp(diffuseDir, specularDir, isSpecularBounce)); // maybe should be inside tranmission if statement
+		r.invDirection = make_float3(1.0f, 1.0f, 1.0f) / r.direction;
 
 		if (isTransmissionBounce)
 		{
@@ -833,6 +851,7 @@ __device__ float3 radiance(Ray& r, uint32_t s1, uint32_t& s2, const Scene* scene
 
 				r.origin = hit.hitPoint + flippedNormal * -0.000001f; // offset ray origin slightly to prevent self intersection
 				r.direction = normalize(transmissionDir); // maybe should be inside tranmission if statement
+				r.invDirection = make_float3(1.0f, 1.0f, 1.0f) / r.direction;
 			}
 			//Exiting a surface
 			else
@@ -844,6 +863,7 @@ __device__ float3 radiance(Ray& r, uint32_t s1, uint32_t& s2, const Scene* scene
 
 				r.origin = hit.hitPoint + flippedNormal * -0.000001f; // offset ray origin slightly to prevent self intersection
 				r.direction = normalize(transmissionDir); // maybe should be inside tranmission if statement
+				r.invDirection = make_float3(1.0f, 1.0f, 1.0f) / r.direction;
 			}
 		}
 
@@ -913,12 +933,12 @@ __global__ void render_kernel(float4* buf, float3* albedoBuf, float3* normalBuf,
 	float2 pixelSize = make_float2(1.00f / (float)width, 1.00f / (float)height);
 	float2 aspect = make_float2(1.0f, (float)width / (float)height);
 
+	// Create primary ray, add incoming radiance to pixelcolor
+	Ray ray = Ray(camera.pos, { 0.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f });
+
 	// Samples per pixel
 	for (size_t s = 0; s < 1u; s++)
 	{
-		// Create primary ray, add incoming radiance to pixelcolor
-		Ray ray = Ray(camera.pos, {0.0f, 0.0f, 0.0f});
-
 		//DOF
 		float2 defocusJitter = randomPointInCircle(s1, 0.8f) * camera.aperture; //Edge biased
 		ray.origin = camera.pos +camRight * defocusJitter.x * aspect.x + camUp * defocusJitter.y * aspect.y;
@@ -928,7 +948,8 @@ __global__ void render_kernel(float4* buf, float3* albedoBuf, float3* normalBuf,
 		float3 jitteredViewPoint = viewPoint + camRight * jitter.x * pixelSize.x + camUp * jitter.y * pixelSize.y;
 
 		ray.direction = normalize(jitteredViewPoint - ray.origin);
-		
+		ray.invDirection = make_float3(1.0f, 1.0f, 1.0f) / ray.direction;
+
 		finalBeauty += radiance(ray, s1, s2, scene, rendererSettings, vbo, finalAlbedo, finalNormal, i, &camera, &skyTex);
 	}
 
