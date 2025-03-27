@@ -32,7 +32,7 @@ void Renderer::SaveRenderToDisk(const std::string path)
 	ImageLoader img = ImageLoader();
 	cudaStreamSynchronize(*m_denoiser.GetCudaStream());
 	cudaDeviceSynchronize();
-	img.SaveImageFile(m_denoiser.GetLinearDenoisedBuffer(), m_finalImage.get()->GetWidth(), m_finalImage.get()->GetHeight(), path.c_str());
+	img.SaveImage_EXR(m_denoiser.GetLinearDenoisedBuffer(), m_finalImage.get()->GetWidth(), m_finalImage.get()->GetHeight(), path.c_str());
 }
 
 void Renderer::OnResize(const Scene& scene, uint32_t width, uint32_t height)

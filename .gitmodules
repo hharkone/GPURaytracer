@@ -7,3 +7,6 @@
 [submodule "submodules/zlib"]
 	path = submodules/zlib
 	url = https://github.com/madler/zlib.git
+[submodule "submodules/lodepng"]
+	path = submodules/lodepng
+	url = https://github.com/lvandeve/lodepng.git

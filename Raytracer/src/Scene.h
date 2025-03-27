@@ -89,20 +89,20 @@ struct Scene
     Sphere spheresSimple[2] =
     {
         //{ float radius, { float3 position }, { Material }}
-          Sphere{ 1.0f,  { 1.58f, 1.9f, -1.77f }, 7u},
+          Sphere{ 1.0f,  { 10.0f, 1.9f, -1.77f }, 7u},
           //Sphere{ 0.25f, {  0.0f,  0.0f,  0.0f  }, 7u},
           //Sphere{ 19.0f, {  0.0f, -19.0f, 0.0f  }, 1u},
-          Sphere{ 1.3f,  { -5.9f, 2.8f,  -0.56f }, 6u}
+          Sphere{ 1.3f,  { -10.0f, 2.8f,  1.56f }, 6u}
     };
 
-    Box boxSimple[1] =
+    Box boxSimple[2] =
     {
           //Box{ { 2.0f,  2.0f,   2.0f },  {  0.0f,  1.0f,  0.0f  }, 2u},
           Box{ { 10.0f, 10.0f, 10.0f },  {  0.0f, -5.0f, 0.0f   }, 1u},
-          //Box{ { 1.0f,  1.0f,   1.0f },  { -3.9f,  1.8f, -0.56f }, 6u}
+          Box{ { 1.0f,  1.0f,   1.0f },  { -3.9f,  1.8f, -0.56f }, 2u}
     };
 
     size_t materialCount = 8u;
     size_t sphereCount = 2u;
-    size_t boxCount = 1u;
+    size_t boxCount = 2u;
 };

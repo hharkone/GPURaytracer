@@ -480,6 +480,11 @@ inline __host__ __device__ float fracf(float x)
     return x - floorf(x);
 }
 
+inline __host__ __device__ float2 fracf(float2 v)
+{
+    return make_float2(fracf(v.x), fracf(v.y));
+}
+
 inline __host__ __device__ float3 fracf(float3 v)
 {
     return make_float3(fracf(v.x), fracf(v.y), fracf(v.z));

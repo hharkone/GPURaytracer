@@ -59,6 +59,8 @@ struct HitInfo
 	float3 hitPoint {0.0f, 0.0f, 0.0f};
 	float3 normal{ 0.0f, 0.0f, 0.0f };
 	float3 color{ 0.0f, 0.0f, 0.0f };
+	float3 tangent{ 0.0f, 0.0f, 0.0f };
+	float2 uv{ 0.0f, 0.0f };
 	size_t materialIndex = 0u;
 	uint32_t bvhDepth = 0u;
 	//uint16_t nodeID = 0u;
@@ -200,6 +202,41 @@ __device__ float2 toSpherical(float3 dir, const float rot)
 	return make_float2(modf(u, &uselessshit), 1.0f-v);
 }
 
+__device__ float3 texture2D(const GPUImage* tex, const float2 uv)
+{
+	size_t texWidth = tex->width;
+	size_t texHeight = tex->height;
+
+	float2 fracuv = fracf(uv * make_float2(1.0f, -1.0f));
+
+	size_t row = (size_t)(fracuv.y * (float)texHeight) * 4u;
+	size_t col = (size_t)(fracuv.x * (float)texWidth)  * 4u;
+
+	size_t pixelIndex = (row * texWidth) + col;
+
+	/*
+	unsigned char* ptr = (unsigned char*)tex->imageData_GPU;
+	float x = float(*(ptr + pixelIndex + 0u));
+	float y = float(*(ptr + pixelIndex + 1u));
+	float z = float(*(ptr + pixelIndex + 2u));
+
+	float3 c = make_float3(x / 255.0f, y / 255.0f, z / 255.0f);
+	*/
+
+	//float* ptr = (float*)tex->imageData_GPU;
+	//float x = *(ptr + pixelIndex + 0u);
+	//float y = *(ptr + pixelIndex + 1u);
+	//float z = *(ptr + pixelIndex + 2u);
+
+	unsigned char x = ((unsigned char*)tex->imageData_GPU)[pixelIndex + 0u];
+	unsigned char y = ((unsigned char*)tex->imageData_GPU)[pixelIndex + 1u];
+	unsigned char z = ((unsigned char*)tex->imageData_GPU)[pixelIndex + 2u];
+
+	float3 c = make_float3(float(x) / 255.0f, float(y) / 255.0f, float(z) / 255.0f);
+
+	return c;
+}
+
 __device__ float3 getEnvironmentLight(const Ray& ray, const Scene* scene, const GPUImage* skyTex)
 {
 	switch(scene->envType)
@@ -302,6 +339,18 @@ __device__ HitInfo rayTriangleIntersect(const Ray& ray, const GPU_Mesh::Triangle
 	float v = -dot(edgeAB, dao) * invDet;
 	float w = 1.0f - u - v;
 
+	float deltaU1 = tri->uv1.x - tri->uv0.x;
+	float deltaV1 = tri->uv1.y - tri->uv0.y;
+	float deltaU2 = tri->uv2.x - tri->uv0.x;
+	float deltaV2 = tri->uv2.y - tri->uv0.y;
+
+	float f = 1.0f / (deltaU1 * deltaV2 - deltaU2 * deltaV1);
+
+	float3 tangent;// = { edgeAB.x / u1, edgeAB.y / u1, edgeAB.z / u1 };
+	tangent.x = f * (deltaV2 * edgeAB.x - deltaV1 * edgeAC.x);
+	tangent.y = f * (deltaV2 * edgeAB.y - deltaV1 * edgeAC.y);
+	tangent.z = f * (deltaV2 * edgeAB.z - deltaV1 * edgeAC.z);
+
 	float3 normal = normalize(tri->n0 * w + tri->n1 * u + tri->n2 * v);
 
 	if (dot(normal, normal) >= 1.001f)
@@ -309,8 +358,8 @@ __device__ HitInfo rayTriangleIntersect(const Ray& ray, const GPU_Mesh::Triangle
 		normal = normalize(tri->n0 + tri->n1 + tri->n2);
 	}
 
-	float3 color = tri->c0 * w + tri->c1 * u + tri->c2 * v;
-	//color = make_float3(1.0f, 1.0f, 1.0f);
+	float3 color = tri->c0  * w + tri->c1  * u + tri->c2  * v;
+	float2 uv    = tri->uv0 * w + tri->uv1 * u + tri->uv2 * v;
 
 	// Initialize hit info
 	HitInfo hit;
@@ -318,7 +367,9 @@ __device__ HitInfo rayTriangleIntersect(const Ray& ray, const GPU_Mesh::Triangle
 	hit.didHit = dst >= 0.0f && u >= 0.0f && v >= 0.0f && w >= 0.0f;
 	hit.hitPoint = (ray.origin) + ray.direction * dst;
 	hit.normal = normal;
+	hit.tangent = normalize(tangent);
 	hit.color = color;
+	hit.uv = uv;
 	//hit.normal = normalize(normalVector);
 	hit.dst = dst;
 	hit.inside = (dot(normalVector, ray.direction) > 0.0f ? true : false);
@@ -675,7 +726,7 @@ __device__ float3 hsv2rgb(float3 c)
 	return c.z * lerp(make_float3(K.x), clamp(p - make_float3(K.x), 0.0f, 1.0f), c.y);
 }
 
-__device__ float3 radiance(Ray& r, uint32_t s1, uint32_t& s2, const Scene* scene, const RenderSettings* rendererSettings, const GPU_Mesh* vbo, float3& albedoOut, float3& normalOut, uint32_t i, const Camera_GPU* camera, const GPUImage* skyTex) // Returns ray color
+__device__ float3 radiance(Ray& r, uint32_t s1, uint32_t& s2, const Scene* scene, const RenderSettings* rendererSettings, const GPU_Mesh* vbo, float3& albedoOut, float3& normalOut, uint32_t i, const Camera_GPU* camera, const GPUImage* skyTex, const GPUImage* debugTex0, const GPUImage* debugTex1, const GPUImage* debugTex2) // Returns ray color
 {
 	float3 accucolor = make_float3(0.0f, 0.0f, 0.0f); // Accumulates ray colour with each iteration through bounce loop
 	float3 accuAlbedo = make_float3(0.0f, 0.0f, 0.0f); // Accumulates ray colour with each iteration through bounce loop
@@ -694,11 +745,12 @@ __device__ float3 radiance(Ray& r, uint32_t s1, uint32_t& s2, const Scene* scene
 
 	float rt = randomValue(s1);
 
-	//make_float3(2.428571428f, 2.318181818f, 2.318181818f)
-	//float3 dispersionColor = srgbToLinear(spectral_gems(rt)) * make_float3(2.428571428f);
+	float3 spectralNormalization = make_float3(2.428571428f, 2.318181818f, 2.318181818f);
+	float3 dispersionColor = srgbToLinear(spectral_gems(rt)) * spectralNormalization;
 
 	//dispersionColor = make_float3(rt < 0.333f ? 1.0f : 0.0f, (rt >= 0.333f && rt < 0.666f) ? 1.0f : 0.0f, (rt >= 0.666f) ? 1.0f : 0.0f) * 3.0f;
 
+#if true
 	for (size_t b = 0; b < rendererSettings->bounces; b++)
 	{
 		//float aberration = randomValue(s1);
@@ -729,8 +781,9 @@ __device__ float3 radiance(Ray& r, uint32_t s1, uint32_t& s2, const Scene* scene
 		}
 
 		Material hitMat = scene->materials[hit.materialIndex];
-		float iorDiff = hitMat.ior;
-		//float disperseIor = hitMat.ior + (1.0f - rt) * hitMat.transmissionAberration * (hitMat.ior-1.0f);
+		//float iorDiff = hitMat.ior;
+		//float iorDiff = hitMat.ior + (rt * 0.5f - 0.5f) * hitMat.transmissionAberration * hitMat.ior;
+		float iorDiff = hitMat.ior + (1.0f - rt) * hitMat.transmissionAberration * (hitMat.ior-1.0f);
 
 		if (inVolume)
 		{
@@ -756,6 +809,26 @@ __device__ float3 radiance(Ray& r, uint32_t s1, uint32_t& s2, const Scene* scene
 			volumeMat.transmissionRoughness = 0.0f;
 		}
 
+		float3 albedo = srgbToLinear(hitMat.albedo);
+		float rough = hitMat.roughness;
+		float metal = hitMat.metalness;
+		float3 N = hit.normal;
+
+		
+		if (hit.materialIndex == 0u)
+		{
+			float2 uv = hit.uv;
+			float3 tex0 = srgbToLinear(texture2D(debugTex0, uv));
+			float3 tex1 = texture2D(debugTex1, uv);
+			float3 tex2 = texture2D(debugTex2, uv) * 2.0f - 1.0f;
+
+			albedo = hitMat.albedo * srgbToLinear(tex0);
+			rough = (hitMat.roughness * hitMat.roughness) * (1.0f-tex1.z);
+			metal = hitMat.metalness * tex1.x;
+			float3 bT = normalize(cross(hit.normal, hit.tangent));
+			N = normalize(hit.tangent) * tex2.x + normalize(bT) * tex2.y + normalize(hit.normal) * tex2.z;
+		}
+		
 		//float disperseIorDiff = fmaxf(disperseIor / 1.0f, 1.0f);
 
 		// Create 2 random numbers
@@ -763,17 +836,17 @@ __device__ float3 radiance(Ray& r, uint32_t s1, uint32_t& s2, const Scene* scene
 		float r2 = randomValue(s1);            // Pick random number for elevation
 		float r2s = sqrtf(r2);
 
-		float3 flippedNormal = (hit.inside ? -hit.normal : hit.normal);
+		float3 flippedNormal = (hit.inside ? -N : N);
 
 		float ndotl = fmaxf(dot(-r.direction, flippedNormal), 0.0f);
 		float F = fresnel(ndotl, 0.0f, iorDiff);
 		float F82 = clamp(fresnel(ndotl, 0.0f, 1.5f) * 3.0f - 1.0f, 0.0f, 1.0f); //Hacking desaturated edges for metals
 
-		float3 transmissionDir = refractionRay(normalize(r.direction + randomInUnitSphere(s1) * hitMat.transmissionRoughness * hitMat.transmissionRoughness), hit.normal, iorDiff, totalInternalReflection);
+		float3 transmissionDir = refractionRay(normalize(r.direction + randomInUnitSphere(s1) * hitMat.transmissionRoughness * hitMat.transmissionRoughness), N, iorDiff, totalInternalReflection);
 
-		float apparentRoughness = lerp(lerp(hitMat.roughness * hitMat.roughness, 0.0f, F), 0.0f, totalInternalReflection);
+		float apparentRoughness = lerp(lerp(rough, 0.0f, F), 0.0f, totalInternalReflection);
 
-		bool isSpecularBounce = fmaxf(hitMat.metalness, F) >= randomValue(s1);
+		bool isSpecularBounce = fmaxf(metal, F) >= randomValue(s1);
 		bool isTransmissionBounce = (hitMat.transmission * (float)!isSpecularBounce) >= randomValue(s1);
 
 		float3 diffuseDir = normalize(flippedNormal + randomDirection(s1));
@@ -786,7 +859,7 @@ __device__ float3 radiance(Ray& r, uint32_t s1, uint32_t& s2, const Scene* scene
 		isTransmissionBounce = (isTransmissionBounce * !totalInternalReflection);
 
 		float3 linearVertexColor = srgbToLinear(lerp(make_float3(1.0f, 1.0f, 1.0f), hit.color, hitMat.vcolor));
-		float3 linearSurfColor = srgbToLinear(hitMat.albedo) * linearVertexColor;
+		float3 linearSurfColor = albedo * linearVertexColor;
 
 		float3 linearTransmissionColor = srgbToLinear(hitMat.transmissionColor);
 		float3 linearVolumeTransmissionColor = srgbToLinear(volumeMat.transmissionColor);
@@ -802,19 +875,19 @@ __device__ float3 radiance(Ray& r, uint32_t s1, uint32_t& s2, const Scene* scene
 
 		float3 volumeAbsorptionColor = powf(linearVolumeTransmissionColor, volumeTransmissionDensity * (1.0-expf(-volumeMat.transmissionDensity)) * 10.0f);
 		volumeAbsorptionColor = (inVolume ? volumeAbsorptionColor : make_float3(1.0f));
-		/*
-		if (b == 0u) // Tint ray to a spectral color
-		{
-			mask = mask * lerp(make_float3(1.0f), dispersionColor, isTransmissionBounce);
-		}
-		*/
+		
+		//if (b == 0u) // Tint ray to a spectral color
+		//{
+		//	mask = mask * lerp(make_float3(1.0f), dispersionColor, isTransmissionBounce);
+		//}
+		
 		//EMISSION
 		accucolor += mask * srgbToLinear(hitMat.emission) * hitMat.emissionIntensity * volumeAbsorptionColor;
 
 		//MAIN OUTPUT
 		mask = mask * lerp(
 						lerp(linearSurfColor, absorptionColor, isTransmissionBounce),
-						lerp(make_float3(1.0f), lerp(linearSurfColor, make_float3(1.0f), F82), hitMat.metalness),
+						lerp(make_float3(1.0f), lerp(linearSurfColor, make_float3(1.0f), F82), metal),
 						isSpecularBounce) * volumeAbsorptionColor;
 
 		if (b == 0)
@@ -842,14 +915,14 @@ __device__ float3 radiance(Ray& r, uint32_t s1, uint32_t& s2, const Scene* scene
 		if (isTransmissionBounce)
 		{
 			// Entering a surface
-			if ((dot(hit.normal, transmissionDir) < 0.0f))
+			if ((dot(N, transmissionDir) < 0.0f))
 			{
 				transmissionCount++;
 				transmissionCount = min(transmissionCount, 19u);
 				matIndexMap[transmissionCount] = hit.materialIndex;
 				//thickness = 0.0f;
 
-				r.origin = hit.hitPoint + flippedNormal * -0.000001f; // offset ray origin slightly to prevent self intersection
+				r.origin = hit.hitPoint + flippedNormal * -0.00001f; // offset ray origin slightly to prevent self intersection
 				r.direction = normalize(transmissionDir); // maybe should be inside tranmission if statement
 				r.invDirection = make_float3(1.0f, 1.0f, 1.0f) / r.direction;
 			}
@@ -861,30 +934,24 @@ __device__ float3 radiance(Ray& r, uint32_t s1, uint32_t& s2, const Scene* scene
 
 				//thickness = 0.0f;
 
-				r.origin = hit.hitPoint + flippedNormal * -0.000001f; // offset ray origin slightly to prevent self intersection
+				r.origin = hit.hitPoint + flippedNormal * -0.00001f; // offset ray origin slightly to prevent self intersection
 				r.direction = normalize(transmissionDir); // maybe should be inside tranmission if statement
 				r.invDirection = make_float3(1.0f, 1.0f, 1.0f) / r.direction;
 			}
 		}
 
-		//volumeMat.ior = (surfaceCount > 0) ? volumeMat.ior : 1.0f;
 		inVolume = (transmissionCount > 0u);
-		///debug output
-		//accucolor = { srgbToLinear(make_float3((float)transmissionCount * 0.05f)) };
-		//debug = srgbToLinear(make_float3((float)transmissionCount * 0.25f));
-		
-	}
 
-	//if (rendererSettings->bvhDebug)
-	//{
-	//	return { bvhDepth, bvhDepth, bvhDepth };
-	//}
+		///debug output
+		debug = hit.normal;
+	}
+#endif
 
 	//MAIN OUTPUT
 	albedoOut = accuAlbedo;
 	normalOut = normalize(accuNormal);
-	//return debug;
-	return accucolor;
+
+	return accucolor * dispersionColor;
 
 	///debug output
 	//return { float(surfaceCount)*0.25f, float(surfaceCount) * 0.25f, float(surfaceCount) * 0.25f };
@@ -892,7 +959,7 @@ __device__ float3 radiance(Ray& r, uint32_t s1, uint32_t& s2, const Scene* scene
 }
 
 __global__ void render_kernel(float4* buf, float3* albedoBuf, float3* normalBuf, uint32_t width, uint32_t height, const Camera_GPU camera, const Scene* scene,
-							   const RenderSettings* rendererSettings, uint32_t sampleIndex, const GPU_Mesh* vbo, const GPUImage skyTex)
+							   const RenderSettings* rendererSettings, uint32_t sampleIndex, const GPU_Mesh* vbo, const GPUImage skyTex, const GPUImage debugTex0, const GPUImage debugTex1, const GPUImage debugTex2)
 {
 	// Assign a CUDA thread to every pixel (x,y) blockIdx, blockDim and threadIdx are CUDA specific
 	// Keywords replaces nested outer loops in CPU code looping over image rows and image columns
@@ -901,15 +968,12 @@ __global__ void render_kernel(float4* buf, float3* albedoBuf, float3* normalBuf,
 
 	if ((x >= width) || (y >= height)) return;
 
-
 	// Index of current pixel (calculated using thread index)
 	uint32_t i = (height - y - 1) * width + x;
 	
 	// Seeds for random number generator
 	uint32_t s1 = x * y * sampleIndex + i;
 	uint32_t s2 = i;
-
-	//float4 outputImageTempFloat4 = tex2D<float4>(skyTex, 0.0f, 0.0f);
 
 	float2 coord = { (float)x / (float)width, (float)y / (float)height };
 	coord = (coord * 2.0f) - make_float2(1.0f, 1.0f); // -1 -> 1
@@ -941,16 +1005,16 @@ __global__ void render_kernel(float4* buf, float3* albedoBuf, float3* normalBuf,
 	{
 		//DOF
 		float2 defocusJitter = randomPointInCircle(s1, 0.8f) * camera.aperture; //Edge biased
-		ray.origin = camera.pos +camRight * defocusJitter.x * aspect.x + camUp * defocusJitter.y * aspect.y;
+		ray.origin = camera.pos + camRight * defocusJitter.x * aspect.x + camUp * defocusJitter.y * aspect.y;
 
 		//MSAA
-		float2 jitter = make_float2(randomValue(s1) * 2.0 - 1.0, randomValue(s1) * 2.0 - 1.0);
+		float2 jitter = make_float2(randomValue(s1) - 0.5f, randomValue(s1) - 0.5f) * 10.0f;
 		float3 jitteredViewPoint = viewPoint + camRight * jitter.x * pixelSize.x + camUp * jitter.y * pixelSize.y;
 
 		ray.direction = normalize(jitteredViewPoint - ray.origin);
 		ray.invDirection = make_float3(1.0f, 1.0f, 1.0f) / ray.direction;
 
-		finalBeauty += radiance(ray, s1, s2, scene, rendererSettings, vbo, finalAlbedo, finalNormal, i, &camera, &skyTex);
+		finalBeauty += radiance(ray, s1, s2, scene, rendererSettings, vbo, finalAlbedo, finalNormal, i, &camera, &skyTex, &debugTex0, &debugTex1, &debugTex2);
 	}
 
 	// Write rgb value of pixel to image buffer on the GPU
@@ -965,9 +1029,6 @@ __global__ void render_kernel(float4* buf, float3* albedoBuf, float3* normalBuf,
 
 	normalBuf[i] *= factor;
 	normalBuf[i] += finalNormal * scale;
-
-	//buf[i] *= factor;
-	//buf[i] += make_float4(finalAlbedo, 1.0f) * scale;
 }
 
 __global__ void floatToImageData_kernel(uint32_t* outputBuffer, float4* inputBuffer, uint32_t width, uint32_t height, uint32_t sampleIndex, const Scene* scene)
@@ -1031,7 +1092,11 @@ void CudaRenderer::Compute(void)
 										  (RenderSettings*)m_deviceSettings.d_pointer(),
 										  *m_sampleIndex,
 										  m_deviceMesh,
-										  m_imgLoader.gpuImage);
+										  m_imgLoaderEnv.gpuImage,
+										  m_imgLoaderTestTexture0.gpuImage,
+										  m_imgLoaderTestTexture1.gpuImage,
+										  m_imgLoaderTestTexture2.gpuImage);
+
 
 	// Check for any errors launching the kernel
 	cudaStatus = cudaGetLastError();
@@ -1090,7 +1155,7 @@ void CudaRenderer::OnResize(uint32_t width, uint32_t height)
 void CudaRenderer::SetHDRI(std::string path)
 {
 	cudaDeviceSynchronize();
-	m_imgLoader.LoadImageFile(path);
+	m_imgLoaderEnv.LoadImage_EXR(path);
 }
 
 void CudaRenderer::SetScene(const Scene* scene)

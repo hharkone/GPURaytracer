@@ -29,21 +29,24 @@ public:
 		m_hostMesh = new GPU_Mesh();
 		//m_hostMesh->LoadOBJFile("meshes/cube_quads.obj", 0u);
 		//m_hostMesh->LoadOBJFile("meshes/torus_simple.obj", 0u);
-		//m_hostMesh->LoadOBJFile("meshes/lion.obj", 0u);
 		//m_hostMesh->LoadOBJFile("meshes/plank_high.OBJ", 0u);
-		//m_hostMesh->LoadOBJFile("meshes/lion_LP.obj", 0u);
+		m_hostMesh->LoadOBJFile("meshes/lion_LP.obj", 0u);
 		//m_hostMesh->LoadOBJFile("meshes/dragon.obj", 0u);
 		//m_hostMesh->LoadOBJFile("meshes/buddha.obj", 0u);
 		//m_hostMesh->LoadOBJFile("meshes/eagle.obj", 0u);
-		m_hostMesh->LoadOBJFile("meshes/dragon2.obj", 0u);
+		//m_hostMesh->LoadOBJFile("meshes/dragon2.obj", 0u);
 		m_hostMesh->BuildBVH();
 
 		m_deviceScene.alloc(sizeof(Scene));
 		m_deviceSettings.alloc(sizeof(RenderSettings));
 
+		m_imgLoaderTestTexture0.LoadImage_PNG("Images/Lion/LionAlbedo.png");
+		m_imgLoaderTestTexture1.LoadImage_PNG("Images/Lion/LionMetalRough.png");
+		m_imgLoaderTestTexture2.LoadImage_PNG("Images/Lion/LionNormal.png");
+
 		if (scene->envImgPathChanged)
 		{
-			m_imgLoader.LoadImageFile(scene->envImgPath);
+			m_imgLoaderEnv.LoadImage_EXR(scene->envImgPath);
 		}
 
 		cudaStatus = cudaGetLastError();
@@ -160,7 +163,10 @@ private:
 	CUDABuffer m_deviceScene;
 	CUDABuffer m_deviceSettings;
 
-	ImageLoader m_imgLoader;
+	ImageLoader m_imgLoaderEnv;
+	ImageLoader m_imgLoaderTestTexture0;
+	ImageLoader m_imgLoaderTestTexture1;
+	ImageLoader m_imgLoaderTestTexture2;
 	//float* m_skyTexture;
 
 	float* m_finalOutputBuffer = nullptr;	//Final float output
