@@ -27,22 +27,23 @@ public:
 		m_localToWorldMat = new float[16];
 
 		m_hostMesh = new GPU_Mesh();
-		//m_hostMesh->LoadOBJFile("meshes/cube_quads.obj", 0u);
-		//m_hostMesh->LoadOBJFile("meshes/torus_simple.obj", 0u);
-		//m_hostMesh->LoadOBJFile("meshes/plank_high.OBJ", 0u);
-		m_hostMesh->LoadOBJFile("meshes/lion_LP.obj", 0u);
-		//m_hostMesh->LoadOBJFile("meshes/dragon.obj", 0u);
-		//m_hostMesh->LoadOBJFile("meshes/buddha.obj", 0u);
-		//m_hostMesh->LoadOBJFile("meshes/eagle.obj", 0u);
-		//m_hostMesh->LoadOBJFile("meshes/dragon2.obj", 0u);
+		//m_hostMesh->LoadOBJFile("meshes/cube_quads.obj", 1u);
+		//m_hostMesh->LoadOBJFile("meshes/torus_simple.obj", 1u);
+		//m_hostMesh->LoadOBJFile("meshes/plank_high.OBJ", 1u);
+		//m_hostMesh->LoadOBJFile("meshes/lion_LP.obj", 1u);
+		//m_hostMesh->LoadOBJFile("meshes/dragon.obj", 1u);
+		//m_hostMesh->LoadOBJFile("meshes/buddha.obj", 1u);
+		//m_hostMesh->LoadOBJFile("meshes/eagle.obj", 1u);
+		//m_hostMesh->LoadOBJFile("meshes/dragon2.obj", 1u);
+		m_hostMesh->LoadOBJFile("meshes/water.obj", 1u);
 		m_hostMesh->BuildBVH();
 
 		m_deviceScene.alloc(sizeof(Scene));
 		m_deviceSettings.alloc(sizeof(RenderSettings));
 
-		m_imgLoaderTestTexture0.LoadImage_PNG("Images/Lion/LionAlbedo.png");
-		m_imgLoaderTestTexture1.LoadImage_PNG("Images/Lion/LionMetalRough.png");
-		m_imgLoaderTestTexture2.LoadImage_PNG("Images/Lion/LionNormal.png");
+		//m_imgLoaderTestTexture0.LoadImage_PNG("Images/Lion/LionAlbedo.png");
+		//m_imgLoaderTestTexture1.LoadImage_PNG("Images/Lion/LionMetalRough.png");
+		//m_imgLoaderTestTexture2.LoadImage_PNG("Images/Lion/LionNormal.png");
 
 		if (scene->envImgPathChanged)
 		{

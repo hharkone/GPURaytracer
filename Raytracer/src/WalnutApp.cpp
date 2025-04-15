@@ -230,7 +230,7 @@ public:
 		ImGui::End();
 
 		ImGui::Begin("Materials");
-		for (size_t i = 0u; i < m_scene.materialCount; i++)
+		for (size_t i = 1u; i <= m_scene.materialCount; i++)
 		{
 			ImGui::PushID((int)i);
 			ImGui::AlignTextToFramePadding();
@@ -253,6 +253,8 @@ public:
 			if (ImGui::SliderFloat("Transmission Roughness", &mat.transmissionRoughness, 0.0f, 1.0f, "%.3f")) { m_sceneChanged = true; }
 			if (ImGui::SliderFloat("Transmission Aberration", &mat.transmissionAberration, 0.0f, 1.0f, "%.3f")) { m_sceneChanged = true; }
 			if (ImGui::SliderFloat("Transmission Density", &mat.transmissionDensity, 0.0f, 1.0f, "%.3f")) { m_sceneChanged = true; }
+			if (ImGui::SliderFloat("Inscatter", &mat.transmissionInscatter, 0.0f, 1.0f, "%.3f")) { m_sceneChanged = true; }
+			if (ImGui::SliderFloat("Inscatter Anisotropy", &mat.transmissionInscatterAnisotropy, -1.0f, 1.0f, "%.3f")) { m_sceneChanged = true; }
 			ImGui::Text("");
 			ImGui::Separator();
 			ImGui::Separator();

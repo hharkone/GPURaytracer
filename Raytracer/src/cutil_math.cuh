@@ -474,6 +474,11 @@ inline __host__ __device__ float3 powf(float3& a, float p)
     return make_float3(pow(a.x, p), pow(a.y, p), pow(a.z, p));
 }
 
+inline __host__ __device__ float3 powf(float3& a, float3& p)
+{
+    return make_float3(pow(a.x, p.x), pow(a.y, p.y), pow(a.z, p.z));
+}
+
 // fractional value
 inline __host__ __device__ float fracf(float x)
 {
