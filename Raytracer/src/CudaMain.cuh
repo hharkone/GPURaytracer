@@ -35,7 +35,11 @@ public:
 		//m_hostMesh->LoadOBJFile("meshes/buddha.obj", 1u);
 		//m_hostMesh->LoadOBJFile("meshes/eagle.obj", 1u);
 		//m_hostMesh->LoadOBJFile("meshes/dragon2.obj", 1u);
-		m_hostMesh->LoadOBJFile("meshes/water.obj", 1u);
+		//m_hostMesh->LoadOBJFile("meshes/water.obj", 1u);
+		//m_hostMesh->LoadOBJFile("meshes/reclining_pan.obj", 1u);
+		//m_hostMesh->LoadOBJFile("meshes/offroad_tire.obj", 1u);
+		//m_hostMesh->LoadOBJFile("meshes/dragon3.obj", 1u);
+		m_hostMesh->LoadOBJFile("meshes/rk-62.obj", 1u);
 		m_hostMesh->BuildBVH();
 
 		m_deviceScene.alloc(sizeof(Scene));
@@ -44,6 +48,14 @@ public:
 		//m_imgLoaderTestTexture0.LoadImage_PNG("Images/Lion/LionAlbedo.png");
 		//m_imgLoaderTestTexture1.LoadImage_PNG("Images/Lion/LionMetalRough.png");
 		//m_imgLoaderTestTexture2.LoadImage_PNG("Images/Lion/LionNormal.png");
+
+		//m_imgLoaderTestTexture0.LoadImage_PNG("Images/ConcreteBrick/T_vk2vcdl_4K_B.png");
+		//m_imgLoaderTestTexture1.LoadImage_PNG("Images/ConcreteBrick/T_vk2vcdl_4K_ORM.png");
+		//m_imgLoaderTestTexture2.LoadImage_PNG("Images/ConcreteBrick/T_vk2vcdl_4K_N.png");
+
+		//m_imgLoaderTestTexture0.LoadImage_PNG("Images/OffroadTire/Offroad_Tire_Clean_BaseColor.png");
+		//m_imgLoaderTestTexture1.LoadImage_PNG("Images/OffroadTire/Offroad_Tire_Clean_ORM.png");
+		//m_imgLoaderTestTexture2.LoadImage_PNG("Images/OffroadTire/Offroad_Tire_Clean_Normal.png");
 
 		if (scene->envImgPathChanged)
 		{

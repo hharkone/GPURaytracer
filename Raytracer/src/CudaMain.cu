@@ -829,7 +829,7 @@ __device__ float3 radiance(Ray& r, uint32_t s1, uint32_t& s2, const Scene* scene
 
 		hitMat = scene->materials[hit.materialIndex];
 
-		if (hit.inside && b <= 0u)
+		if (hit.inside && transmissionCount <= 0u)
 		{
 			transmissionCount++;
 			matIndexMap[clamp(transmissionCount, (uint16_t)0u, (uint16_t)19u)] = hit.materialIndex;
@@ -871,24 +871,26 @@ __device__ float3 radiance(Ray& r, uint32_t s1, uint32_t& s2, const Scene* scene
 		float rough = hitMat.roughness;
 		float metal = hitMat.metalness;
 		float3 N = hit.normal;
-		float3 flippedNormal = (hit.inside ? -N : N);
-		float3 flippedGeometricNormal = (hit.inside ? -hit.geomNormal : hit.geomNormal);
 
 		/*
-		if (hit.materialIndex == 0u)
+		if (hit.materialIndex == 1u && debugTex0 != nullptr)
 		{
 			float2 uv = hit.uv;
 			float3 tex0 = srgbToLinear(texture2D(debugTex0, uv));
 			float3 tex1 = texture2D(debugTex1, uv);
 			float3 tex2 = texture2D(debugTex2, uv) * 2.0f - 1.0f;
 
-			albedo = hitMat.albedo * srgbToLinear(tex0);
-			rough = (hitMat.roughness * hitMat.roughness) * (1.0f-tex1.z);
-			metal = hitMat.metalness * tex1.x;
+			albedo = hitMat.albedo * tex0;
+			rough = (hitMat.roughness * hitMat.roughness) * (1.0f-tex1.y);
+			metal = hitMat.metalness * tex1.z;
 			float3 bT = normalize(cross(hit.normal, hit.tangent));
 			N = normalize(hit.tangent) * tex2.x + normalize(bT) * tex2.y + normalize(hit.normal) * tex2.z;
+			N = normalize(lerp(hit.normal, N, hitMat.transmissionInscatter));
 		}
 		*/
+
+		float3 flippedNormal = (hit.inside ? -N : N);
+		float3 flippedGeometricNormal = (hit.inside ? -hit.geomNormal : hit.geomNormal);
 
 		//float disperseIorDiff = fmaxf(disperseIor / 1.0f, 1.0f);
 
@@ -949,6 +951,7 @@ __device__ float3 radiance(Ray& r, uint32_t s1, uint32_t& s2, const Scene* scene
 		float3 specularColor = lerp(linearSurfColor, make_float3(1.0f), F82);
 			   specularColor = lerp(make_float3(1.0f), specularColor, metal);
 		float3 maskColor = lerp(lerp(linearSurfColor, specularColor, isSpecularBounce), make_float3(1.0f), isTransmissionBounce);
+			   maskColor = maskColor * volumeAbsorptionColor;
 
 		mask = mask * maskColor;
 
@@ -995,7 +998,7 @@ __device__ float3 radiance(Ray& r, uint32_t s1, uint32_t& s2, const Scene* scene
 				transmissionCount++;
 				transmissionCount = min(transmissionCount, 19u);
 				matIndexMap[transmissionCount] = hit.materialIndex;
-				mask = mask * volumeAbsorptionColor;
+				//mask = mask * volumeAbsorptionColor;
 
 				r.origin = hit.hitPoint + flippedGeometricNormal * -0.00001f;
 				r.direction = normalize(transmissionDir);
@@ -1013,7 +1016,7 @@ __device__ float3 radiance(Ray& r, uint32_t s1, uint32_t& s2, const Scene* scene
 			{
 				transmissionCount--;
 				transmissionCount = max(transmissionCount, 0u);
-				mask = mask * volumeAbsorptionColor;
+				//mask = mask * volumeAbsorptionColor;
 				//matIndexMap[transmissionCount] = 0;
 				r.origin = hit.hitPoint + flippedGeometricNormal * -0.0001f; // offset ray origin slightly to prevent self intersection
 				r.direction = normalize(transmissionDir);
@@ -1070,7 +1073,7 @@ __global__ void render_kernel(float4* buf, float3* albedoBuf, float3* normalBuf,
 	//DOF
 	float2 defocusJitter = randomPointInCircle(s1, 0.8f) * camera.aperture; //Edge biased
 	//MSAA
-	float2 jitter = make_float2(randomValue(s1) - 0.5f, randomValue(s1) - 0.5f) * pixelSize;
+	float2 jitter = make_float2(randomValue(s1) - 0.5f, randomValue(s1) - 0.5f) * pixelSize * 2.0f;
 
 	// Calculate focus point
 	float viewPointLocal[4] = { coord.x, coord.y, 1.0f, 1.0f };

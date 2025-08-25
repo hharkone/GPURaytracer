@@ -252,7 +252,7 @@ public:
 			if (ImGui::SliderFloat("Transmission", &mat.transmission, 0.0f, 1.0f, "%.3f")) { m_sceneChanged = true; }
 			if (ImGui::SliderFloat("Transmission Roughness", &mat.transmissionRoughness, 0.0f, 1.0f, "%.3f")) { m_sceneChanged = true; }
 			if (ImGui::SliderFloat("Transmission Aberration", &mat.transmissionAberration, 0.0f, 1.0f, "%.3f")) { m_sceneChanged = true; }
-			if (ImGui::SliderFloat("Transmission Density", &mat.transmissionDensity, 0.0f, 1.0f, "%.3f")) { m_sceneChanged = true; }
+			if (ImGui::DragFloat("Transmission Density", &mat.transmissionDensity, 0.01f, 0.0f, 100.0f, "%.3f")) { m_sceneChanged = true; }
 			if (ImGui::SliderFloat("Inscatter", &mat.transmissionInscatter, 0.0f, 1.0f, "%.3f")) { m_sceneChanged = true; }
 			if (ImGui::SliderFloat("Inscatter Anisotropy", &mat.transmissionInscatterAnisotropy, -1.0f, 1.0f, "%.3f")) { m_sceneChanged = true; }
 			ImGui::Text("");
