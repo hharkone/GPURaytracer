@@ -69,16 +69,11 @@ public:
     };
 
     MeshBuffer deviceMesh;
-    //uint32_t nodesUsed = 1u;
-    //uint32_t numTris = 0u;
     BVHNode* bvhNode = nullptr;
-    //std::vector<BVHNode> bvhNodeVector;
     Triangle* triangleBuffer = nullptr;
     MeshInfo* meshInfoBuffer = nullptr;
     float3* triangleCentroidScratchBuffer = nullptr;
     uint32_t* triIdx = nullptr;
-    //uint32_t numMeshes = 0u;
-    //uint32_t maxNodes;
     std::string filepath;
 
 private:

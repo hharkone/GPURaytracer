@@ -14,7 +14,7 @@ Scene::Scene()
     materialBuffer.alloc_and_upload(materials, materialCount);
     materialBufferPtr = materialBuffer.d_pointer();
 
-    ImportMesh("meshes/NVision.obj");
+    ImportMesh("meshes/dragon2.obj");
 }
 
 Scene::~Scene()

@@ -3,55 +3,13 @@
 #include <memory>
 #include <map>
 
+#include "zlib.h"
 #include "GPU_Mesh.h"
 
 //#define USE_UNOPTIMIZED_BVH_SPLITTING
 
 void GPU_Mesh::Upload()
 {
-/*
-    cudaMalloc(&m_deviceMesh, sizeof(GPU_Mesh));
-    cudaMemcpy(m_deviceMesh, m_hostMesh, sizeof(GPU_Mesh), cudaMemcpyHostToDevice);
-
-    cudaStatus = cudaGetLastError();
-    if (cudaStatus != cudaSuccess)
-    {
-        fprintf(stderr, "Mesh buffer copy to device failed: %s\n", cudaGetErrorString(cudaStatus));
-    }
-
-    GPU_Mesh::Triangle* dTris;
-    cudaMalloc(&dTris, m_hostMesh->numTris * sizeof(GPU_Mesh::Triangle));
-    cudaMemcpy(dTris, m_hostMesh->triangleBuffer, m_hostMesh->numTris * sizeof(GPU_Mesh::Triangle), cudaMemcpyHostToDevice);
-    cudaMemcpy(&m_deviceMesh->triangleBuffer, &dTris, sizeof(GPU_Mesh::Triangle*), cudaMemcpyHostToDevice);
-
-    cudaStatus = cudaGetLastError();
-    if (cudaStatus != cudaSuccess)
-    {
-        fprintf(stderr, "GPU_Mesh::Triangle* copy to device failed: %s\n", cudaGetErrorString(cudaStatus));
-    }
-
-    GPU_Mesh::MeshInfo* dMeshInfo;
-    cudaMalloc(&dMeshInfo, m_hostMesh->numMeshes * sizeof(GPU_Mesh::MeshInfo));
-    cudaMemcpy(dMeshInfo, m_hostMesh->meshInfoBuffer, m_hostMesh->numMeshes * sizeof(GPU_Mesh::MeshInfo), cudaMemcpyHostToDevice);
-    cudaMemcpy(&m_deviceMesh->meshInfoBuffer, &dMeshInfo, sizeof(GPU_Mesh::MeshInfo*), cudaMemcpyHostToDevice);
-
-    cudaStatus = cudaGetLastError();
-    if (cudaStatus != cudaSuccess)
-    {
-        fprintf(stderr, "GPU_Mesh::MeshInfo* copy to device failed: %s\n", cudaGetErrorString(cudaStatus));
-    }
-
-    GPU_Mesh::BVHNode* dBVHNodes;
-    cudaMalloc(&dBVHNodes, m_hostMesh->nodesUsed * sizeof(GPU_Mesh::BVHNode));
-    cudaMemcpy(dBVHNodes, m_hostMesh->bvhNode, m_hostMesh->nodesUsed * sizeof(GPU_Mesh::BVHNode), cudaMemcpyHostToDevice);
-    cudaMemcpy(&m_deviceMesh->bvhNode, &dBVHNodes, sizeof(GPU_Mesh::BVHNode*), cudaMemcpyHostToDevice);
-
-    uint32_t* dtriIdx;
-    cudaMalloc(&dtriIdx, m_hostMesh->numTris * sizeof(uint32_t));
-    cudaMemcpy(dtriIdx, m_hostMesh->triIdx, m_hostMesh->numTris * sizeof(uint32_t), cudaMemcpyHostToDevice);
-    cudaMemcpy(&m_deviceMesh->triIdx, &dtriIdx, sizeof(uint32_t*), cudaMemcpyHostToDevice);
-*/
-
     CUDAbvhBuffer.alloc_and_upload(bvhNode, deviceMesh.nodesUsed);
     deviceMesh.bvhNode = CUDAbvhBuffer.d_pointer();
 
@@ -312,7 +270,7 @@ void GPU_Mesh::LoadOBJFile(const std::string& path, int materialIndex)
                 }
                 else
                 {
-                    newTri.matID = 2u;
+                    newTri.matID = 4u;
                 }
             }
 
@@ -352,7 +310,7 @@ void GPU_Mesh::LoadOBJFile(const std::string& path, int materialIndex)
                 }
                 else
                 {
-                    newTri.matID = 2u;
+                    newTri.matID = 4u;
                 }
             }
 
@@ -529,16 +487,16 @@ std::string CacheFilePath(const std::string& filename)
 {
     std::string BVHcacheFilename(filename);
     size_t lastindex = BVHcacheFilename.find_last_of(".");
-    BVHcacheFilename.substr(0, lastindex);
+    //BVHcacheFilename.substr(0, lastindex);
     return BVHcacheFilename += ".bvh";
 }
 
 bool GPU_Mesh::TryLoadCache(const std::string& filename)
 {
     std::string cacheFile = CacheFilePath(filename);
-
     FILE* fp = fopen(cacheFile.c_str(), "rb");
-    if (!fp)
+
+    if (fp == NULL)
     {
         fprintf(stderr, "No BVH cache exists.\n");
         return false;
@@ -547,6 +505,47 @@ bool GPU_Mesh::TryLoadCache(const std::string& filename)
     // BVH has been built already and stored in a file, read the file
     fprintf(stderr, "Cache exists, reading the pre-calculated BVH data...\n");
 
+    uLongf compressedSize = 0u;
+    Bytef* compressedBuffer = nullptr;
+    uLongf uncompressedSize = 0u;
+    Bytef* uncompressedBuffer = nullptr;
+    size_t destOffset = 0u;
+    int c;
+
+    if (1 != fread(&uncompressedSize, sizeof(uLongf), 1, fp)) goto CACHE_FAIL;
+    if(uncompressedSize <= 0u) goto CACHE_FAIL;
+    uncompressedBuffer = (Bytef*)malloc(uncompressedSize);
+    if (uncompressedBuffer == nullptr) goto CACHE_FAIL;
+
+    if (1 != fread(&compressedSize, sizeof(uLongf), 1, fp)) goto CACHE_FAIL;
+    if (compressedSize <= 0u) goto CACHE_FAIL;
+    compressedBuffer = (Bytef*)malloc(compressedSize);
+    if (compressedBuffer == nullptr) goto CACHE_FAIL;
+
+    if (compressedSize != fread(compressedBuffer, sizeof(Bytef), compressedSize, fp)) goto CACHE_FAIL;
+
+    fprintf(stderr, "Uncompressing BVH data.\n");
+    c = uncompress(uncompressedBuffer, &uncompressedSize, compressedBuffer, compressedSize);
+
+    if (c != Z_OK)
+    {
+        fprintf(stderr, "BVH uncompression failure.\n");
+        return false;
+    }
+
+    memcpy(&deviceMesh.nodesUsed, uncompressedBuffer,              sizeof(uint32_t));                       destOffset += sizeof(uint32_t);
+    memcpy(&deviceMesh.numTris,   (void*)(uncompressedBuffer + destOffset), sizeof(uint32_t));                       destOffset += sizeof(uint32_t);
+
+    bvhNode = new BVHNode[deviceMesh.nodesUsed];
+    triIdx = new uint32_t[deviceMesh.numTris];
+    memcpy(bvhNode,               (void*)(uncompressedBuffer + destOffset), sizeof(BVHNode) * deviceMesh.nodesUsed); destOffset += sizeof(BVHNode) * deviceMesh.nodesUsed;
+    memcpy(triIdx,                (void*)(uncompressedBuffer + destOffset), sizeof(uint32_t) * deviceMesh.numTris);  destOffset += sizeof(uint32_t) * deviceMesh.numTris;
+
+    triangleBuffer = new Triangle[deviceMesh.numTris];
+    meshInfoBuffer = new MeshInfo;
+    memcpy(triangleBuffer,        (void*)(uncompressedBuffer + destOffset), sizeof(Triangle) * deviceMesh.numTris);  destOffset += sizeof(Triangle) * deviceMesh.numTris;
+    memcpy(meshInfoBuffer,        (void*)(uncompressedBuffer + destOffset), sizeof(MeshInfo));                       destOffset += sizeof(MeshInfo);
+    /*
     if (1 != fread(&deviceMesh.nodesUsed, sizeof(uint32_t), 1, fp)) goto CACHE_FAIL;
     if (1 != fread(&deviceMesh.numTris,   sizeof(uint32_t), 1, fp)) goto CACHE_FAIL;
 
@@ -562,6 +561,8 @@ bool GPU_Mesh::TryLoadCache(const std::string& filename)
     if (1 != fread(meshInfoBuffer, sizeof(MeshInfo), 1, fp)) goto CACHE_FAIL;
     //if (deviceMesh.numTris != fread(triangleCentroidScratchBuffer, sizeof(float3), deviceMesh.numTris, fp)) goto CACHE_FAIL;
 
+    */
+
     fclose(fp);
     fprintf(stderr, "BVH cache read.\n");
 
@@ -576,24 +577,70 @@ CACHE_FAIL:
 
 bool GPU_Mesh::TrySaveCache(const std::string& filename)
 {
+    const Bytef* uncompressedBuffer = nullptr;
+    uLongf uncompressedSize = 0u;
+    uncompressedSize += sizeof(uint32_t);
+    uncompressedSize += sizeof(uint32_t);
+    uncompressedSize += sizeof(BVHNode) * deviceMesh.nodesUsed;
+    uncompressedSize += sizeof(uint32_t) * deviceMesh.numTris;
+    uncompressedSize += sizeof(Triangle) * deviceMesh.numTris;
+    uncompressedSize += sizeof(MeshInfo);
+
+    uncompressedBuffer = (Bytef*)malloc(uncompressedSize);
+
+    if (uncompressedBuffer == nullptr)
+    {
+        return false;
+    }
+
+    size_t destOffset = 0u;
+    memcpy((void*)(uncompressedBuffer + destOffset), &deviceMesh.nodesUsed, sizeof(uint32_t));                       destOffset += sizeof(uint32_t);
+    memcpy((void*)(uncompressedBuffer + destOffset), &deviceMesh.numTris,   sizeof(uint32_t));                       destOffset += sizeof(uint32_t);
+    memcpy((void*)(uncompressedBuffer + destOffset), bvhNode,               sizeof(BVHNode) * deviceMesh.nodesUsed); destOffset += sizeof(BVHNode) * deviceMesh.nodesUsed;
+    memcpy((void*)(uncompressedBuffer + destOffset), triIdx,                sizeof(uint32_t) * deviceMesh.numTris);  destOffset += sizeof(uint32_t) * deviceMesh.numTris;
+    memcpy((void*)(uncompressedBuffer + destOffset), triangleBuffer,        sizeof(Triangle) * deviceMesh.numTris);  destOffset += sizeof(Triangle) * deviceMesh.numTris;
+    memcpy((void*)(uncompressedBuffer + destOffset), meshInfoBuffer,        sizeof(MeshInfo));                       destOffset += sizeof(MeshInfo);
+
+//if (1 != fwrite(&deviceMesh.nodesUsed, sizeof(uint32_t), 1, fp)) goto CACHE_FAIL;
+//if (1 != fwrite(&deviceMesh.numTris,   sizeof(uint32_t), 1, fp)) goto CACHE_FAIL;
+//if (deviceMesh.nodesUsed != fwrite(bvhNode, sizeof(BVHNode), deviceMesh.nodesUsed, fp)) goto CACHE_FAIL;
+//if (deviceMesh.numTris != fwrite(triIdx, sizeof(uint32_t), deviceMesh.numTris, fp)) goto CACHE_FAIL;
+//if (deviceMesh.numTris != fwrite(triangleBuffer, sizeof(Triangle), deviceMesh.numTris, fp)) goto CACHE_FAIL;
+//if (1 != fwrite(meshInfoBuffer, sizeof(MeshInfo), 1, fp)) goto CACHE_FAIL;
+
+    uLongf compressedSize = (uncompressedSize + uncompressedSize / 500) + 12u; //Allocate slightly larger destination buffer.
+    Bytef* compressedBuffer = (Bytef*)malloc(compressedSize);
+
+    fprintf(stderr, "Compressing BVH data.\n");
+    int c = compress(compressedBuffer, &compressedSize, uncompressedBuffer, uncompressedSize);
+    if (c != Z_OK)
+    {
+        fprintf(stderr, "BVH compression failure.\n");
+        return false;
+    }
+
+    //int c = uncompress(dest, &destAllocSize, dataBuffer, allocSize);
+
     std::string cacheFile = CacheFilePath(filename);
-    //FILE* fp = fopen(cacheFile.c_str(), "rb");
     FILE* fp = fopen(cacheFile.c_str(), "wb");
-    //if (!fp)
     {
         // Now store the results, if possible...
         fprintf(stderr, "Writing BVH data...\n");
 
-        
-        if (!fp) return false;
+        if (fp == NULL) return false;
 
-        if (1 != fwrite(&deviceMesh.nodesUsed, sizeof(uint32_t), 1, fp)) goto CACHE_FAIL;
-        if (1 != fwrite(&deviceMesh.numTris,   sizeof(uint32_t), 1, fp)) goto CACHE_FAIL;
+        if (1 != fwrite(&uncompressedSize, sizeof(uLongf), 1, fp)) goto CACHE_FAIL;
+        if (1 != fwrite(&compressedSize, sizeof(uLongf), 1, fp)) goto CACHE_FAIL;
+        if (compressedSize != fwrite(compressedBuffer, sizeof(Bytef), compressedSize, fp)) goto CACHE_FAIL;
 
-        if (deviceMesh.nodesUsed != fwrite(bvhNode, sizeof(BVHNode), deviceMesh.nodesUsed, fp)) goto CACHE_FAIL;
-        if (deviceMesh.numTris != fwrite(triIdx, sizeof(uint32_t), deviceMesh.numTris, fp)) goto CACHE_FAIL;
-        if (deviceMesh.numTris != fwrite(triangleBuffer, sizeof(Triangle), deviceMesh.numTris, fp)) goto CACHE_FAIL;
-        if (1 != fwrite(meshInfoBuffer, sizeof(MeshInfo), 1, fp)) goto CACHE_FAIL;
+
+        //if (1 != fwrite(&deviceMesh.nodesUsed, sizeof(uint32_t), 1, fp)) goto CACHE_FAIL;
+        //if (1 != fwrite(&deviceMesh.numTris,   sizeof(uint32_t), 1, fp)) goto CACHE_FAIL;
+        //
+        //if (deviceMesh.nodesUsed != fwrite(bvhNode, sizeof(BVHNode), deviceMesh.nodesUsed, fp)) goto CACHE_FAIL;
+        //if (deviceMesh.numTris != fwrite(triIdx, sizeof(uint32_t), deviceMesh.numTris, fp)) goto CACHE_FAIL;
+        //if (deviceMesh.numTris != fwrite(triangleBuffer, sizeof(Triangle), deviceMesh.numTris, fp)) goto CACHE_FAIL;
+        //if (1 != fwrite(meshInfoBuffer, sizeof(MeshInfo), 1, fp)) goto CACHE_FAIL;
         //if (deviceMesh.numTris != fwrite(triangleCentroidScratchBuffer, sizeof(float3), deviceMesh.numTris, fp)) goto CACHE_FAIL;
 
         fclose(fp);
@@ -605,6 +652,7 @@ bool GPU_Mesh::TrySaveCache(const std::string& filename)
 CACHE_FAIL:
     fclose(fp);
     fprintf(stderr, "ERROR: BVH cache file writing failed.\n");
+
     return false;
 }
 
@@ -624,8 +672,6 @@ void GPU_Mesh::BuildBVH()
     triIdx = new uint32_t[deviceMesh.numTris];
     triangleCentroidScratchBuffer = new float3[deviceMesh.numTris];
 
-    //bvhNodeVector.resize(numTris * 2 - 1);
-
     for (uint32_t i = 0; i < deviceMesh.numTris; i++)
     {
         triangleCentroidScratchBuffer[i] = (triangleBuffer[i].pos0 + triangleBuffer[i].pos1 + triangleBuffer[i].pos2) * 0.3333333f;
@@ -634,7 +680,6 @@ void GPU_Mesh::BuildBVH()
 
     // assign all triangles to root node
     BVHNode& root = bvhNode[rootNodeIdx];
-    //BVHNode& root = bvhNodeVector.at(rootNodeIdx);
 
     root.leftFirst = 0;
     root.triCount = deviceMesh.numTris;
@@ -650,20 +695,7 @@ void GPU_Mesh::BuildBVH()
     bvhNode = newArr;
 
     fprintf(stderr, "BVH built using: %i nodes\n", deviceMesh.nodesUsed);
-    /*
-    std::fstream fOut;
-    fOut.open("debug_output.txt", std::ios::out | std::ios::trunc);
 
-    for (uint32_t i = 0; i < nodesUsed; i++)
-    {
-        BVHNode n = bvhNode[i];
-        fOut << "Node: " << i << "\n";
-        fOut << "bbox: " << "[" << n.aabbMin.x << ", " << n.aabbMin.y << ", " << n.aabbMin.z << "],  " << "[" << n.aabbMax.x << ", " << n.aabbMax.y << ", " << n.aabbMax.z << "]" << "\n";
-        fOut << "leftFirst: " << n.leftFirst << "\n";
-        fOut << "triCount: " << n.triCount << "\n\n";
-
-    }
-    */
     if (TrySaveCache(filepath))
     {
         return;
@@ -680,6 +712,6 @@ GPU_Mesh::~GPU_Mesh()
     delete[] bvhNode;
     delete[] triangleBuffer;
     delete[] meshInfoBuffer;
-    delete[] triIdx;
+    if (triIdx != nullptr) { delete[] triIdx; }
     if (triangleCentroidScratchBuffer != nullptr) { delete[] triangleCentroidScratchBuffer; }
 }

@@ -26,23 +26,6 @@ public:
 		m_viewMat		  = new float[16];
 		m_localToWorldMat = new float[16];
 
-		//m_hostMesh = new GPU_Mesh();
-		//m_hostMesh->LoadOBJFile("meshes/cube_quads.obj", 1u);
-		//m_hostMesh->LoadOBJFile("meshes/torus_simple.obj", 1u);
-		//m_hostMesh->LoadOBJFile("meshes/plank_high.OBJ", 1u);
-		//m_hostMesh->LoadOBJFile("meshes/lion_LP.obj", 1u);
-		//m_hostMesh->LoadOBJFile("meshes/dragon.obj", 1u);
-		//m_hostMesh->LoadOBJFile("meshes/buddha.obj", 1u);
-		//m_hostMesh->LoadOBJFile("meshes/eagle.obj", 1u);
-		//m_hostMesh->LoadOBJFile("meshes/dragon2.obj", 1u);
-		//m_hostMesh->LoadOBJFile("meshes/water.obj", 1u);
-		//m_hostMesh->LoadOBJFile("meshes/reclining_pan.obj", 1u);
-		//m_hostMesh->LoadOBJFile("meshes/offroad_tire.obj", 1u);
-		//m_hostMesh->LoadOBJFile("meshes/dragon3.obj", 1u);
-		//m_hostMesh->LoadOBJFile("meshes/rk-62.obj", 1u);
-		//m_hostMesh->LoadOBJFile("meshes/NVision.obj", 0u);
-		//m_hostMesh->BuildBVH();
-		
 		m_deviceScene.alloc(sizeof(Scene));
 		m_deviceSettings.alloc(sizeof(RenderSettings));
 
@@ -68,54 +51,6 @@ public:
 		{
 			fprintf(stderr, "ImageLoader: Data buffer copy to device failed: %s\n", cudaGetErrorString(cudaStatus));
 		}
-		/*
-		cudaMalloc(&m_deviceMesh, sizeof(GPU_Mesh));
-		cudaMemcpy(m_deviceMesh, m_hostMesh, sizeof(GPU_Mesh), cudaMemcpyHostToDevice);
-
-		cudaStatus = cudaGetLastError();
-		if (cudaStatus != cudaSuccess)
-		{
-			fprintf(stderr, "Mesh buffer copy to device failed: %s\n", cudaGetErrorString(cudaStatus));
-		}
-
-		GPU_Mesh::Triangle* dTris;
-		cudaMalloc(&dTris, m_hostMesh->numTris * sizeof(GPU_Mesh::Triangle));
-		cudaMemcpy(dTris, m_hostMesh->triangleBuffer, m_hostMesh->numTris * sizeof(GPU_Mesh::Triangle), cudaMemcpyHostToDevice);
-		cudaMemcpy(&m_deviceMesh->triangleBuffer, &dTris, sizeof(GPU_Mesh::Triangle*), cudaMemcpyHostToDevice);
-
-		cudaStatus = cudaGetLastError();
-		if (cudaStatus != cudaSuccess)
-		{
-			fprintf(stderr, "GPU_Mesh::Triangle* copy to device failed: %s\n", cudaGetErrorString(cudaStatus));
-		}
-
-		GPU_Mesh::MeshInfo* dMeshInfo;
-		cudaMalloc(&dMeshInfo, m_hostMesh->numMeshes * sizeof(GPU_Mesh::MeshInfo));
-		cudaMemcpy(dMeshInfo, m_hostMesh->meshInfoBuffer, m_hostMesh->numMeshes * sizeof(GPU_Mesh::MeshInfo), cudaMemcpyHostToDevice);
-		cudaMemcpy(&m_deviceMesh->meshInfoBuffer, &dMeshInfo, sizeof(GPU_Mesh::MeshInfo*), cudaMemcpyHostToDevice);
-
-		cudaStatus = cudaGetLastError();
-		if (cudaStatus != cudaSuccess)
-		{
-			fprintf(stderr, "GPU_Mesh::MeshInfo* copy to device failed: %s\n", cudaGetErrorString(cudaStatus));
-		}
-
-		GPU_Mesh::BVHNode* dBVHNodes;
-		cudaMalloc(&dBVHNodes, m_hostMesh->nodesUsed * sizeof(GPU_Mesh::BVHNode));
-		cudaMemcpy(dBVHNodes, m_hostMesh->bvhNode, m_hostMesh->nodesUsed * sizeof(GPU_Mesh::BVHNode), cudaMemcpyHostToDevice);
-		cudaMemcpy(&m_deviceMesh->bvhNode, &dBVHNodes, sizeof(GPU_Mesh::BVHNode*), cudaMemcpyHostToDevice);
-
-		uint32_t* dtriIdx;
-		cudaMalloc(&dtriIdx, m_hostMesh->numTris * sizeof(uint32_t));
-		cudaMemcpy(dtriIdx, m_hostMesh->triIdx, m_hostMesh->numTris * sizeof(uint32_t), cudaMemcpyHostToDevice);
-		cudaMemcpy(&m_deviceMesh->triIdx, &dtriIdx, sizeof(uint32_t*), cudaMemcpyHostToDevice);
-
-		cudaStatus = cudaGetLastError();
-		if (cudaStatus != cudaSuccess)
-		{
-			fprintf(stderr, "GPU_Mesh::BVHNode* copy to device failed: %s\n", cudaGetErrorString(cudaStatus));
-		}
-		*/
 	}
 
 	~CudaRenderer()
