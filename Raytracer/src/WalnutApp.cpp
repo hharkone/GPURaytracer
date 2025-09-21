@@ -8,6 +8,7 @@
 #include "Walnut/EntryPoint.h"
 #include "Walnut/Image.h"
 #include "Walnut/Timer.h"
+#include "imoguizmo.hpp"
 #include "Renderer.h"
 #include "Camera.h"
 #include "cuda_runtime.h"
@@ -62,7 +63,7 @@ public:
 
 	virtual void OnUIRender() override
 	{
-		//ImGui::ShowDemoWindow();
+		ImGui::ShowDemoWindow();
 		ImGuiIO& io = ImGui::GetIO();
 		io.FontGlobalScale = 0.8f;
 		ImGuiStyle& style = ImGui::GetStyle();
@@ -93,6 +94,7 @@ public:
 		if (ImGui::Button("Reset") || m_sceneChanged)
 		{
 			m_renderer.ResetFrameIndex();
+			m_scene.UploadMaterials();
 			m_sceneChanged = false;
 		}
 
@@ -184,17 +186,17 @@ public:
 		}
 		else
 		{
-			static int item_current_idx = 0;
-			const char* combo_preview_value = m_exrFilePaths.at(item_current_idx).path().string().c_str();
+			static int exr_item_index = 0;
+			const char* combo_exr_name = _strdup(m_exrFilePaths.at(exr_item_index).path().string().c_str());
 
-			if (ImGui::BeginCombo("EXR Image", combo_preview_value, ImGuiComboFlags_PopupAlignLeft))
+			if (ImGui::BeginCombo("EXR Image", combo_exr_name, ImGuiComboFlags_PopupAlignLeft))
 			{
 				for (int n = 0; n < m_exrFilePaths.size(); n++)
 				{
-					const bool is_selected = (item_current_idx == n);
+					const bool is_selected = (exr_item_index == n);
 					if (ImGui::Selectable(m_exrFilePaths.at(n).path().string().c_str(), is_selected))
 					{
-						item_current_idx = n;
+						exr_item_index = n;
 						m_scene.envImgPath = m_exrFilePaths.at(n).path().string();
 						m_scene.envImgPathChanged = true;
 						m_sceneChanged = true;
@@ -230,34 +232,46 @@ public:
 		ImGui::End();
 
 		ImGui::Begin("Materials");
-		for (size_t i = 1u; i <= m_scene.materialCount; i++)
+		for (size_t i = 1u; i < m_scene.materialCount; i++) //Skip first material index (Air)
 		{
 			ImGui::PushID((int)i);
 			ImGui::AlignTextToFramePadding();
 
 			Material& mat = m_scene.materials[i];
 
-			ImGui::Text("Material: %i", i);
-			ImGui::Text("Surface");
-			if (ImGui::ColorEdit3("Albedo", &(mat.albedo.x))) { m_sceneChanged = true; }
-			if (ImGui::SliderFloat("Vertex Color Influence", &(mat.vcolor), 0.0f, 1.0f, "%.3f")) { m_sceneChanged = true; }
-			if (ImGui::SliderFloat("Metalness", &(mat.metalness), 0.0f, 1.0f, "%.3f")) { m_sceneChanged = true; }
-			if (ImGui::SliderFloat("Roughness", &(mat.roughness), 0.0f, 1.0f, "%.3f")) { m_sceneChanged = true; }
-			if (ImGui::SliderFloat("IOR", &mat.ior, 1.0f, 32.0f, "%.3f", flagLog)) { m_sceneChanged = true; }
-			ImGui::Text("Emission");
-			if (ImGui::ColorEdit3("Emission", &(mat.emission.x))) { m_sceneChanged = true; }
-			if (ImGui::SliderFloat("Emission Intensity", &(mat.emissionIntensity), 0.0f, 1000.0f, "%.3f", flagLog)) { m_sceneChanged = true; }
-			ImGui::Text("Transmission");
-			if (ImGui::ColorEdit3("Transmission Color", &(mat.transmissionColor.x))) { m_sceneChanged = true; }
-			if (ImGui::SliderFloat("Transmission", &mat.transmission, 0.0f, 1.0f, "%.3f")) { m_sceneChanged = true; }
-			if (ImGui::SliderFloat("Transmission Roughness", &mat.transmissionRoughness, 0.0f, 1.0f, "%.3f")) { m_sceneChanged = true; }
-			if (ImGui::SliderFloat("Transmission Aberration", &mat.transmissionAberration, 0.0f, 1.0f, "%.3f")) { m_sceneChanged = true; }
-			if (ImGui::DragFloat("Transmission Density", &mat.transmissionDensity, 0.01f, 0.0f, 100.0f, "%.3f")) { m_sceneChanged = true; }
-			if (ImGui::SliderFloat("Inscatter", &mat.transmissionInscatter, 0.0f, 1.0f, "%.3f")) { m_sceneChanged = true; }
-			if (ImGui::SliderFloat("Inscatter Anisotropy", &mat.transmissionInscatterAnisotropy, -1.0f, 1.0f, "%.3f")) { m_sceneChanged = true; }
-			ImGui::Text("");
-			ImGui::Separator();
-			ImGui::Separator();
+			if (ImGui::CollapsingHeader("Material", ImGuiTreeNodeFlags_None))
+			{
+				ImGui::Text("Material: %i", i);
+				ImGui::Text("Surface");
+				if (ImGui::ColorEdit3("Albedo", &(mat.albedo.x))) { m_sceneChanged = true; }
+				if (ImGui::SliderFloat("Vertex Color Influence", &(mat.vcolor), 0.0f, 1.0f, "%.3f")) { m_sceneChanged = true; }
+				if (ImGui::SliderFloat("Metalness", &(mat.metalness), 0.0f, 1.0f, "%.3f")) { m_sceneChanged = true; }
+				if (ImGui::SliderFloat("Roughness", &(mat.roughness), 0.0f, 1.0f, "%.3f")) { m_sceneChanged = true; }
+				if (ImGui::SliderFloat("IOR", &mat.ior, 1.0f, 32.0f, "%.3f", flagLog)) { m_sceneChanged = true; }
+				ImGui::Text("Emission");
+				if (ImGui::ColorEdit3("Emission", &(mat.emission.x))) { m_sceneChanged = true; }
+				if (ImGui::SliderFloat("Emission Intensity", &(mat.emissionIntensity), 0.0f, 1000.0f, "%.3f", flagLog)) { m_sceneChanged = true; }
+				ImGui::Text("Transmission");
+				if (ImGui::ColorEdit3("Transmission Color", &(mat.transmissionColor.x))) { m_sceneChanged = true; }
+				if (ImGui::SliderFloat("Transmission", &mat.transmission, 0.0f, 1.0f, "%.3f")) { m_sceneChanged = true; }
+				if (ImGui::SliderFloat("Transmission Roughness", &mat.transmissionRoughness, 0.0f, 1.0f, "%.3f")) { m_sceneChanged = true; }
+				if (ImGui::SliderFloat("Transmission Aberration", &mat.transmissionAberration, 0.0f, 1.0f, "%.3f")) { m_sceneChanged = true; }
+				if (ImGui::DragFloat("Transmission Density", &mat.transmissionDensity, 0.01f, 0.0f, 100.0f, "%.3f")) { m_sceneChanged = true; }
+				if (ImGui::SliderFloat("Inscatter", &mat.transmissionInscatter, 0.0f, 1.0f, "%.3f")) { m_sceneChanged = true; }
+				if (ImGui::SliderFloat("Inscatter Anisotropy", &mat.transmissionInscatterAnisotropy, -1.0f, 1.0f, "%.3f")) { m_sceneChanged = true; }
+				ImGui::Text("");
+				ImGui::Separator();
+				ImGui::Separator();
+				
+			}
+			else
+			{
+				ImGui::SameLine();
+				ImGui::Text("Material: %i", i);
+				ImGui::SameLine();
+				if (ImGui::ColorEdit3("", &(mat.albedo.x), ImGuiColorEditFlags_NoInputs)) { m_sceneChanged = true; }
+			}
+
 			ImGui::PopID();
 		}
 		ImGui::End();
@@ -282,6 +296,33 @@ public:
 		bool cameraControls = (/*ImGui::IsWindowHovered() &&*/ io.MouseDown[1]);
 		m_camera.SetIsContextFocused(cameraControls);
 
+		// it is recommended to use a separate projection matrix since the values that work best
+		// can be very different from what works well with normal renderings
+		// e.g., with glm -> glm::perspective(glm::radians(90.0f), 1.0f, 0.1f, 1000.0f);
+		glm::mat4 gizmoProjection = glm::perspective(glm::radians(60.0f), 1.0f, 1.0f, 1000.0f);
+
+		// optional: configure color, axis length and more
+		ImOGuizmo::config.axisLengthScale = 1.5f;
+		ImOGuizmo::config.lineThicknessScale = 0.12f;
+		ImOGuizmo::config.hoverCircleRadiusScale = 1.0f;
+		ImOGuizmo::config.negativeRadiusScale = 0.5f;
+		ImOGuizmo::config.positiveRadiusScale = 0.5f;
+
+		// specify position and size of gizmo (and its window when using ImOGuizmo::BeginFrame())
+		const float widgetSize = 16.0f;
+		const float offset = widgetSize * 2.0f + 32.0f;
+		ImOGuizmo::SetRect(ImGui::GetWindowPos().x + offset/* x */, ImGui::GetWindowPos().y + m_viewportHeight - offset /* y */, widgetSize /* square size */);
+		//ImOGuizmo::BeginFrame(); // to use you own window remove this call 
+		// and wrap everything in between ImGui::Begin() and ImGui::End() instead
+
+		// optional: set distance to pivot (-> activates interaction)
+		glm::mat4 viewMat = m_camera.GetView();
+		if(ImOGuizmo::DrawGizmo(&(viewMat[0][0]), &gizmoProjection[0][0], 3.0f /* optional: default = 0.0f */))
+		{
+		// in case of user interaction viewMatrix gets updated
+			m_camera.SetView(viewMat);
+			m_sceneChanged = true;
+		}
 
 		ImGui::End();
 		ImGui::PopStyleVar();

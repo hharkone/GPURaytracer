@@ -384,7 +384,7 @@ __device__ HitInfo rayTriangleIntersect(const Ray& ray, const GPU_Mesh::Triangle
 	hit.geomNormal = normalize(geometricNormal);
 	hit.dst = dst;
 	hit.inside = (dot(geometricNormal, ray.direction) > 0.0f ? true : false);
-	hit.materialIndex = 1u;
+	hit.materialIndex = tri->matID;
 
 	return hit;
 }
@@ -542,12 +542,13 @@ __device__ float IntersectAABB_D(const Ray& ray, const HitInfo& hit, const float
 	if (tmax >= tmin && tmin < hit.dst && tmax > 0) return tmin; else return FLT_MAX;
 }
 
-__device__ void IntersectBVH(const Ray& ray, HitInfo& hit, const GPU_Mesh* vbo, const RenderSettings* rendererSettings)
+__device__ void IntersectBVH(const Ray& ray, HitInfo& hit, const Scene* scene, const RenderSettings* rendererSettings)
 {
 	uint32_t hitDepth = 0u;
 	uint32_t stackPtr = 0u;
 
-	GPU_Mesh::BVHNode* node = &vbo->bvhNode[0];
+	MeshBuffer* meshBuffer = (MeshBuffer*)&scene->sceneMesh.deviceMesh;
+	GPU_Mesh::BVHNode* node = (GPU_Mesh::BVHNode*)meshBuffer->bvhNode; 
 	GPU_Mesh::BVHNode* stack[32];
 	stack[stackPtr++] = 0u;
 
@@ -560,8 +561,8 @@ __device__ void IntersectBVH(const Ray& ray, HitInfo& hit, const GPU_Mesh* vbo, 
 		{
 			for (uint32_t i = 0; i < node->triCount; i++)
 			{
-				uint32_t triIndex = vbo->triIdx[node->leftFirst + i];
-				GPU_Mesh::Triangle* triangle = &vbo->triangleBuffer[triIndex];
+				uint32_t triIndex = ((uint32_t*)meshBuffer->indexBuffer)[node->leftFirst + i];
+				GPU_Mesh::Triangle* triangle = &((GPU_Mesh::Triangle*)meshBuffer->triangleBuffer)[triIndex];
 
 				hit = rayTriangleIntersect(ray, triangle);
 
@@ -585,8 +586,8 @@ __device__ void IntersectBVH(const Ray& ray, HitInfo& hit, const GPU_Mesh* vbo, 
 			continue;
 		}
 
-		GPU_Mesh::BVHNode* child1 = &vbo->bvhNode[node->leftFirst];
-		GPU_Mesh::BVHNode* child2 = &vbo->bvhNode[node->leftFirst + 1];
+		GPU_Mesh::BVHNode* child1 = &((GPU_Mesh::BVHNode*)meshBuffer->bvhNode)[node->leftFirst];
+		GPU_Mesh::BVHNode* child2 = &((GPU_Mesh::BVHNode*)meshBuffer->bvhNode)[node->leftFirst + 1];
 
 		float dist1 = IntersectAABB_D(ray, closestHit, child1->aabbMin, child1->aabbMax);
 		float dist2 = IntersectAABB_D(ray, closestHit, child2->aabbMin, child2->aabbMax);
@@ -626,7 +627,7 @@ __device__ void IntersectBVH(const Ray& ray, HitInfo& hit, const GPU_Mesh* vbo, 
 	hit.bvhDepth = hitDepth;
 }
 
-__device__ HitInfo intersect_scene(Ray& r, const Scene* scene, const GPU_Mesh* vbo, const RenderSettings* rendererSettings)
+__device__ HitInfo intersect_scene(Ray& r, const Scene* scene, const RenderSettings* rendererSettings)
 {
 	HitInfo hit;
 	HitInfo closestHit;
@@ -653,7 +654,7 @@ __device__ HitInfo intersect_scene(Ray& r, const Scene* scene, const GPU_Mesh* v
 		}
 	}
 
-	IntersectBVH(r, hit, vbo, rendererSettings);
+	IntersectBVH(r, hit, scene, rendererSettings);
 
 	if (hit.didHit && hit.dst < closestHit.dst)
 	{
@@ -760,7 +761,7 @@ __device__ float3 rgb2hsv(float3 c)
 	return make_float3(abs(q.z + (q.w - q.y) / (6.0 * d + e)), d / (q.x + e), q.x);
 }
 
-__device__ float3 radiance(Ray& r, uint32_t s1, uint32_t& s2, const Scene* scene, const RenderSettings* rendererSettings, const GPU_Mesh* vbo, float3& albedoOut, float3& normalOut, uint32_t i, const Camera_GPU* camera, const GPUImage* skyTex, const GPUImage* debugTex0, const GPUImage* debugTex1, const GPUImage* debugTex2) // Returns ray color
+__device__ float3 radiance(Ray& r, uint32_t s1, uint32_t& s2, const Scene* scene, const RenderSettings* rendererSettings, float3& albedoOut, float3& normalOut, uint32_t i, const Camera_GPU* camera, const GPUImage* skyTex, const GPUImage* debugTex0, const GPUImage* debugTex1, const GPUImage* debugTex2) // Returns ray color
 {
 	float3 accucolor = make_float3(0.0f, 0.0f, 0.0f); // Accumulates ray colour with each iteration through bounce loop
 	float3 accuAlbedo = make_float3(0.0f, 0.0f, 0.0f); // Accumulates ray colour with each iteration through bounce loop
@@ -769,8 +770,8 @@ __device__ float3 radiance(Ray& r, uint32_t s1, uint32_t& s2, const Scene* scene
 
 	bool totalInternalReflection = false;
 
-	Material hitMat = scene->materials[0];
-	Material volumeMat = scene->materials[0];
+	Material hitMat = ((Material*)scene->materialBufferPtr)[0];
+	Material volumeMat = ((Material*)scene->materialBufferPtr)[0];
 
 	float thickness = 0.0f;
 	uint16_t transmissionCount = 0u;
@@ -783,8 +784,8 @@ __device__ float3 radiance(Ray& r, uint32_t s1, uint32_t& s2, const Scene* scene
 
 	float rt = randomValue(s1);
 
-	float3 spectralNormalization = make_float3(2.428571428f, 2.318181818f, 2.318181818f);
-	float3 dispersionColor = srgbToLinear(spectral_gems(rt)) * spectralNormalization;
+	//float3 spectralNormalization = make_float3(2.428571428f, 2.318181818f, 2.318181818f);
+	//float3 dispersionColor = srgbToLinear(spectral_gems(rt)) * spectralNormalization;
 
 	//dispersionColor = make_float3(rt < 0.333f ? 1.0f : 0.0f, (rt >= 0.333f && rt < 0.666f) ? 1.0f : 0.0f, (rt >= 0.666f) ? 1.0f : 0.0f) * 3.0f;
 
@@ -792,7 +793,7 @@ __device__ float3 radiance(Ray& r, uint32_t s1, uint32_t& s2, const Scene* scene
 	for (size_t b = 0; b < rendererSettings->bounces; b++)
 	{
 		// Test ray for intersection with scene
-		hit = intersect_scene(r, scene, vbo, rendererSettings);
+		hit = intersect_scene(r, scene, rendererSettings);
 
 		if (rendererSettings->bvhDebug)
 		{
@@ -826,8 +827,8 @@ __device__ float3 radiance(Ray& r, uint32_t s1, uint32_t& s2, const Scene* scene
 		//accucolor = make_float3(debug);
 		//accucolor = fn;
 		//break;
-
-		hitMat = scene->materials[hit.materialIndex];
+		//hitMat = ((Material*)scene->materialBufferPtr)[hit.materialIndex];
+		hitMat = ((Material*)scene->materialBufferPtr)[hit.materialIndex];
 
 		if (hit.inside && transmissionCount <= 0u)
 		{
@@ -836,7 +837,7 @@ __device__ float3 radiance(Ray& r, uint32_t s1, uint32_t& s2, const Scene* scene
 		}
 
 		uint16_t prevMatIndex = clamp(transmissionCount, (uint16_t)0u, (uint16_t)19u);
-		volumeMat = scene->materials[matIndexMap[prevMatIndex]];
+		volumeMat = ((Material*)scene->materialBufferPtr)[matIndexMap[prevMatIndex]];
 
 		float iorDiffF = fmaxf(fmaxf(hitMat.ior, volumeMat.ior) / fminf(hitMat.ior, volumeMat.ior), 1.0f);
 		float iorDiff = hitMat.ior / volumeMat.ior;// / volumeMat.ior;
@@ -845,23 +846,23 @@ __device__ float3 radiance(Ray& r, uint32_t s1, uint32_t& s2, const Scene* scene
 		if (hit.inside && transmissionCount <= 1u) //Interface to air
 		{
 			iorDiffF = hitMat.ior;
-			iorDiff = 1.0f / hitMat.ior;
+			iorDiff = hitMat.ior;//1.0f / hitMat.ior;
 		}
 
 		//if (r.inVolumeMat != -1)
-		{
+		//{
 			
 			
 			//volumeMat = scene->materials[r.inVolumeMat];
 			//iorDiff = fmaxf(hitMat.ior / volumeMat.ior, 1.0f);
 
 			//if (hit.inside && transmissionCount <= 1u) //Interface to air
-			{
+			//{
 				//iorDiff = hitMat.ior;
-			}
+			//}
 
 			//disperseIor = iorDiff + (1.0f - rt) * hitMat.transmissionAberration * (iorDiff - 1.0f);
-		}
+		//}
 		//else
 		//{
 		//	volumeMat = scene->air;
@@ -987,7 +988,7 @@ __device__ float3 radiance(Ray& r, uint32_t s1, uint32_t& s2, const Scene* scene
 
 		mask *= 1.0f / p;
 
-		r.origin = hit.hitPoint + flippedGeometricNormal * 0.00001f;
+		r.origin = hit.hitPoint + flippedGeometricNormal * 0.0001f;
 		r.direction = normalize(lerp(diffuseDir, specularDir, isSpecularBounce));
 
 		if (isTransmissionBounce)
@@ -1000,7 +1001,7 @@ __device__ float3 radiance(Ray& r, uint32_t s1, uint32_t& s2, const Scene* scene
 				matIndexMap[transmissionCount] = hit.materialIndex;
 				//mask = mask * volumeAbsorptionColor;
 
-				r.origin = hit.hitPoint + flippedGeometricNormal * -0.00001f;
+				r.origin = hit.hitPoint + flippedGeometricNormal * -0.0001f;
 				r.direction = normalize(transmissionDir);
 				/*
 				if (transmissionCount > 0u)
@@ -1018,7 +1019,7 @@ __device__ float3 radiance(Ray& r, uint32_t s1, uint32_t& s2, const Scene* scene
 				transmissionCount = max(transmissionCount, 0u);
 				//mask = mask * volumeAbsorptionColor;
 				//matIndexMap[transmissionCount] = 0;
-				r.origin = hit.hitPoint + flippedGeometricNormal * -0.0001f; // offset ray origin slightly to prevent self intersection
+				r.origin = hit.hitPoint + flippedGeometricNormal * -0.001f; // offset ray origin slightly to prevent self intersection
 				r.direction = normalize(transmissionDir);
 			}
 
@@ -1038,7 +1039,7 @@ __device__ float3 radiance(Ray& r, uint32_t s1, uint32_t& s2, const Scene* scene
 }
 
 __global__ void render_kernel(float4* buf, float3* albedoBuf, float3* normalBuf, uint32_t width, uint32_t height, const Camera_GPU camera, const Scene* scene,
-							   const RenderSettings* rendererSettings, uint32_t sampleIndex, const GPU_Mesh* vbo, const GPUImage skyTex, const GPUImage debugTex0, const GPUImage debugTex1, const GPUImage debugTex2)
+							   const RenderSettings* rendererSettings, uint32_t sampleIndex, const GPUImage skyTex, const GPUImage debugTex0, const GPUImage debugTex1, const GPUImage debugTex2)
 {
 	// Assign a CUDA thread to every pixel (x,y) blockIdx, blockDim and threadIdx are CUDA specific
 	// Keywords replaces nested outer loops in CPU code looping over image rows and image columns
@@ -1100,7 +1101,7 @@ __global__ void render_kernel(float4* buf, float3* albedoBuf, float3* normalBuf,
 	ray.direction = normalize(viewPoint - cameraPos);
 	ray.invDirection = make_float3(1.0f, 1.0f, 1.0f) / ray.direction;
 
-	finalBeauty += radiance(ray, s1, s2, scene, rendererSettings, vbo, finalAlbedo, finalNormal, i, &camera, &skyTex, &debugTex0, &debugTex1, &debugTex2);
+	finalBeauty += radiance(ray, s1, s2, scene, rendererSettings, finalAlbedo, finalNormal, i, &camera, &skyTex, &debugTex0, &debugTex1, &debugTex2);
 
 	// Write rgb value of pixel to image buffer on the GPU
 	float scale = (1.0f / ((float)(sampleIndex)));
@@ -1176,7 +1177,6 @@ void CudaRenderer::Compute(void)
 										  (Scene*)m_deviceScene.d_pointer(),
 										  (RenderSettings*)m_deviceSettings.d_pointer(),
 										  *m_sampleIndex,
-										  m_deviceMesh,
 										  m_imgLoaderEnv.gpuImage,
 										  m_imgLoaderTestTexture0.gpuImage,
 										  m_imgLoaderTestTexture1.gpuImage,

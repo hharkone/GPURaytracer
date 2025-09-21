@@ -26,7 +26,7 @@ public:
 		m_viewMat		  = new float[16];
 		m_localToWorldMat = new float[16];
 
-		m_hostMesh = new GPU_Mesh();
+		//m_hostMesh = new GPU_Mesh();
 		//m_hostMesh->LoadOBJFile("meshes/cube_quads.obj", 1u);
 		//m_hostMesh->LoadOBJFile("meshes/torus_simple.obj", 1u);
 		//m_hostMesh->LoadOBJFile("meshes/plank_high.OBJ", 1u);
@@ -39,9 +39,10 @@ public:
 		//m_hostMesh->LoadOBJFile("meshes/reclining_pan.obj", 1u);
 		//m_hostMesh->LoadOBJFile("meshes/offroad_tire.obj", 1u);
 		//m_hostMesh->LoadOBJFile("meshes/dragon3.obj", 1u);
-		m_hostMesh->LoadOBJFile("meshes/rk-62.obj", 1u);
-		m_hostMesh->BuildBVH();
-
+		//m_hostMesh->LoadOBJFile("meshes/rk-62.obj", 1u);
+		//m_hostMesh->LoadOBJFile("meshes/NVision.obj", 0u);
+		//m_hostMesh->BuildBVH();
+		
 		m_deviceScene.alloc(sizeof(Scene));
 		m_deviceSettings.alloc(sizeof(RenderSettings));
 
@@ -67,7 +68,7 @@ public:
 		{
 			fprintf(stderr, "ImageLoader: Data buffer copy to device failed: %s\n", cudaGetErrorString(cudaStatus));
 		}
-
+		/*
 		cudaMalloc(&m_deviceMesh, sizeof(GPU_Mesh));
 		cudaMemcpy(m_deviceMesh, m_hostMesh, sizeof(GPU_Mesh), cudaMemcpyHostToDevice);
 
@@ -114,6 +115,7 @@ public:
 		{
 			fprintf(stderr, "GPU_Mesh::BVHNode* copy to device failed: %s\n", cudaGetErrorString(cudaStatus));
 		}
+		*/
 	}
 
 	~CudaRenderer()
@@ -127,7 +129,6 @@ public:
 
 		m_deviceScene.free();
 		m_deviceSettings.free();
-		cudaFree(m_deviceMesh);
 	}
 
 	void SetHDRI(std::string path);
@@ -153,8 +154,8 @@ private:
 	float m_aperture;
 	float m_focusDist;
 	const Scene* m_scene = nullptr;
-	GPU_Mesh* m_hostMesh;
-	GPU_Mesh* m_deviceMesh;
+	//GPU_Mesh* m_hostMesh;
+	//GPU_Mesh* m_deviceMesh;
 	size_t m_bufferSize;
 	uint32_t* m_sampleIndex;
 	int* m_samples;

@@ -27,6 +27,7 @@ public:
 	float GetRotationSpeed();
 	void RecalculateProjection();
 	void RecalculateView();
+	void SetView(glm::mat4 v);
 	void RecalculateLocalToWorld();
 	void SetIsContextFocused(bool focus);
 

@@ -5,7 +5,7 @@
 
 struct GPUImage
 {
-    CUdeviceptr imageData_GPU;
+    CUdeviceptr imageData_GPU = 0;
     size_t width = 0u;
     size_t height = 0u;
 };

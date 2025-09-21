@@ -10,3 +10,6 @@
 [submodule "submodules/lodepng"]
 	path = submodules/lodepng
 	url = https://github.com/lvandeve/lodepng.git
+[submodule "submodules/imoguizmo"]
+	path = submodules/imoguizmo
+	url = https://github.com/fknfilewalker/imoguizmo

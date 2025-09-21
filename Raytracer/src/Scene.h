@@ -2,6 +2,8 @@
 
 #include <string>
 #include <cuda_runtime.h>
+#include "CudaBuffer.h"
+#include "GPU_Mesh.h"
 
 struct Material
 {
@@ -57,6 +59,14 @@ enum class EnvironmentType
 
 struct Scene
 {
+    Scene();
+    ~Scene();
+
+    void UploadMaterials();
+    void AddNewDefaultMaterial(size_t index);
+    void ImportMesh(std::string path);
+    void ImportMesh(std::string path, size_t overrideMaterial);
+
     TonemapSettings tonemap;
     EnvironmentType envType = EnvironmentType::EnvType_HDRI;
     bool envImgPathChanged = false;
@@ -75,16 +85,13 @@ struct Scene
     float skyRotation = 0.0f;
     float backgroundBrightness = 1.0f;
 
-    Material materials[9] =
+    //Material materialAir = Material{ { 1.0f, 1.0f,  1.0f  }, 0.0f, 0.0f, { 0.0f, 0.0f, 0.0f }, 0.0f, 1.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, { 0.0f, 0.0f, 0.0f }, 0.0f };
+
+    Material* materials = new Material[4]
     {
         //         Albedo,              vcolor amount, roughness, emission,            emission intensity, ior, trans, inscatter, inscatter anisotropy, trans rough, trans aber, trans dens, trans col,              metal
-        Material{ { 1.0f, 1.0f,  1.0f  }, 0.0f,        0.0f,      { 0.0f, 0.0f, 0.0f }, 0.0f,              1.0f, 1.0f, 0.0f,      0.0f,                 0.0f,        0.0f,       0.0f,       { 0.0f, 0.0f, 0.0f },   0.0f }, //Air
+        Material{ { 1.0f, 1.0f,  1.0f  }, 0.0f, 0.0f, { 0.0f, 0.0f, 0.0f }, 0.0f, 1.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, { 0.0f, 0.0f, 0.0f }, 0.0f },                                                                    //Air
         Material{ { 0.8f, 0.8f,  0.8f  }, 0.0f,        0.21f,     { 0.0f, 0.0f, 0.0f }, 0.0f,              1.5f, 0.0f, 0.0f,      0.0f,                 0.0f,        1.0f,       1.0f,       { 0.95f, 0.75f, 0.4f }, 0.0f }, //Diffuse
-        Material{ { 0.5f, 0.5f,  0.5f  }, 0.0f,        0.3f,      { 0.0f, 0.0f, 0.0f }, 0.0f,              1.5f, 0.0f, 0.0f,      0.0f,                 0.0f,        0.0f,       0.1f,       { 1.0f, 1.0f, 1.0f },   0.0f }, //Red	
-        Material{ { 0.5f, 0.7f,  0.8f  }, 0.0f,        0.1f,      { 0.0f, 0.0f, 0.0f }, 0.0f,              1.5f, 1.0f, 0.0f,      0.0f,                 0.0f,        0.0f,       0.1f,       { 0.3f, 0.6f, 0.7f },   0.0f }, //Blue
-        Material{ { 0.7f, 0.7f,  0.7f  }, 0.0f,        0.2f,      { 0.0f, 0.0f, 0.0f }, 0.0f,              1.5f, 0.0f, 0.0f,      0.0f,                 0.0f,        0.0f,       0.1f,       { 1.0f, 1.0f, 1.0f },   0.0f }, //White
-        Material{ { 1.0f, 0.9f,  0.6f  }, 0.0f,        0.1f,      { 0.0f, 0.0f, 0.0f }, 0.0f,              1.5f, 0.0f, 0.0f,      0.0f,                 0.0f,        0.0f,       0.1f,       { 1.0f, 1.0f, 1.0f },   1.0f }, //Gold
-        Material{ { 0.98f,0.815f,0.75f }, 0.0f,        0.1f,      { 0.0f, 0.0f, 0.0f }, 0.0f,              1.5f, 0.0f, 0.0f,      0.0f,                 0.0f,        0.0f,       0.1f,       { 1.0f, 1.0f, 1.0f },   1.0f }, //Copper
         Material{ { 0.0f, 0.0f,  0.0f  }, 0.0f,        0.1f,      { 1.0f, 0.8f, 0.6f }, 7.0f,              1.5f, 0.0f, 0.0f,      0.0f,                 0.0f,        0.0f,       0.1f,       { 1.0f, 1.0f, 1.0f },   0.0f }, //Light1
         Material{ { 0.0f, 0.0f,  0.0f  }, 0.0f,        0.1f,      { 0.6f, 0.8f, 1.0f }, 4.5f,              1.5f, 0.0f, 0.0f,      0.0f,                 0.0f,        0.0f,       0.1f,       { 1.0f, 1.0f, 1.0f },   0.0f }  //Light2
     };
@@ -92,20 +99,27 @@ struct Scene
     Sphere spheresSimple[2] =
     {
         //{ float radius, { float3 position }, { Material }}
-          Sphere{ 1.0f,  { 10.0f, 1.9f, -1.77f }, 8u},
+          Sphere{ 1.0f,  { 10.0f, 1.9f, -1.77f }, 3u},
           //Sphere{ 0.25f, {  0.0f,  0.0f,  0.0f  }, 7u},
           //Sphere{ 19.0f, {  0.0f, -19.0f, 0.0f  }, 1u},
-          Sphere{ 1.3f,  { -10.0f, 2.8f,  1.56f }, 7u}
+          Sphere{ 1.3f,  { -10.0f, 2.8f,  1.56f }, 2u}
     };
 
     Box boxSimple[2] =
     {
           //Box{ { 2.0f,  2.0f,   2.0f },  {  0.0f,  1.0f,  0.0f  }, 2u},
-          Box{ { 10.0f, 10.0f, 10.0f },  {  0.0f, -5.2f, 0.0f   }, 2u},
-          Box{ { 1.0f,  1.0f,   1.0f },  { -3.9f,  1.8f, -0.56f }, 3u}
+          Box{ { 10.0f, 10.0f, 10.0f },  {  0.0f, -5.2f, 0.0f   }, 1u},
+          Box{ { 1.0f,  1.0f,   1.0f },  { -3.9f,  1.8f, -0.56f }, 1u}
     };
 
-    size_t materialCount = 9u;
+    size_t materialCount = 4u;
     size_t sphereCount = 2u;
-    size_t boxCount = 2u;
+    size_t boxCount = 1u;
+
+    CUDABuffer materialBuffer;
+    CUdeviceptr materialBufferPtr;
+    GPU_Mesh sceneMesh;
+
+private:
+    void ResizeAndAddMaterials(size_t size);
 };

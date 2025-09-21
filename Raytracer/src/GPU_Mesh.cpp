@@ -1,10 +1,69 @@
 #include <iostream>
 #include <fstream>
 #include <memory>
+#include <map>
 
 #include "GPU_Mesh.h"
 
 //#define USE_UNOPTIMIZED_BVH_SPLITTING
+
+void GPU_Mesh::Upload()
+{
+/*
+    cudaMalloc(&m_deviceMesh, sizeof(GPU_Mesh));
+    cudaMemcpy(m_deviceMesh, m_hostMesh, sizeof(GPU_Mesh), cudaMemcpyHostToDevice);
+
+    cudaStatus = cudaGetLastError();
+    if (cudaStatus != cudaSuccess)
+    {
+        fprintf(stderr, "Mesh buffer copy to device failed: %s\n", cudaGetErrorString(cudaStatus));
+    }
+
+    GPU_Mesh::Triangle* dTris;
+    cudaMalloc(&dTris, m_hostMesh->numTris * sizeof(GPU_Mesh::Triangle));
+    cudaMemcpy(dTris, m_hostMesh->triangleBuffer, m_hostMesh->numTris * sizeof(GPU_Mesh::Triangle), cudaMemcpyHostToDevice);
+    cudaMemcpy(&m_deviceMesh->triangleBuffer, &dTris, sizeof(GPU_Mesh::Triangle*), cudaMemcpyHostToDevice);
+
+    cudaStatus = cudaGetLastError();
+    if (cudaStatus != cudaSuccess)
+    {
+        fprintf(stderr, "GPU_Mesh::Triangle* copy to device failed: %s\n", cudaGetErrorString(cudaStatus));
+    }
+
+    GPU_Mesh::MeshInfo* dMeshInfo;
+    cudaMalloc(&dMeshInfo, m_hostMesh->numMeshes * sizeof(GPU_Mesh::MeshInfo));
+    cudaMemcpy(dMeshInfo, m_hostMesh->meshInfoBuffer, m_hostMesh->numMeshes * sizeof(GPU_Mesh::MeshInfo), cudaMemcpyHostToDevice);
+    cudaMemcpy(&m_deviceMesh->meshInfoBuffer, &dMeshInfo, sizeof(GPU_Mesh::MeshInfo*), cudaMemcpyHostToDevice);
+
+    cudaStatus = cudaGetLastError();
+    if (cudaStatus != cudaSuccess)
+    {
+        fprintf(stderr, "GPU_Mesh::MeshInfo* copy to device failed: %s\n", cudaGetErrorString(cudaStatus));
+    }
+
+    GPU_Mesh::BVHNode* dBVHNodes;
+    cudaMalloc(&dBVHNodes, m_hostMesh->nodesUsed * sizeof(GPU_Mesh::BVHNode));
+    cudaMemcpy(dBVHNodes, m_hostMesh->bvhNode, m_hostMesh->nodesUsed * sizeof(GPU_Mesh::BVHNode), cudaMemcpyHostToDevice);
+    cudaMemcpy(&m_deviceMesh->bvhNode, &dBVHNodes, sizeof(GPU_Mesh::BVHNode*), cudaMemcpyHostToDevice);
+
+    uint32_t* dtriIdx;
+    cudaMalloc(&dtriIdx, m_hostMesh->numTris * sizeof(uint32_t));
+    cudaMemcpy(dtriIdx, m_hostMesh->triIdx, m_hostMesh->numTris * sizeof(uint32_t), cudaMemcpyHostToDevice);
+    cudaMemcpy(&m_deviceMesh->triIdx, &dtriIdx, sizeof(uint32_t*), cudaMemcpyHostToDevice);
+*/
+
+    CUDAbvhBuffer.alloc_and_upload(bvhNode, deviceMesh.nodesUsed);
+    deviceMesh.bvhNode = CUDAbvhBuffer.d_pointer();
+
+    CUDAindexBuffer.alloc_and_upload(triIdx, deviceMesh.numTris);
+    deviceMesh.indexBuffer = CUDAindexBuffer.d_pointer();
+
+    CUDAtriangleBuffer.alloc_and_upload(triangleBuffer, deviceMesh.numTris);
+    deviceMesh.triangleBuffer = CUDAtriangleBuffer.d_pointer();
+
+    CUDAmeshInfoBuffer.alloc_and_upload(meshInfoBuffer, 1u);
+    deviceMesh.meshInfoBuffer = CUDAmeshInfoBuffer.d_pointer();
+}
 
 void GPU_Mesh::CalculateBbox(GPU_Mesh::MeshInfo& meshInfo)
 {
@@ -28,13 +87,19 @@ void GPU_Mesh::CalculateBbox(GPU_Mesh::MeshInfo& meshInfo)
     }
 }
 
-void GPU_Mesh::LoadOBJFile(const std::string& path, uint16_t materialIndex)
+void GPU_Mesh::LoadOBJFile(const std::string& path)
+{
+    LoadOBJFile(path, -1);
+}
+
+void GPU_Mesh::LoadOBJFile(const std::string& path, int materialIndex)
 {
     filepath = path;
 
     if (TryLoadCache(filepath))
     {
         loadedFromCache = true;
+        Upload();
         return;
     }
 
@@ -49,16 +114,20 @@ void GPU_Mesh::LoadOBJFile(const std::string& path, uint16_t materialIndex)
     }
 
     std::string line;
+    std::string matString;
 
     float x, y, z, r, g, b;
     int f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12;
-    std::string s;
+    uint16_t materialGroup = 0u;
+    char s[256] = { 0 };
 
     std::vector<float3> pos;
     std::vector<float3> normal;
     std::vector<float3> color;
     std::vector<float2> uv;
     std::vector<int> tris;
+    std::vector<uint16_t> matIndex;
+    std::map<std::string, uint16_t> materialMap;
 
     while (std::getline(infile, line))
     {
@@ -86,6 +155,16 @@ void GPU_Mesh::LoadOBJFile(const std::string& path, uint16_t materialIndex)
         {
             if (sscanf_s(line.c_str(), "vt %f %f\n", &x, &y) == 2) // vertex UV
                 uv.push_back(make_float2(x, y));
+        }
+        else if (test == "g ") // face material
+        {
+            if (sscanf_s(line.c_str(), "%*s %s\n", s, (unsigned)line.length()) == 1)
+            {
+                if (!materialMap[s]) // if this material name is not found, add it and incement unique material count.
+                {
+                    materialMap.insert_or_assign(s, materialGroup++);
+                }
+            }
         }
         else if (test == "f ")
         {
@@ -118,7 +197,7 @@ void GPU_Mesh::LoadOBJFile(const std::string& path, uint16_t materialIndex)
 
 
                 importTriangleCount += 2u;
-                numTris += 2u;
+                deviceMesh.numTris += 2u;
             }
             //Tris, with UV
             else if (sscanf_s(line.c_str(), "f %i/%i/%i %i/%i/%i %i/%i/%i\n", &f1, &f2, &f3, &f4, &f5, &f6, &f7, &f8, &f9) == 9)
@@ -136,7 +215,7 @@ void GPU_Mesh::LoadOBJFile(const std::string& path, uint16_t materialIndex)
                 tris.push_back(f8 - 1);
 
                 importTriangleCount += 1u;
-                numTris++;
+                deviceMesh.numTris++;
             }
             //Quads, no UV
             else if (sscanf_s(line.c_str(), "f %i//%i %i//%i %i//%i %i//%i\n", &f1, &f2, &f3, &f4, &f5, &f6, &f7, &f8) == 8 && uv.size() == 0)
@@ -160,7 +239,7 @@ void GPU_Mesh::LoadOBJFile(const std::string& path, uint16_t materialIndex)
                 tris.push_back(f2 - 1);
 
                 importTriangleCount += 2u;
-                numTris += 2u;
+                deviceMesh.numTris += 2u;
             }
             //Tris, no UV
             else if (sscanf_s(line.c_str(), "f %i//%i %i//%i %i//%i\n", &f1, &f2, &f3, &f4, &f5, &f6) == 6 && uv.size() == 0)
@@ -175,9 +254,12 @@ void GPU_Mesh::LoadOBJFile(const std::string& path, uint16_t materialIndex)
                 tris.push_back(f6 - 1);
 
                 importTriangleCount += 1u;
-                numTris++;
+                deviceMesh.numTris++;
             }
-
+            if (!materialMap.empty())
+            {
+                matIndex.push_back(materialGroup);
+            }
         }
 
     }
@@ -187,10 +269,10 @@ void GPU_Mesh::LoadOBJFile(const std::string& path, uint16_t materialIndex)
 
     uint32_t meshTriCount = 0u;
 
-    for (uint32_t i = 0u; i < numMeshes; i++)
-    {
-        meshTriCount += meshInfoBuffer[i].triangleCount;
-    }
+    //for (uint32_t i = 0u; i < deviceMesh.numMeshes; i++)
+    //{
+    //    meshTriCount += meshInfoBuffer[i].triangleCount;
+    //}
 
     //Allocate new triangle buffer that can encompass all previous triangles + new imported ones.
     Triangle* newTriBuf = new Triangle[meshTriCount + importTriangleCount];
@@ -218,6 +300,22 @@ void GPU_Mesh::LoadOBJFile(const std::string& path, uint16_t materialIndex)
             newTri.n2 = normal[tris[j + 5u]];
             newTri.uv2 = { 0.0f, 0.0f };
 
+            if (!(materialIndex == -1))
+            {
+                newTri.matID = (uint16_t)materialIndex;
+            }
+            else
+            {
+                if (!matIndex.empty())
+                {
+                    newTri.matID = matIndex[i] + 4u;
+                }
+                else
+                {
+                    newTri.matID = 2u;
+                }
+            }
+
             std::memcpy(&newTriBuf[meshTriCount + i], &newTri, sizeof(Triangle));
         }
     }
@@ -242,6 +340,22 @@ void GPU_Mesh::LoadOBJFile(const std::string& path, uint16_t materialIndex)
             newTri.n2 = normal[tris[j + 7u]];
             newTri.uv2 = uv[tris[j + 8u]];
 
+            if (!(materialIndex == -1))
+            {
+                newTri.matID = (uint16_t)materialIndex;
+            }
+            else
+            {
+                if (!matIndex.empty())
+                {
+                    newTri.matID = matIndex[i] + 4u;
+                }
+                else
+                {
+                    newTri.matID = 2u;
+                }
+            }
+
             std::memcpy(&newTriBuf[meshTriCount + i], &newTri, sizeof(Triangle));
         }
     }
@@ -253,17 +367,23 @@ void GPU_Mesh::LoadOBJFile(const std::string& path, uint16_t materialIndex)
     MeshInfo newMeshInfo;
     newMeshInfo.firstTriangleIndex = meshTriCount;
     newMeshInfo.triangleCount = importTriangleCount;
-    newMeshInfo.materialIndex = materialIndex;
+    //newMeshInfo.materialIndex = materialIndex;
+    newMeshInfo.materialCount = (materialGroup == 0 ? 1u : materialGroup + 1u);
 
     CalculateBbox(newMeshInfo);
 
-    MeshInfo* newMeshInfoBuf = new MeshInfo[numMeshes + 1u];
-    std::memcpy(newMeshInfoBuf, meshInfoBuffer, numMeshes * sizeof(MeshInfo));
-    std::memcpy(&newMeshInfoBuf[numMeshes], &newMeshInfo, sizeof(MeshInfo));
+    meshInfoBuffer = &newMeshInfo;
 
-    meshInfoBuffer = newMeshInfoBuf;
+    //MeshInfo* newMeshInfoBuf = new MeshInfo[deviceMesh.numMeshes + 1u];
+    //std::memcpy(newMeshInfoBuf, meshInfoBuffer, deviceMesh.numMeshes * sizeof(MeshInfo));
+    //std::memcpy(&newMeshInfoBuf[deviceMesh.numMeshes], &newMeshInfo, sizeof(MeshInfo));
 
-    numMeshes++;
+    //meshInfoBuffer = newMeshInfoBuf;
+
+    //deviceMesh.numMeshes++;
+
+    BuildBVH();
+    Upload();
 }
 
 void GPU_Mesh::UpdateNodeBounds(uint32_t nodeIdx)
@@ -388,8 +508,8 @@ void GPU_Mesh::Subdivide(uint32_t nodeIdx)
     if (leftCount == 0 || leftCount == node.triCount) return;
 
     // create child nodes
-    uint32_t leftChildIdx = nodesUsed++;
-    uint32_t rightChildIdx = nodesUsed++;
+    uint32_t leftChildIdx = deviceMesh.nodesUsed++;
+    uint32_t rightChildIdx = deviceMesh.nodesUsed++;
     bvhNode[leftChildIdx].leftFirst = node.leftFirst;
     bvhNode[leftChildIdx].triCount = leftCount;
     bvhNode[rightChildIdx].leftFirst = i;
@@ -415,8 +535,6 @@ std::string CacheFilePath(const std::string& filename)
 
 bool GPU_Mesh::TryLoadCache(const std::string& filename)
 {
-    //return false;
-
     std::string cacheFile = CacheFilePath(filename);
 
     FILE* fp = fopen(cacheFile.c_str(), "rb");
@@ -429,20 +547,20 @@ bool GPU_Mesh::TryLoadCache(const std::string& filename)
     // BVH has been built already and stored in a file, read the file
     fprintf(stderr, "Cache exists, reading the pre-calculated BVH data...\n");
 
-    if (1 != fread(&nodesUsed, sizeof(uint32_t), 1, fp)) goto CACHE_FAIL;
-    if (1 != fread(&numTris, sizeof(uint32_t), 1, fp)) goto CACHE_FAIL;
+    if (1 != fread(&deviceMesh.nodesUsed, sizeof(uint32_t), 1, fp)) goto CACHE_FAIL;
+    if (1 != fread(&deviceMesh.numTris,   sizeof(uint32_t), 1, fp)) goto CACHE_FAIL;
 
-    bvhNode = new BVHNode[nodesUsed];
-    triIdx = new uint32_t[numTris];
-    triangleBuffer = new Triangle[numTris];
+    bvhNode = new BVHNode[deviceMesh.nodesUsed];
+    triIdx = new uint32_t[deviceMesh.numTris];
+    triangleBuffer = new Triangle[deviceMesh.numTris];
     meshInfoBuffer = new MeshInfo[1u];
-    triangleCentroidScratchBuffer = new float3[numTris];
+    //triangleCentroidScratchBuffer = new float3[deviceMesh.numTris];
 
-    if (nodesUsed != fread(bvhNode, sizeof(BVHNode), nodesUsed, fp)) goto CACHE_FAIL;
-    if (numTris != fread(triIdx, sizeof(uint32_t), numTris, fp)) goto CACHE_FAIL;
-    if (numTris != fread(triangleBuffer, sizeof(Triangle), numTris, fp)) goto CACHE_FAIL;
+    if (deviceMesh.nodesUsed != fread(bvhNode, sizeof(BVHNode), deviceMesh.nodesUsed, fp)) goto CACHE_FAIL;
+    if (deviceMesh.numTris != fread(triIdx, sizeof(uint32_t), deviceMesh.numTris, fp)) goto CACHE_FAIL;
+    if (deviceMesh.numTris != fread(triangleBuffer, sizeof(Triangle), deviceMesh.numTris, fp)) goto CACHE_FAIL;
     if (1 != fread(meshInfoBuffer, sizeof(MeshInfo), 1, fp)) goto CACHE_FAIL;
-    if (numTris != fread(triangleCentroidScratchBuffer, sizeof(float3), numTris, fp)) goto CACHE_FAIL;
+    //if (deviceMesh.numTris != fread(triangleCentroidScratchBuffer, sizeof(float3), deviceMesh.numTris, fp)) goto CACHE_FAIL;
 
     fclose(fp);
     fprintf(stderr, "BVH cache read.\n");
@@ -459,24 +577,24 @@ CACHE_FAIL:
 bool GPU_Mesh::TrySaveCache(const std::string& filename)
 {
     std::string cacheFile = CacheFilePath(filename);
-    FILE* fp = fopen(cacheFile.c_str(), "rb");
-
-    if (!fp)
+    //FILE* fp = fopen(cacheFile.c_str(), "rb");
+    FILE* fp = fopen(cacheFile.c_str(), "wb");
+    //if (!fp)
     {
         // Now store the results, if possible...
         fprintf(stderr, "Writing BVH data...\n");
 
-        fp = fopen(cacheFile.c_str(), "wb");
+        
         if (!fp) return false;
 
-        if (1 != fwrite(&nodesUsed, sizeof(uint32_t), 1, fp)) goto CACHE_FAIL;
-        if (1 != fwrite(&numTris, sizeof(uint32_t), 1, fp)) goto CACHE_FAIL;
+        if (1 != fwrite(&deviceMesh.nodesUsed, sizeof(uint32_t), 1, fp)) goto CACHE_FAIL;
+        if (1 != fwrite(&deviceMesh.numTris,   sizeof(uint32_t), 1, fp)) goto CACHE_FAIL;
 
-        if (nodesUsed != fwrite(bvhNode, sizeof(BVHNode), nodesUsed, fp)) goto CACHE_FAIL;
-        if (numTris != fwrite(triIdx, sizeof(uint32_t), numTris, fp)) goto CACHE_FAIL;
-        if (numTris != fwrite(triangleBuffer, sizeof(Triangle), numTris, fp)) goto CACHE_FAIL;
+        if (deviceMesh.nodesUsed != fwrite(bvhNode, sizeof(BVHNode), deviceMesh.nodesUsed, fp)) goto CACHE_FAIL;
+        if (deviceMesh.numTris != fwrite(triIdx, sizeof(uint32_t), deviceMesh.numTris, fp)) goto CACHE_FAIL;
+        if (deviceMesh.numTris != fwrite(triangleBuffer, sizeof(Triangle), deviceMesh.numTris, fp)) goto CACHE_FAIL;
         if (1 != fwrite(meshInfoBuffer, sizeof(MeshInfo), 1, fp)) goto CACHE_FAIL;
-        if (numTris != fwrite(triangleCentroidScratchBuffer, sizeof(float3), numTris, fp)) goto CACHE_FAIL;
+        //if (deviceMesh.numTris != fwrite(triangleCentroidScratchBuffer, sizeof(float3), deviceMesh.numTris, fp)) goto CACHE_FAIL;
 
         fclose(fp);
         fprintf(stderr, "BVH cache written.\n");
@@ -497,18 +615,18 @@ void GPU_Mesh::BuildBVH()
         return;
     }
 
-    if (numTris == 0)
+    if (deviceMesh.numTris == 0)
     {
         return;
     }
 
-    bvhNode = new BVHNode[numTris * 2 - 1];
-    triIdx = new uint32_t[numTris];
-    triangleCentroidScratchBuffer = new float3[numTris];
+    bvhNode = new BVHNode[deviceMesh.numTris * 2 - 1];
+    triIdx = new uint32_t[deviceMesh.numTris];
+    triangleCentroidScratchBuffer = new float3[deviceMesh.numTris];
 
     //bvhNodeVector.resize(numTris * 2 - 1);
 
-    for (uint32_t i = 0; i < numTris; i++)
+    for (uint32_t i = 0; i < deviceMesh.numTris; i++)
     {
         triangleCentroidScratchBuffer[i] = (triangleBuffer[i].pos0 + triangleBuffer[i].pos1 + triangleBuffer[i].pos2) * 0.3333333f;
         triIdx[i] = i;
@@ -519,19 +637,19 @@ void GPU_Mesh::BuildBVH()
     //BVHNode& root = bvhNodeVector.at(rootNodeIdx);
 
     root.leftFirst = 0;
-    root.triCount = numTris;
+    root.triCount = deviceMesh.numTris;
 
     UpdateNodeBounds(rootNodeIdx);
     // subdivide recursively
     Subdivide(rootNodeIdx);
 
     //Resize
-    BVHNode* newArr = new BVHNode[nodesUsed];
-    memcpy(newArr, bvhNode, nodesUsed * sizeof(BVHNode));
+    BVHNode* newArr = new BVHNode[deviceMesh.nodesUsed];
+    memcpy(newArr, bvhNode, deviceMesh.nodesUsed * sizeof(BVHNode));
     delete[] bvhNode;
     bvhNode = newArr;
 
-    fprintf(stderr, "BVH built using: %i nodes\n", nodesUsed);
+    fprintf(stderr, "BVH built using: %i nodes\n", deviceMesh.nodesUsed);
     /*
     std::fstream fOut;
     fOut.open("debug_output.txt", std::ios::out | std::ios::trunc);
@@ -552,11 +670,16 @@ void GPU_Mesh::BuildBVH()
     }
 }
 
+GPU_Mesh::GPU_Mesh()
+{
+    //deviceMesh = new MeshBuffer();
+}
+
 GPU_Mesh::~GPU_Mesh()
 {
     delete[] bvhNode;
     delete[] triangleBuffer;
     delete[] meshInfoBuffer;
-    delete[] triangleCentroidScratchBuffer;
     delete[] triIdx;
+    if (triangleCentroidScratchBuffer != nullptr) { delete[] triangleCentroidScratchBuffer; }
 }

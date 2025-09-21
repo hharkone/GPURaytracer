@@ -130,7 +130,7 @@ void Camera::OnResize(uint32_t width, uint32_t height)
 	m_ViewportWidth = width;
 	m_ViewportHeight = height;
 
-	RecalculateView();
+	//RecalculateView();
 	RecalculateProjection();
 	RecalculateLocalToWorld();
 
@@ -165,7 +165,11 @@ void Camera::RecalculateView()
 	m_View = glm::lookAt(m_Position, m_Position + m_ForwardDirection, glm::vec3(0, 1, 0));
 	m_InverseView = glm::inverse(m_View);
 }
-
+void Camera::SetView(glm::mat4 v)
+{
+	m_View = v;
+	m_InverseView = glm::inverse(m_View);
+}
 void Camera::RecalculateLocalToWorld()
 {
 	m_localToWorld = glm::inverse(m_Projection * m_View);
