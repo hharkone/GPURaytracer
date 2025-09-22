@@ -76,14 +76,18 @@ public:
 		ImGuiColorEditFlags misc_flags = ImGuiColorEditFlags_HDR;
 		static ImGuiSliderFlags flags = ImGuiSliderFlags_None;
 		static ImGuiSliderFlags flagLog = ImGuiSliderFlags_Logarithmic;
-
-		ImGui::SetColorEditOptions(ImGuiColorEditFlags_Float | ImGuiColorEditFlags_HDR | ImGuiColorEditFlags_PickerHueWheel);
+		ImGui::SetColorEditOptions(ImGuiColorEditFlags_Float | ImGuiColorEditFlags_PickerHueWheel | ImGuiColorEditFlags_DisplayHSV);
 
 		ImGui::Begin("Settings");
 		ImGui::Text("CUDA Device: %s", prop.name);
 		ImGui::Text("Last render time: %.3f ms   FPS: %i", m_renderTimeMs, (1000u / std::max((uint32_t)m_renderTimeMs, 1u)));
 		ImGui::Text("%i Million primary rays per second", m_raysPerSec);
 		ImGui::Text("Sample Index: %i", m_renderer.GetFrameIndex());
+
+		const char* resolutionFactors[] = { "1:1", "1:2", "1:3", "1:4" };
+		static int resolutionFactorIndex = 1;
+		ImGui::Combo("Resolution", &resolutionFactorIndex, resolutionFactors, IM_ARRAYSIZE(resolutionFactors));
+		ImGui::Text("(%i x %i)", m_viewportWidth, m_viewportHeight);
 
 		ImGui::Checkbox("Accumulate", &m_renderer.GetSettings().accumulate);
 		ImGui::Checkbox("Use OPTIX Denoiser", &m_renderer.GetSettings().denoise);
@@ -279,14 +283,14 @@ public:
 		ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
 		ImGui::Begin("Viewport");
 
-		m_viewportWidth = (uint32_t)ImGui::GetContentRegionAvail().x;
-		m_viewportHeight = (uint32_t)ImGui::GetContentRegionAvail().y;
+		m_viewportWidth = (uint32_t)ImGui::GetContentRegionAvail().x / (resolutionFactorIndex + 1);
+		m_viewportHeight = (uint32_t)ImGui::GetContentRegionAvail().y / (resolutionFactorIndex + 1);
 
 		auto image = m_renderer.GetFinalImage();
 
 		if (image)
 		{
-			ImGui::Image(image->GetDescriptorSet(), { (float)image->GetWidth(), (float)image->GetHeight() } );
+			ImGui::Image(image->GetDescriptorSet(), { (float)image->GetWidth() * (float)(resolutionFactorIndex + 1), (float)image->GetHeight() * (float)(resolutionFactorIndex + 1) });
 			//inverted
 			//ImGui::Image(image->GetDescriptorSet(),
 			//	{ (float)image->GetWidth(), (float)image->GetHeight() },
