@@ -41,11 +41,6 @@ public:
 		//m_imgLoaderTestTexture1.LoadImage_PNG("Images/OffroadTire/Offroad_Tire_Clean_ORM.png");
 		//m_imgLoaderTestTexture2.LoadImage_PNG("Images/OffroadTire/Offroad_Tire_Clean_Normal.png");
 
-		if (scene->envImgPathChanged)
-		{
-			m_imgLoaderEnv.LoadImage_EXR(scene->envImgPath);
-		}
-
 		cudaStatus = cudaGetLastError();
 		if (cudaStatus != cudaSuccess)
 		{
