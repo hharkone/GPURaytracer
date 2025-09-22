@@ -285,6 +285,8 @@ public:
 
 		m_viewportWidth = (uint32_t)ImGui::GetContentRegionAvail().x / (resolutionFactorIndex + 1);
 		m_viewportHeight = (uint32_t)ImGui::GetContentRegionAvail().y / (resolutionFactorIndex + 1);
+		uint32_t actualHeight = (uint32_t)ImGui::GetContentRegionAvail().y;
+		// (resolutionFactorIndex + 1)
 
 		auto image = m_renderer.GetFinalImage();
 
@@ -315,7 +317,8 @@ public:
 		// specify position and size of gizmo (and its window when using ImOGuizmo::BeginFrame())
 		const float widgetSize = 16.0f;
 		const float offset = widgetSize * 2.0f + 32.0f;
-		ImOGuizmo::SetRect(ImGui::GetWindowPos().x + offset/* x */, ImGui::GetWindowPos().y + m_viewportHeight - offset /* y */, widgetSize /* square size */);
+
+		ImOGuizmo::SetRect(ImGui::GetWindowPos().x + offset, ImGui::GetWindowPos().y - offset + actualHeight, widgetSize);
 		//ImOGuizmo::BeginFrame(); // to use you own window remove this call 
 		// and wrap everything in between ImGui::Begin() and ImGui::End() instead
 
@@ -323,7 +326,7 @@ public:
 		glm::mat4 viewMat = m_camera.GetView();
 		if(ImOGuizmo::DrawGizmo(&(viewMat[0][0]), &gizmoProjection[0][0], 3.0f /* optional: default = 0.0f */))
 		{
-		// in case of user interaction viewMatrix gets updated
+			// in case of user interaction viewMatrix gets updated
 			m_camera.SetView(viewMat);
 			m_sceneChanged = true;
 		}

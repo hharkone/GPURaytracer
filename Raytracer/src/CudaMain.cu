@@ -282,6 +282,10 @@ __device__ float3 getEnvironmentLight(const Ray& ray, const Scene* scene, const 
 
 			return c * scene->skyColor * scene->skyBrightness;
 		}
+		default:
+		{
+			return { 0.0f, 0.0f, 0.0f };
+		}
 	}
 }
 
@@ -775,13 +779,10 @@ __device__ float3 radiance(Ray& r, uint32_t s1, uint32_t& s2, const Scene* scene
 
 	float thickness = 0.0f;
 	uint16_t transmissionCount = 0u;
-	uint32_t s = 2345u;
 	float bvhDepth = 0.0f;
 	uint16_t matIndexMap[20u] = { 0u };
 	float3 debug = make_float3(0.0f, 0.0f, 0.0f);
 	HitInfo hit;
-	HitInfo previousHit;
-
 	float rt = randomValue(s1);
 
 	//float3 spectralNormalization = make_float3(2.428571428f, 2.318181818f, 2.318181818f);

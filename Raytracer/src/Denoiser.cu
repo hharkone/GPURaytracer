@@ -183,7 +183,7 @@ void Denoiser::InitOptix(void* inputBeautyBuffer, void* inputAlbedoBuffer, void*
 	return;
 }
 
-void Denoiser::Denoise(const TonemapSettings* tonemapper, bool enabled)
+void Denoiser::Denoise(const TonemapSettings* tonemapper, bool enabled, bool temporalEnable)
 {
 	int tx = 8;
 	int ty = 8;
@@ -204,14 +204,17 @@ void Denoiser::Denoise(const TonemapSettings* tonemapper, bool enabled)
 
 	if (enabled)
 	{
-		// Execute the denoiser
-		OPTIX_CHECK(optixDenoiserInvoke(m_optixDenoiser, m_cudaStream, &m_optixParams,
-			(CUdeviceptr)m_denoiser_state_buffer, m_denoiser_sizes.stateSizeInBytes,
-			&m_guide_layer, &m_optixLayer, 1u, 0u, 0u,
-			(CUdeviceptr)m_denoiser_scratch_buffer, m_denoiser_sizes.withoutOverlapScratchSizeInBytes));
+		if (temporalEnable)
+		{
+			// Execute the denoiser
+			OPTIX_CHECK(optixDenoiserInvoke(m_optixDenoiser, m_cudaStream, &m_optixParams,
+				(CUdeviceptr)m_denoiser_state_buffer, m_denoiser_sizes.stateSizeInBytes,
+				&m_guide_layer, &m_optixLayer, 1u, 0u, 0u,
+				(CUdeviceptr)m_denoiser_scratch_buffer, m_denoiser_sizes.withoutOverlapScratchSizeInBytes));
 
-		CU_CHECK(cudaStreamSynchronize(m_cudaStream));
-		CU_CHECK(cudaDeviceSynchronize());
+			CU_CHECK(cudaStreamSynchronize(m_cudaStream));
+			CU_CHECK(cudaDeviceSynchronize());
+		}
 
 		tonemapper_kernel2 <<<blocks, threads >>> ((float4*)m_floatDenoisedBuffer_GPU.d_pointer(), (float4*)m_floatTonemappedBuffer_GPU.d_pointer(), m_width, m_height, *tonemapper);
 	}

@@ -116,7 +116,10 @@ void Renderer::Render(const Scene& scene, const Camera& camera)
 			m_frameIndex++;
 		}
 
-		m_denoiser.Denoise(&m_activeScene->tonemap, m_settings.denoise);
+		bool denoiseTemporal = (m_frameIndex % 100u == 0u) && m_settings.denoise;
+		denoiseTemporal = denoiseTemporal || m_frameIndex <= 100u;
+
+		m_denoiser.Denoise(&m_activeScene->tonemap, m_settings.denoise, denoiseTemporal);
 
 		if (m_denoiser.GetDenoisedBuffer())
 		{

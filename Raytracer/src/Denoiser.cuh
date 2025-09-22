@@ -11,7 +11,7 @@ public:
 	Denoiser() {}
     ~Denoiser();
 
-    void Denoise(const TonemapSettings* tonemapper, bool enabled);
+    void Denoise(const TonemapSettings* tonemapper, bool enabled, bool temporalEnable);
     void InitOptix(void* inputBeautyBuffer, void* inputAlbedoBuffer, void* inputNormalBuffer, uint32_t width, uint32_t height);
     float* GetDenoisedBuffer() { return m_finalOutputBuffer; }
     float* GetLinearDenoisedBuffer() { return m_finalLinearOutputBuffer; }
