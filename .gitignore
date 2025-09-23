@@ -16,3 +16,4 @@ Raytracer/test.obj
 Raytracer/meshes/**
 Raytracer/images/**
 /Raytracer/Renderoutput
+Raytracer/imgui.ini

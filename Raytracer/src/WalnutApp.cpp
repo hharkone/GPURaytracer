@@ -119,6 +119,12 @@ public:
 		ImGui::End();
 
 		ImGui::Begin("Scene");
+		ImGui::Text("Models:");
+		ImGui::AlignTextToFramePadding();
+		if (ImGui::DragFloat4("Matrix[0]", &m_scene.sceneMesh.transformMatrix[0][0], 0.01f)) { m_sceneChanged = true; m_scene.sceneMesh.ApplyTransform(); }
+		if (ImGui::DragFloat4("Matrix[1]", &m_scene.sceneMesh.transformMatrix[1][0], 0.01f)) { m_sceneChanged = true; m_scene.sceneMesh.ApplyTransform(); }
+		if (ImGui::DragFloat4("Matrix[2]", &m_scene.sceneMesh.transformMatrix[2][0], 0.01f)) { m_sceneChanged = true; m_scene.sceneMesh.ApplyTransform(); }
+		if (ImGui::DragFloat4("Matrix[3]", &m_scene.sceneMesh.transformMatrix[3][0], 0.01f)) { m_sceneChanged = true; m_scene.sceneMesh.ApplyTransform(); }
 
 		ImGui::Text("Spheres: ", m_scene.sphereCount);
 		for (size_t i = 0u; i < m_scene.sphereCount; i++)

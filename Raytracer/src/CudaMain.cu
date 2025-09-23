@@ -360,7 +360,7 @@ __device__ HitInfo rayTriangleIntersect(const Ray& ray, const GPU_Mesh::Triangle
 
 	float3 normal = normalize(tri->n0 * w + tri->n1 * u + tri->n2 * v);
 
-	if (dot(ray.direction, -normal) < 0.0f)
+	if (abs(dot(ray.direction, -normal)) < 0.01f)
 	{
 		normal = normalize(normal - ray.direction * 0.01f); //Bend normals toward the ray that are over-extrapolated.
 		//normal = ray.direction * -1.0f;
@@ -381,15 +381,16 @@ __device__ HitInfo rayTriangleIntersect(const Ray& ray, const GPU_Mesh::Triangle
 	//hit.didHit = determinant >= 1E-6 && dst >= 0.0f && u >= 0.0f && v >= 0.0f && w >= 0.0f;
 	hit.didHit = dst >= 0.0f && u >= 0.0f && v >= 0.0f && w >= 0.0f;
 	hit.hitPoint = (ray.origin) + ray.direction * dst;
+	hit.inside = (dot(geometricNormal, ray.direction) > 0.0f ? true : false);
 	hit.normal = normal;
 	hit.tangent = normalize(tangent);
 	hit.color = color;
 	hit.uv = uv;
 	hit.geomNormal = normalize(geometricNormal);
 	hit.dst = dst;
-	hit.inside = (dot(geometricNormal, ray.direction) > 0.0f ? true : false);
 	hit.materialIndex = tri->matID;
-
+	//hit.normal = (hit.inside ? -normal : normal);
+	//hit.inside = false;
 	return hit;
 }
 
@@ -557,6 +558,16 @@ __device__ void IntersectBVH(const Ray& ray, HitInfo& hit, const Scene* scene, c
 	stack[stackPtr++] = 0u;
 
 	HitInfo closestHit;
+	
+	float rayDir[4];
+	float4 dirVec = make_float4(ray.direction, 0.0f);
+	vector4_matrix4_mult(&dirVec.x, &scene->sceneMesh.transformMatrixInverse[0][0], rayDir);
+
+	float rayPos[4];
+	float4 posVec = make_float4(ray.origin, 1.0f);
+	vector4_matrix4_mult(&posVec.x, &scene->sceneMesh.transformMatrixInverse[0][0], rayPos);
+
+	Ray newRay = Ray(make_float3(rayPos[0], rayPos[1], rayPos[2]), make_float3(rayDir[0], rayDir[1], rayDir[2]), make_float3(1.0f / rayDir[0], 1.0f / rayDir[1], 1.0f / rayDir[2]));
 
 	while (stackPtr > 0u)
 	//while (1)
@@ -568,7 +579,7 @@ __device__ void IntersectBVH(const Ray& ray, HitInfo& hit, const Scene* scene, c
 				uint32_t triIndex = ((uint32_t*)meshBuffer->indexBuffer)[node->leftFirst + i];
 				GPU_Mesh::Triangle* triangle = &((GPU_Mesh::Triangle*)meshBuffer->triangleBuffer)[triIndex];
 
-				hit = rayTriangleIntersect(ray, triangle);
+				hit = rayTriangleIntersect(newRay, triangle);
 
 				if (hit.didHit && hit.dst < closestHit.dst)
 				{
@@ -593,8 +604,8 @@ __device__ void IntersectBVH(const Ray& ray, HitInfo& hit, const Scene* scene, c
 		GPU_Mesh::BVHNode* child1 = &((GPU_Mesh::BVHNode*)meshBuffer->bvhNode)[node->leftFirst];
 		GPU_Mesh::BVHNode* child2 = &((GPU_Mesh::BVHNode*)meshBuffer->bvhNode)[node->leftFirst + 1];
 
-		float dist1 = IntersectAABB_D(ray, closestHit, child1->aabbMin, child1->aabbMax);
-		float dist2 = IntersectAABB_D(ray, closestHit, child2->aabbMin, child2->aabbMax);
+		float dist1 = IntersectAABB_D(newRay, closestHit, child1->aabbMin, child1->aabbMax);
+		float dist2 = IntersectAABB_D(newRay, closestHit, child2->aabbMin, child2->aabbMax);
 		hit.bvhDepth = fminf(dist1, dist2);
 
 		if (dist1 >= dist2)
@@ -626,9 +637,25 @@ __device__ void IntersectBVH(const Ray& ray, HitInfo& hit, const Scene* scene, c
 		hitDepth++;
 
 	}// while()
-	
+
 	hit = closestHit;
 	hit.bvhDepth = hitDepth;
+
+	float hitPos[4];
+	float4 hitPosVec = make_float4(hit.hitPoint, 1.0f);
+	vector4_matrix4_mult(&hitPosVec.x, &scene->sceneMesh.transformMatrix[0][0], hitPos);
+
+	float hitNormal[4];
+	float4 hitNormalVec = make_float4(hit.normal, 0.0f);
+	vector4_matrix4_mult(&hitNormalVec.x, &scene->sceneMesh.transformMatrixInverseTranspose[0][0], hitNormal);
+
+	float hitGNormal[4];
+	float4 hitGNormalVec = make_float4(hit.geomNormal, 0.0f);
+	vector4_matrix4_mult(&hitGNormalVec.x, &scene->sceneMesh.transformMatrixInverseTranspose[0][0], hitGNormal);
+
+	hit.hitPoint = make_float3(hitPos[0], hitPos[1], hitPos[2]);
+	hit.normal = normalize(make_float3(hitNormal[0], hitNormal[1], hitNormal[2]));
+	hit.geomNormal = normalize(make_float3(hitGNormal[0], hitGNormal[1], hitGNormal[2]));
 }
 
 __device__ HitInfo intersect_scene(Ray& r, const Scene* scene, const RenderSettings* rendererSettings)

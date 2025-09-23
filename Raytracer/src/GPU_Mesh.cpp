@@ -129,29 +129,29 @@ void GPU_Mesh::LoadOBJFile(const std::string& path, int materialIndex)
             //Quads, with UV
             if (sscanf_s(line.c_str(), "f %i/%i/%i %i/%i/%i %i/%i/%i %i/%i/%i\n", &f1, &f2, &f3, &f4, &f5, &f6, &f7, &f8, &f9, &f10, &f11, &f12) == 12)
             {
-                tris.push_back(f1 - 1);
-                tris.push_back(f3 - 1);
-                tris.push_back(f2 - 1);
+                tris.push_back(abs(f1) - 1);
+                tris.push_back(abs(f3) - 1);
+                tris.push_back(abs(f2) - 1);
 
-                tris.push_back(f4 - 1);
-                tris.push_back(f6 - 1);
-                tris.push_back(f5 - 1);
+                tris.push_back(abs(f4) - 1);
+                tris.push_back(abs(f6) - 1);
+                tris.push_back(abs(f5) - 1);
 
-                tris.push_back(f7 - 1);
-                tris.push_back(f9 - 1);
-                tris.push_back(f8 - 1);
+                tris.push_back(abs(f7) - 1);
+                tris.push_back(abs(f9) - 1);
+                tris.push_back(abs(f8) - 1);
 
-                tris.push_back(f7 - 1);
-                tris.push_back(f9 - 1);
-                tris.push_back(f8 - 1);
+                tris.push_back(abs(f7) - 1);
+                tris.push_back(abs(f9) - 1);
+                tris.push_back(abs(f8) - 1);
 
-                tris.push_back(f10 - 1);
-                tris.push_back(f12 - 1);
-                tris.push_back(f11 - 1);
+                tris.push_back(abs(f10) - 1);
+                tris.push_back(abs(f12) - 1);
+                tris.push_back(abs(f11) - 1);
 
-                tris.push_back(f1 - 1);
-                tris.push_back(f3 - 1);
-                tris.push_back(f2 - 1);
+                tris.push_back(abs(f1) - 1);
+                tris.push_back(abs(f3) - 1);
+                tris.push_back(abs(f2) - 1);
 
 
                 importTriangleCount += 2u;
@@ -160,17 +160,17 @@ void GPU_Mesh::LoadOBJFile(const std::string& path, int materialIndex)
             //Tris, with UV
             else if (sscanf_s(line.c_str(), "f %i/%i/%i %i/%i/%i %i/%i/%i\n", &f1, &f2, &f3, &f4, &f5, &f6, &f7, &f8, &f9) == 9)
             {
-                tris.push_back(f1 - 1);
-                tris.push_back(f3 - 1);
-                tris.push_back(f2 - 1);
+                tris.push_back(abs(f1) - 1);
+                tris.push_back(abs(f3) - 1);
+                tris.push_back(abs(f2) - 1);
 
-                tris.push_back(f4 - 1);
-                tris.push_back(f6 - 1);
-                tris.push_back(f5 - 1);
+                tris.push_back(abs(f4) - 1);
+                tris.push_back(abs(f6) - 1);
+                tris.push_back(abs(f5) - 1);
 
-                tris.push_back(f7 - 1);
-                tris.push_back(f9 - 1);
-                tris.push_back(f8 - 1);
+                tris.push_back(abs(f7) - 1);
+                tris.push_back(abs(f9) - 1);
+                tris.push_back(abs(f8) - 1);
 
                 importTriangleCount += 1u;
                 deviceMesh.numTris++;
@@ -178,23 +178,23 @@ void GPU_Mesh::LoadOBJFile(const std::string& path, int materialIndex)
             //Quads, no UV
             else if (sscanf_s(line.c_str(), "f %i//%i %i//%i %i//%i %i//%i\n", &f1, &f2, &f3, &f4, &f5, &f6, &f7, &f8) == 8 && uv.size() == 0)
             {
-                tris.push_back(f1 - 1);
-                tris.push_back(f2 - 1);
+                tris.push_back(abs(f1) - 1);
+                tris.push_back(abs(f2) - 1);
 
-                tris.push_back(f3 - 1);
-                tris.push_back(f4 - 1);
+                tris.push_back(abs(f3) - 1);
+                tris.push_back(abs(f4) - 1);
 
-                tris.push_back(f5 - 1);
-                tris.push_back(f6 - 1);
+                tris.push_back(abs(f5) - 1);
+                tris.push_back(abs(f6) - 1);
 
-                tris.push_back(f5 - 1);
-                tris.push_back(f6 - 1);
+                tris.push_back(abs(f5) - 1);
+                tris.push_back(abs(f6) - 1);
 
-                tris.push_back(f7 - 1);
-                tris.push_back(f8 - 1);
+                tris.push_back(abs(f7) - 1);
+                tris.push_back(abs(f8) - 1);
 
-                tris.push_back(f1 - 1);
-                tris.push_back(f2 - 1);
+                tris.push_back(abs(f1) - 1);
+                tris.push_back(abs(f2) - 1);
 
                 importTriangleCount += 2u;
                 deviceMesh.numTris += 2u;
@@ -202,14 +202,14 @@ void GPU_Mesh::LoadOBJFile(const std::string& path, int materialIndex)
             //Tris, no UV
             else if (sscanf_s(line.c_str(), "f %i//%i %i//%i %i//%i\n", &f1, &f2, &f3, &f4, &f5, &f6) == 6 && uv.size() == 0)
             {
-                tris.push_back(f1 - 1);
-                tris.push_back(f2 - 1);
+                tris.push_back(abs(f1) - 1);
+                tris.push_back(abs(f2) - 1);
 
-                tris.push_back(f3 - 1);
-                tris.push_back(f4 - 1);
+                tris.push_back(abs(f3) - 1);
+                tris.push_back(abs(f4) - 1);
 
-                tris.push_back(f5 - 1);
-                tris.push_back(f6 - 1);
+                tris.push_back(abs(f5) - 1);
+                tris.push_back(abs(f6) - 1);
 
                 importTriangleCount += 1u;
                 deviceMesh.numTris++;
@@ -702,16 +702,28 @@ void GPU_Mesh::BuildBVH()
     }
 }
 
+void GPU_Mesh::ApplyTransform()
+{
+    CUDATransformMatrix.upload(&transformMatrix, 1);
+    transformMatrixInverse = glm::inverse(transformMatrix);
+    CUDATransformMatrixInverse.upload(&transformMatrixInverse, 1);
+    transformMatrixInverseTranspose = glm::transpose(transformMatrixInverse);
+    CUDATransformMatrixInverseTranspose.upload(&transformMatrixInverseTranspose, 1);
+}
+
 GPU_Mesh::GPU_Mesh()
 {
     //deviceMesh = new MeshBuffer();
+    CUDATransformMatrix.alloc_and_upload(&transformMatrix, 1);
+    CUDATransformMatrixInverse.alloc_and_upload(&transformMatrixInverse, 1);
+    CUDATransformMatrixInverseTranspose.alloc_and_upload(&transformMatrixInverseTranspose, 1);
 }
 
 GPU_Mesh::~GPU_Mesh()
 {
-    delete[] bvhNode;
-    delete[] triangleBuffer;
-    delete[] meshInfoBuffer;
-    if (triIdx != nullptr) { delete[] triIdx; }
-    if (triangleCentroidScratchBuffer != nullptr) { delete[] triangleCentroidScratchBuffer; }
+    //delete[] bvhNode;
+    //delete[] triangleBuffer;
+    //delete[] meshInfoBuffer;
+    //if (triIdx != nullptr) { delete[] triIdx; }
+    //if (triangleCentroidScratchBuffer != nullptr) { delete[] triangleCentroidScratchBuffer; }
 }

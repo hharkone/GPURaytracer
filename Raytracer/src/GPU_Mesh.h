@@ -1,6 +1,8 @@
 #pragma once
 #include <string>
 #include <vector>
+#include <glm/glm.hpp>
+
 #include "cuda_runtime.h"
 #include "cutil_math.cuh"
 #include "CudaBuffer.h"
@@ -23,6 +25,7 @@ public:
     void LoadOBJFile(const std::string& path);
     void LoadOBJFile(const std::string& path, int materialIndex);
     void BuildBVH();
+    void ApplyTransform();
 
     GPU_Mesh();
     ~GPU_Mesh();
@@ -75,12 +78,18 @@ public:
     float3* triangleCentroidScratchBuffer = nullptr;
     uint32_t* triIdx = nullptr;
     std::string filepath;
-
+    glm::mat4x4 transformMatrix = glm::mat4x4(1.0f);
+    glm::mat4x4 transformMatrixInverse = glm::mat4x4(1.0f);
+    glm::mat4x4 transformMatrixInverseTranspose = glm::mat4x4(1.0f);
+    
 private:
     CUDABuffer CUDAbvhBuffer;
     CUDABuffer CUDAtriangleBuffer;
     CUDABuffer CUDAmeshInfoBuffer;
     CUDABuffer CUDAindexBuffer;
+    CUDABuffer CUDATransformMatrix;
+    CUDABuffer CUDATransformMatrixInverse;
+    CUDABuffer CUDATransformMatrixInverseTranspose;
 
     uint32_t rootNodeIdx = 0;
     float EvaluateSAH(BVHNode& node, int axis, float pos);
