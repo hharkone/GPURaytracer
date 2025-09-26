@@ -258,8 +258,8 @@ __device__ float3 getEnvironmentLight(const Ray& ray, const Scene* scene, const 
 			size_t row = (size_t)(uv.y * (float)texHeight);
 			size_t col = (size_t)(uv.x * (float)texWidth);
 
-			size_t pixelIndex = (row * texWidth) + col;
-			//uint32_t pixelIndex = calcZOrder(col, row);
+			//size_t pixelIndex = (row * texWidth) + col;
+			uint32_t pixelIndex = calcZOrder(col, row);
 
 			float4* ptr = (float4*)skyTex->imageData_GPU;
 			float x = (ptr + pixelIndex)->x;
@@ -402,69 +402,6 @@ void __device__ IntersectTri(const Ray& ray, HitInfo& hit, const GPU_Mesh::Trian
 		hit.didHit = true;
 	}
 }
-
-/*
-__device__ bool rayBoxIntersection(const Ray& r, const float3& min, const float3& max)
-{
-	float t[9];
-	t[1] = (min.x - r.origin.x) / r.direction.x;
-	t[2] = (max.x - r.origin.x) / r.direction.x;
-	t[3] = (min.y - r.origin.y) / r.direction.y;
-	t[4] = (max.y - r.origin.y) / r.direction.y;
-	t[5] = (min.z - r.origin.z) / r.direction.z;
-	t[6] = (max.z - r.origin.z) / r.direction.z;
-	t[7] = fmaxff(fmaxf(fminff(t[1], t[2]), fminff(t[3], t[4])), fminff(t[5], t[6]));
-	t[8] = fminff(fminf(fmaxff(t[1], t[2]), fmaxff(t[3], t[4])), fmaxff(t[5], t[6]));
-	//t[9] = (t[8] < 0 || t[7] > t[8]) ? FLT_MAX : t[7];
-
-	return (t[8] < 0 || t[7] > t[8]);
-}
-
-__device__ bool rayBoxIntersection(const Ray& ray, HitInfo& hit, const float3& bmin, const float3& bmax)
-{
-	float tx1 = (bmin.x - ray.origin.x) / ray.direction.x, tx2 = (bmax.x - ray.origin.x) / ray.direction.x;
-	float tmin = min(tx1, tx2), tmax = max(tx1, tx2);
-	float ty1 = (bmin.y - ray.origin.y) / ray.direction.y, ty2 = (bmax.y - ray.origin.y) / ray.direction.y;
-	tmin = max(tmin, min(ty1, ty2)), tmax = min(tmax, max(ty1, ty2));
-	float tz1 = (bmin.z - ray.origin.z) / ray.direction.z, tz2 = (bmax.z - ray.origin.z) / ray.direction.z;
-	tmin = max(tmin, min(tz1, tz2)), tmax = min(tmax, max(tz1, tz2));
-
-	bool didHit (tmax >= tmin && tmin < hit.dst && tmax > 0);
-
-	float3 c = (bmin + bmax) * 0.5f;
-
-	hit.didHit = didHit;
-	hit.dst = tmin;
-	hit.hitPoint = ray.direction * tmin + ray.origin;
-
-	if (ray.origin.x < bmax.x && ray.origin.x > bmin.x &&
-		ray.origin.y < bmax.y && ray.origin.y > bmin.y &&
-		ray.origin.z < bmax.z && ray.origin.z > bmin.z)
-	{
-		hit.dst = tmax;
-		hit.hitPoint = ray.direction * tmax + ray.origin;
-		hit.inside = true;
-	}
-
-	float3 p = hit.hitPoint - c;
-	float3 d = (bmin - bmax) * 0.5f;
-
-	float bias = 1.0001f;
-
-	hit.normal = normalize( make_float3(float(int(p.x / abs(d.x) * bias)),
-										float(int(p.y / abs(d.y) * bias)),
-										float(int(p.z / abs(d.z) * bias))) );
-
-	hit.inside = (dot(hit.normal, ray.direction) > 0.0f ? true : false);
-	hit.color = make_float3(1.0f, 1.0f, 1.0f);
-	hit.materialIndex = 0u;
-	//hit.hitPoint = c;
-
-	return didHit;
-}
-
-*/
-
 
 __device__ bool rayBoxIntersection(const Ray& ray, HitInfo& hit, const Box& box)
 {

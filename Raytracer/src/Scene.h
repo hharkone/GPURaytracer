@@ -63,7 +63,7 @@ struct Scene
     ~Scene();
 
     void UploadMaterials();
-    void AddNewDefaultMaterial(size_t index);
+    void SetDefaultMaterial(size_t index);
     void ImportMesh(std::string path);
     void ImportMesh(std::string path, size_t overrideMaterial);
 

@@ -28,7 +28,7 @@ class ExampleLayer : public Walnut::Layer
 {
 public:
 
-	ExampleLayer() : m_camera(50.0f, 0.1f, 1000000.0f)
+	ExampleLayer() : m_camera(50.0f, 1.0f, 100000.0f)
 	{
 		m_rendetTimeVec.resize(20);
 		cudaGetDeviceProperties(&prop, 0);
@@ -85,7 +85,7 @@ public:
 		ImGui::Text("Sample Index: %i", m_renderer.GetFrameIndex());
 
 		const char* resolutionFactors[] = { "1:1", "1:2", "1:3", "1:4" };
-		static int resolutionFactorIndex = 1;
+		static int resolutionFactorIndex = 0;
 		ImGui::Combo("Resolution", &resolutionFactorIndex, resolutionFactors, IM_ARRAYSIZE(resolutionFactors));
 		ImGui::Text("(%i x %i)", m_viewportWidth, m_viewportHeight);
 

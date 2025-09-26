@@ -50,30 +50,6 @@ void ImageLoader::LoadImage_PNG(const std::string path)
     }
 }
 
-/*
-uint32_t calcZOrder(uint16_t xPos, uint16_t yPos)
-{
-    static const uint32_t MASKS[] = { 0x55555555, 0x33333333, 0x0F0F0F0F, 0x00FF00FF };
-    static const uint32_t SHIFTS[] = { 1, 2, 4, 8 };
-
-    uint32_t x = xPos;  // Interleave lower 16 bits of x and y, so the bits of x
-    uint32_t y = yPos;  // are in the even positions and bits from y in the odd;
-
-    x = (x | (x << SHIFTS[3])) & MASKS[3];
-    x = (x | (x << SHIFTS[2])) & MASKS[2];
-    x = (x | (x << SHIFTS[1])) & MASKS[1];
-    x = (x | (x << SHIFTS[0])) & MASKS[0];
-
-    y = (y | (y << SHIFTS[3])) & MASKS[3];
-    y = (y | (y << SHIFTS[2])) & MASKS[2];
-    y = (y | (y << SHIFTS[1])) & MASKS[1];
-    y = (y | (y << SHIFTS[0])) & MASKS[0];
-
-    const uint32_t result = x | (y << 1);
-    return result;
-}
-*/
-
 static void arrangeToZCurve(float* src, float4* dst, int width, int height)
 {
     size_t i = 0;
@@ -126,7 +102,7 @@ void ImageLoader::LoadImage_EXR(const std::string path)
         float4* zcurve = new float4[width * height];
         arrangeToZCurve(out, zcurve, width, height);
 
-        gpuBuffer.alloc_and_upload(out, gpuImage.width * gpuImage.height * 4u);
+        gpuBuffer.alloc_and_upload(zcurve, gpuImage.width * gpuImage.height);
         gpuImage.imageData_GPU = gpuBuffer.d_pointer();
 
         free(out); // release memory of image data

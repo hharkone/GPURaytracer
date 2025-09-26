@@ -37,7 +37,7 @@ void Scene::ImportMesh(std::string path, size_t overrideMaterial)
 	sceneMesh.LoadOBJFile(path, overrideMaterial);
 }
 
-void Scene::AddNewDefaultMaterial(size_t index)
+void Scene::SetDefaultMaterial(size_t index)
 {
     materials[index] = Material{ { 0.8f, 0.8f,  0.8f  }, 0.0f, 0.21f, { 0.0f, 0.0f, 0.0f }, 0.0f, 1.5f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, 1.0f, { 0.95f, 0.75f, 0.4f }, 0.0f };
 }
@@ -51,9 +51,9 @@ void Scene::ResizeAndAddMaterials(size_t size)
     delete[] materials;
     materials = newArr;
 
-    for (int i = materialCount - 1u; i < materialCount + size; i++)
+    for (int i = materialCount; i < materialCount + size; i++)
     {
-        AddNewDefaultMaterial(i);
+        SetDefaultMaterial(i);
     }
 
     materialCount += size;
