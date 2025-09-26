@@ -425,13 +425,11 @@ void GPU_Mesh::Subdivide(uint32_t nodeIdx)
 #else
     int bestAxis = -1;
     float bestPos = 0, bestCost = 1e30f;
-    uint splitCount = 8u;
-    for (int axis = 0; axis < 3; axis++) for (uint i = 0; i < splitCount; i++)
+    uint splitCount = 2u;
+    for (int axis = 0; axis < 3; axis++) for (uint i = 1u; i < splitCount; i++)
     {
-        //Triangle& triangle = triangleBuffer[triIdx[node.leftFirst + i]];
-        //float candidatePos = (&triangleCentroidScratchBuffer[triIdx[i]].x)[axis];
-        float xx = (1.0f / float(splitCount + 1u)) * float(i + 1u);
-        float3 candidatePos = lerp(node.aabbMin, node.aabbMax, (1.0f / float(splitCount+1u)) * float(i+1u) );
+        float xx = (1.0f / float(splitCount + 1u)) * float(i);
+        float3 candidatePos = lerp(node.aabbMin, node.aabbMax, xx);
 
         float cost = EvaluateSAH(node, axis, (&candidatePos.x)[axis]);
         if (cost < bestCost)
@@ -452,9 +450,6 @@ void GPU_Mesh::Subdivide(uint32_t nodeIdx)
     uint32_t j = i + node.triCount - 1;
     while (i <= j)
     {
-        //if (j <= 0u)
-        //    break;
-
         if ((&triangleCentroidScratchBuffer[triIdx[i]].x)[axis] < splitPos)
             i++;
         else
@@ -487,8 +482,7 @@ std::string CacheFilePath(const std::string& filename)
 {
     std::string BVHcacheFilename(filename);
     size_t lastindex = BVHcacheFilename.find_last_of(".");
-    //BVHcacheFilename.substr(0, lastindex);
-    return BVHcacheFilename += ".bvh";
+    return BVHcacheFilename.substr(0, lastindex) += ".bvh";
 }
 
 bool GPU_Mesh::TryLoadCache(const std::string& filename)
