@@ -215,20 +215,7 @@ __device__ float3 texture2D(const GPUImage* tex, const float2 uv)
 	size_t col = (size_t)(fracuv.x * (float)texWidth)  * 4u;
 
 	size_t pixelIndex = (row * texWidth) + col;
-
-	/*
-	unsigned char* ptr = (unsigned char*)tex->imageData_GPU;
-	float x = float(*(ptr + pixelIndex + 0u));
-	float y = float(*(ptr + pixelIndex + 1u));
-	float z = float(*(ptr + pixelIndex + 2u));
-
-	float3 c = make_float3(x / 255.0f, y / 255.0f, z / 255.0f);
-	*/
-
-	//float* ptr = (float*)tex->imageData_GPU;
-	//float x = *(ptr + pixelIndex + 0u);
-	//float y = *(ptr + pixelIndex + 1u);
-	//float z = *(ptr + pixelIndex + 2u);
+	//uint32_t pixelIndex = calcZOrder(row, col);
 
 	unsigned char x = ((unsigned char*)tex->imageData_GPU)[pixelIndex + 0u];
 	unsigned char y = ((unsigned char*)tex->imageData_GPU)[pixelIndex + 1u];
@@ -268,17 +255,18 @@ __device__ float3 getEnvironmentLight(const Ray& ray, const Scene* scene, const 
 			size_t texHeight = skyTex->height;
 
 			float2 uv = toSpherical(ray.direction, scene->skyRotation);
-			size_t row = (size_t)(uv.y * (float)texHeight) * 4u;
-			size_t col = (size_t)(uv.x * (float)texWidth) * 4u;
+			size_t row = (size_t)(uv.y * (float)texHeight);
+			size_t col = (size_t)(uv.x * (float)texWidth);
 
 			size_t pixelIndex = (row * texWidth) + col;
+			//uint32_t pixelIndex = calcZOrder(col, row);
 
-			float* ptr = (float*)skyTex->imageData_GPU;
-			float x = *(ptr + pixelIndex + 0u);
-			float y = *(ptr + pixelIndex + 1u);
-			float z = *(ptr + pixelIndex + 2u);
+			float4* ptr = (float4*)skyTex->imageData_GPU;
+			float x = (ptr + pixelIndex)->x;
+			float y = (ptr + pixelIndex)->y;
+			float z = (ptr + pixelIndex)->z;
 
-			float3 c = make_float3(x,y,z);
+			float3 c = make_float3(x, y, z);
 
 			return c * scene->skyColor * scene->skyBrightness;
 		}

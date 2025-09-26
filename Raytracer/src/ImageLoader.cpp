@@ -8,6 +8,7 @@
 #define TINYEXR_USE_THREAD 1
 #define STB_IMAGE_WRITE_IMPLEMENTATION 1
 
+#include "cutil_math.cuh"
 #include "stb_image.h"
 #include "stb_image_write.h"
 #include "zlib.h"
@@ -49,6 +50,52 @@ void ImageLoader::LoadImage_PNG(const std::string path)
     }
 }
 
+/*
+uint32_t calcZOrder(uint16_t xPos, uint16_t yPos)
+{
+    static const uint32_t MASKS[] = { 0x55555555, 0x33333333, 0x0F0F0F0F, 0x00FF00FF };
+    static const uint32_t SHIFTS[] = { 1, 2, 4, 8 };
+
+    uint32_t x = xPos;  // Interleave lower 16 bits of x and y, so the bits of x
+    uint32_t y = yPos;  // are in the even positions and bits from y in the odd;
+
+    x = (x | (x << SHIFTS[3])) & MASKS[3];
+    x = (x | (x << SHIFTS[2])) & MASKS[2];
+    x = (x | (x << SHIFTS[1])) & MASKS[1];
+    x = (x | (x << SHIFTS[0])) & MASKS[0];
+
+    y = (y | (y << SHIFTS[3])) & MASKS[3];
+    y = (y | (y << SHIFTS[2])) & MASKS[2];
+    y = (y | (y << SHIFTS[1])) & MASKS[1];
+    y = (y | (y << SHIFTS[0])) & MASKS[0];
+
+    const uint32_t result = x | (y << 1);
+    return result;
+}
+*/
+
+static void arrangeToZCurve(float* src, float4* dst, int width, int height)
+{
+    size_t i = 0;
+    for (int y = 0; y < height; y++)
+    {
+        for (int x = 0; x < width; x++)
+        {
+            if (x == width - 1u && y == height - 1u)
+            {
+                bool asd = true;
+            }
+            uint32_t pixelIndex = calcZOrder(x, y);
+            dst[pixelIndex].x = src[i * 4u + 0u];
+            dst[pixelIndex].y = src[i * 4u + 1u];
+            dst[pixelIndex].z = src[i * 4u + 2u];
+            dst[pixelIndex].w = src[i * 4u + 3u];
+
+            i++;
+        }
+    }
+}
+
 void ImageLoader::LoadImage_EXR(const std::string path)
 {
     float* out; // width * height * RGBA
@@ -76,10 +123,14 @@ void ImageLoader::LoadImage_EXR(const std::string path)
             gpuBuffer.free();
         }
 
+        float4* zcurve = new float4[width * height];
+        arrangeToZCurve(out, zcurve, width, height);
+
         gpuBuffer.alloc_and_upload(out, gpuImage.width * gpuImage.height * 4u);
         gpuImage.imageData_GPU = gpuBuffer.d_pointer();
 
         free(out); // release memory of image data
+        delete[] zcurve;
         fprintf(stderr, "ImageLoader: Loaded EXR file: %s\n", path.c_str());
     }
 }
